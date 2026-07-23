@@ -1,0 +1,41 @@
+import Phaser from 'phaser';
+import './style.css';
+import { GAME_WIDTH, GAME_HEIGHT } from './config';
+import { BootScene } from '@scenes/BootScene';
+import { PreloadScene } from '@scenes/PreloadScene';
+import { MenuScene } from '@scenes/MenuScene';
+import { CharacterCreationScene } from '@scenes/CharacterCreationScene';
+import { ShardShopScene } from '@scenes/ShardShopScene';
+import { BoardScene } from '@scenes/BoardScene';
+import { EventScene } from '@scenes/EventScene';
+import { CombatScene } from '@scenes/CombatScene';
+import { LandmarkScene } from '@scenes/LandmarkScene';
+import { EndingScene } from '@scenes/EndingScene';
+import { GameOverScene } from '@scenes/GameOverScene';
+
+const config: Phaser.Types.Core.GameConfig = {
+  type: Phaser.AUTO,
+  width: GAME_WIDTH,
+  height: GAME_HEIGHT,
+  parent: 'app',
+  backgroundColor: '#0b0d10',
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+  },
+  scene: [
+    BootScene,
+    PreloadScene,
+    MenuScene,
+    CharacterCreationScene,
+    ShardShopScene,
+    BoardScene,
+    EventScene,
+    CombatScene,
+    LandmarkScene,
+    EndingScene,
+    GameOverScene,
+  ],
+};
+
+new Phaser.Game(config);

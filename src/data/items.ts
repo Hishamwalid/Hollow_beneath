@@ -1,0 +1,103 @@
+import type { InventoryEntry, ItemDef } from './types';
+
+export const ITEMS: Record<string, ItemDef> = {
+  ration: {
+    id: 'ration',
+    name: 'Ration',
+    description: 'Dense travel bread. Restores 25% max HP.',
+    kind: 'consumable',
+    effect: { healPercent: 25 },
+    sellValue: 10,
+  },
+  bandage: {
+    id: 'bandage',
+    name: 'Bandage',
+    description: 'Cures Bleed and Poison.',
+    kind: 'consumable',
+    effect: { cureStatus: ['bleed', 'poison'] },
+    sellValue: 8,
+  },
+  waterskin: {
+    id: 'waterskin',
+    name: 'Waterskin',
+    description: 'Cures Burn.',
+    kind: 'consumable',
+    effect: { cureStatus: ['burn'] },
+    sellValue: 8,
+  },
+  rusty_dagger: {
+    id: 'rusty_dagger',
+    name: 'Rusty Dagger',
+    description: 'Starting weapon. Slash damage.',
+    kind: 'weapon',
+    effect: { statBonus: { atk: 2 } },
+    sellValue: 5,
+  },
+  leather_vest: {
+    id: 'leather_vest',
+    name: 'Leather Vest',
+    description: 'Starting armour.',
+    kind: 'armour',
+    effect: { statBonus: { def: 1 } },
+    sellValue: 5,
+  },
+  cracked_lens: {
+    id: 'cracked_lens',
+    name: 'Cracked Lens',
+    description: 'Starting focus. Slightly amplifies magic.',
+    kind: 'focus',
+    effect: { statBonus: { matk: 1 } },
+    sellValue: 5,
+  },
+  caravan_knife: {
+    id: 'caravan_knife',
+    name: 'Caravan Knife',
+    description: 'Well-balanced trade blade. +3 ATK.',
+    kind: 'weapon',
+    effect: { statBonus: { atk: 3 } },
+    sellValue: 30,
+  },
+  blank_book: {
+    id: 'blank_book',
+    name: 'Blank Book',
+    description: 'Pages that fill themselves in. +5 MDEF.',
+    kind: 'accessory',
+    effect: { statBonus: { mdef: 5 } },
+    sellValue: 60,
+  },
+  resonance_sketch: {
+    id: 'resonance_sketch',
+    name: 'Resonance Sketch',
+    description: 'A recorded frequency. Sells well.',
+    kind: 'material',
+    sellValue: 50,
+  },
+  muted_stone: {
+    id: 'muted_stone',
+    name: 'Muted Stone',
+    description: 'Silence given weight. +2 DEF.',
+    kind: 'accessory',
+    effect: { statBonus: { def: 2 } },
+    sellValue: 25,
+  },
+  cracked_crystal: {
+    id: 'cracked_crystal',
+    name: 'Cracked Crystal',
+    description: 'A shard of the Chorus, silenced.',
+    kind: 'material',
+    sellValue: 40,
+  },
+  fossil_crown: {
+    id: 'fossil_crown',
+    name: 'Fossil Crown',
+    description: "The Fossil King's crown. +5 MDEF, +10% Resonance gain.",
+    kind: 'accessory',
+    effect: { statBonus: { mdef: 5 } },
+    sellValue: 100,
+  },
+};
+
+export const STARTING_INVENTORY: InventoryEntry[] = [
+  { id: 'ration', qty: 2 },
+  { id: 'bandage', qty: 1 },
+];
