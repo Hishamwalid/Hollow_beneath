@@ -117,11 +117,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!player || !game) return;
     const refund = deathRefund(player.echoShards);
     const newMeta = { ...meta, echoShards: meta.echoShards + refund, deathCount: meta.deathCount + 1 };
+    if (game.checkpointPage === 0) {
+      set({ meta: newMeta, player: null, game: null });
+      get().persist();
+      return;
+    }
     const { game: restoredGame, player: restoredPlayer } = restoreCheckpoint({ ...game, isDead: true });
     if (restoredPlayer) {
       set({ meta: newMeta, player: restoredPlayer, game: restoredGame });
     } else {
-      // No checkpoint reached yet — run ends entirely.
       set({ meta: newMeta, player: null, game: null });
     }
     get().persist();

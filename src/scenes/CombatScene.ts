@@ -34,7 +34,9 @@ export class CombatScene extends Phaser.Scene {
   private engine!: CombatEngine;
   private sceneData!: CombatSceneData;
   private enemyDisplays: EnemyDisplay[] = [];
+  private enemyKeyMap: Map<string, EnemyDisplay> = new Map();
   private selectedTarget: string | null = null;
+  private lastPlayerHP = 0;
   private statPanel?: ReturnType<typeof createStatPanel>;
   private apPips?: ReturnType<typeof createApPips>;
   private actionBarContainer?: Phaser.GameObjects.Container;
@@ -55,6 +57,7 @@ export class CombatScene extends Phaser.Scene {
     this.sceneData = data;
     const store = useGameStore.getState();
     const player = store.player;
+    this.lastPlayerHP = player?.currentHP ?? 0;
     if (!player) {
       this.scene.start('Board');
       return;
@@ -84,7 +87,7 @@ export class CombatScene extends Phaser.Scene {
     this.statPanel = createStatPanel(this, 16, GAME_HEIGHT - 190, 320);
     this.apPips = createApPips(this, GAME_WIDTH - 120, GAME_HEIGHT - 190);
 
-    this.logText = this.add.text(16, GAME_HEIGHT - 240, '', {
+    this.logText = this.add.text(16, GAME_HEIGHT - 280, '', {
       fontFamily: FONT_MONO,
       fontSize: '12px',
       color: PALETTE_HEX.boneMuted,
@@ -99,6 +102,7 @@ export class CombatScene extends Phaser.Scene {
   private buildEnemyDisplays(snap: CombatSnapshot) {
     this.enemyDisplays.forEach((d) => d.destroy());
     this.enemyDisplays = [];
+    this.enemyKeyMap.clear();
     const n = snap.enemies.length;
     const spacing = Math.min(220, (GAME_WIDTH - 200) / Math.max(1, n));
     const startX = GAME_WIDTH / 2 - ((n - 1) * spacing) / 2;
@@ -109,6 +113,7 @@ export class CombatScene extends Phaser.Scene {
       });
       disp.update(e);
       this.enemyDisplays.push(disp);
+      this.enemyKeyMap.set(e.key, disp);
     });
     if (!this.selectedTarget && snap.enemies[0]) this.selectedTarget = snap.enemies[0].key;
   }
@@ -154,22 +159,22 @@ export class CombatScene extends Phaser.Scene {
     const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
 
     const items = [
-      { id: 'attack', label: 'Attack', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction(() => this.engine.attack(this.selectedTarget ?? undefined)) },
+      { id: 'attack', label: 'Attack', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
       ...activeSkills.map((id) => ({
         id,
         label: NAMED_SKILLS[id].name,
         apCost: NAMED_SKILLS[id].apCost,
         disabled: !canAct || !canAfford(NAMED_SKILLS[id].apCost),
-        onClick: () => this.doAction(() => this.engine.useSkill(id, this.selectedTarget ?? undefined)),
+        onClick: () => this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined)),
       })),
       {
         id: 'resonance',
         label: 'Resonance',
         apCost: 2,
         disabled: !canAct || !canAfford(2) || player.resonance < 25,
-        onClick: () => this.doAction(() => this.engine.resonanceAbility(this.selectedTarget ?? undefined)),
+        onClick: () => this.doAction('resonance', () => this.engine.resonanceAbility(this.selectedTarget ?? undefined)),
       },
-      { id: 'guard', label: 'Guard', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction(() => this.engine.guard()) },
+      { id: 'guard', label: 'Guard', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },
       {
         id: 'item',
         label: 'Item',
@@ -177,14 +182,14 @@ export class CombatScene extends Phaser.Scene {
         disabled: !canAct || !canAfford(1) || player.inventory.length === 0,
         onClick: () => this.openItemMenu(),
       },
-      { id: 'analyze', label: 'Analyze', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction(() => this.engine.analyze(this.selectedTarget ?? undefined)) },
-      { id: 'sunder', label: 'Sunder', apCost: 2, disabled: !canAct || !canAfford(2), onClick: () => this.doAction(() => this.engine.sunder(this.selectedTarget ?? undefined)) },
-      { id: 'withdraw', label: 'Withdraw', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction(() => this.engine.withdraw()) },
+      { id: 'analyze', label: 'Analyze', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction('analyze', () => this.engine.analyze(this.selectedTarget ?? undefined)) },
+      { id: 'sunder', label: 'Sunder', apCost: 2, disabled: !canAct || !canAfford(2), onClick: () => this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)) },
+      { id: 'withdraw', label: 'Withdraw', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction('withdraw', () => this.engine.withdraw()) },
     ];
 
     const cols = 4;
     const rowH = 52;
-    const wrapper = this.add.container(16, GAME_HEIGHT - 130);
+    const wrapper = this.add.container(450, GAME_HEIGHT - 130);
     const { container: row1 } = createActionBar(this, 0, 0, items.slice(0, cols));
     wrapper.add(row1);
     if (items.length > cols) {
@@ -194,10 +199,99 @@ export class CombatScene extends Phaser.Scene {
     this.actionBarContainer = wrapper;
   }
 
-  private doAction(fn: () => CombatSnapshot) {
+  private doAction(type: string, fn: () => CombatSnapshot) {
     audio.click();
+    const prevHP = this.lastPlayerHP;
     const snap = fn();
     this.refresh(snap);
+    this.animateAction(type, this.selectedTarget ?? undefined, snap, prevHP);
+  }
+
+  private animateAction(type: string, targetKey: string | undefined, snap: CombatSnapshot, prevPlayerHP: number) {
+    const display = targetKey ? this.enemyKeyMap.get(targetKey) : undefined;
+    switch (type) {
+      case 'attack': {
+        if (display) { this.flashTarget(display.container, 0xff4444); this.shakeTarget(display.container); }
+        const e = snap.enemies.find((en) => en.key === targetKey);
+        const dmg = e ? prevPlayerHP - snap.playerHP - 9999 : prevPlayerHP - snap.playerHP;
+        break;
+      }
+      case 'skill': {
+        if (display) { this.flashTarget(display.container, 0x9b59b6); this.shakeTarget(display.container); }
+        break;
+      }
+      case 'resonance': {
+        if (display) { this.flashTarget(display.container, 0x2c3e50); this.shakeTarget(display.container, 10); }
+        break;
+      }
+      case 'guard': {
+        if (this.statPanel) this.flashTarget(this.statPanel.container, 0x4a6fa5);
+        this.floatingText(200, 620, 'GUARD', PALETTE_HEX.player);
+        break;
+      }
+      case 'item': {
+        if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
+        const healed = snap.playerHP - prevPlayerHP;
+        if (healed > 0) this.floatingText(200, 620, `+${healed} HP`, PALETTE_HEX.ok);
+        break;
+      }
+      case 'analyze': {
+        if (display) { this.flashTarget(display.container, 0xc9a24b); }
+        if (targetKey) this.floatingText(200, 260, 'WEAKNESSES READ', PALETTE_HEX.gold);
+        break;
+      }
+      case 'sunder': {
+        if (display) { this.flashTarget(display.container, 0xe67e22); this.shakeTarget(display.container); }
+        if (targetKey) this.floatingText(200, 260, 'ARMOR BROKEN', '#e67e22');
+        break;
+      }
+      case 'withdraw': {
+        this.cameras.main.shake(200, 0.005);
+        break;
+      }
+    }
+    if (snap.playerHP < prevPlayerHP && type !== 'withdraw') {
+      audio.damageTaken();
+      if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
+      const dmg = prevPlayerHP - snap.playerHP;
+      this.floatingText(200, 600, `-${dmg}`, PALETTE_HEX.danger);
+    }
+    this.lastPlayerHP = snap.playerHP;
+  }
+
+  private flashTarget(container: Phaser.GameObjects.Container, color: number): void {
+    const overlay = this.add.rectangle(container.x, container.y, 128, 96, color, 0.6).setDepth(10);
+    this.tweens.add({
+      targets: overlay,
+      alpha: 0,
+      duration: 300,
+      onComplete: () => overlay.destroy(),
+    });
+  }
+
+  private shakeTarget(container: Phaser.GameObjects.Container, intensity = 6): void {
+    const origX = container.x;
+    this.tweens.add({
+      targets: container,
+      x: origX - intensity,
+      duration: 35,
+      yoyo: true,
+      repeat: 3,
+    });
+  }
+
+  private floatingText(x: number, y: number, text: string, color: string): void {
+    const t = this.add.text(x, y, text, {
+      fontFamily: FONT_MONO, fontSize: '14px', color, fontStyle: 'bold',
+    }).setOrigin(0.5);
+    this.tweens.add({
+      targets: t,
+      y: y - 40,
+      alpha: 0,
+      duration: 700,
+      ease: 'Power2',
+      onComplete: () => t.destroy(),
+    });
   }
 
   private openItemMenu() {
@@ -216,7 +310,7 @@ export class CombatScene extends Phaser.Scene {
         subtitle: ITEMS[entry.id]?.description,
         onSelect: () => {
           this.closeOverlay();
-          this.doAction(() => this.engine.useItem(entry.id));
+          this.doAction('item', () => this.engine.useItem(entry.id));
         },
       })),
       { width: 420, spacing: 56 },
@@ -245,8 +339,15 @@ export class CombatScene extends Phaser.Scene {
         subtitle: MOMENTUM_LABELS[c].subtitle,
         onSelect: () => {
           this.closeOverlay();
+          const prevHP = this.lastPlayerHP;
           const snap = this.engine.resolveMomentum(c);
           this.refresh(snap);
+          const healed = snap.playerHP - prevHP;
+          if (healed > 0) {
+            if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
+            this.floatingText(200, 620, `+${healed} HP`, PALETTE_HEX.ok);
+          }
+          this.lastPlayerHP = snap.playerHP;
         },
       })),
       { width: 420, spacing: 58 },
@@ -255,12 +356,27 @@ export class CombatScene extends Phaser.Scene {
 
   private onEndTurn() {
     audio.click();
+    const prevHP = this.lastPlayerHP;
     const snap = this.engine.endPlayerPhase();
     this.refresh(snap);
+    if (snap.playerHP < prevHP) {
+      audio.damageTaken();
+      if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
+      const dmg = prevHP - snap.playerHP;
+      this.floatingText(200, 600, `-${dmg}`, PALETTE_HEX.danger);
+    }
+    this.lastPlayerHP = snap.playerHP;
     if (snap.phase === 'player' || (snap.phase !== 'victory' && snap.phase !== 'defeat' && snap.phase !== 'fled' && snap.phase !== 'momentum_choice')) {
       this.time.delayedCall(700, () => {
         const next = this.engine.beginRound();
         this.refresh(next);
+        if (next.playerHP < this.lastPlayerHP) {
+          audio.damageTaken();
+          if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
+          const dmg2 = this.lastPlayerHP - next.playerHP;
+          this.floatingText(200, 600, `-${dmg2}`, PALETTE_HEX.danger);
+        }
+        this.lastPlayerHP = next.playerHP;
       });
     }
   }

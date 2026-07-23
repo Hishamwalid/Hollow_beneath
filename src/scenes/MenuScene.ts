@@ -13,37 +13,48 @@ export class MenuScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     const cx = GAME_WIDTH / 2;
 
+    const { meta, loadActiveRun } = useGameStore.getState();
+    const canContinue = loadActiveRun();
+
+    const buttons: { label: string; onClick: () => void }[] = [];
+    if (canContinue) buttons.push({ label: 'Continue', onClick: () => this.scene.start('Board') });
+    buttons.push({ label: 'New Descent', onClick: () => this.scene.start('CharacterCreation') });
+    buttons.push({ label: 'Echo Shard Shop', onClick: () => this.scene.start('ShardShop') });
+
+    const btnH = 52;
+    const btnGap = 70;
+    const buttonsH = buttons.length * btnH + (buttons.length - 1) * btnGap;
+    const contentH = 52 + 30 + 16 + 30 + 14 + 60 + buttonsH;
+    let y = (GAME_HEIGHT - contentH) / 2;
+
     this.add
-      .text(cx, 160, 'THE HOLLOW BENEATH', { fontFamily: FONT_SERIF, fontSize: '52px', color: PALETTE_HEX.gold })
+      .text(cx, y + 26, 'THE HOLLOW BENEATH', { fontFamily: FONT_SERIF, fontSize: '52px', color: PALETTE_HEX.gold })
       .setOrigin(0.5);
+    y += 52 + 30;
+
     this.add
-      .text(cx, 210, 'a descent, a translation, a mistake made carefully', {
+      .text(cx, y, 'a descent, a translation, a mistake made carefully', {
         fontFamily: FONT_SERIF,
         fontSize: '16px',
         color: PALETTE_HEX.boneMuted,
         fontStyle: 'italic',
       })
       .setOrigin(0.5);
-
-    const { meta, loadActiveRun } = useGameStore.getState();
-    const canContinue = loadActiveRun();
+    y += 16 + 30;
 
     this.add
-      .text(cx, 270, `Echo Shards: ${meta.echoShards}    Runs: ${meta.totalRuns}    Endings seen: ${meta.endingsAchieved.length}/6`, {
+      .text(cx, y, `Echo Shards: ${meta.echoShards}    Runs: ${meta.totalRuns}    Endings seen: ${meta.endingsAchieved.length}/6`, {
         fontFamily: FONT_SERIF,
         fontSize: '14px',
         color: PALETTE_HEX.boneMuted,
       })
       .setOrigin(0.5);
+    y += 14 + 60;
 
-    let y = 360;
-    if (canContinue) {
-      createButton(this, cx, y, 'Continue', () => this.scene.start('Board'), { width: 320 });
-      y += 70;
+    for (const btn of buttons) {
+      createButton(this, cx, y, btn.label, btn.onClick, { width: 320 });
+      y += btnGap;
     }
-    createButton(this, cx, y, 'New Descent', () => this.scene.start('CharacterCreation'), { width: 320 });
-    y += 70;
-    createButton(this, cx, y, 'Echo Shard Shop', () => this.scene.start('ShardShop'), { width: 320 });
 
     this.add
       .text(cx, GAME_HEIGHT - 40, 'placeholder build — art & audio pending · Team Akrasia', {
