@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { createButton } from '@ui/Button';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { spawnHitParticles } from '@systems/particles';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -11,8 +13,15 @@ export class GameOverScene extends Phaser.Scene {
   }
 
   create() {
-    this.cameras.main.setBackgroundColor(0x0b0d10);
+    this.cameras.main.setBackgroundColor(0x1a0808);
+    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x330000, 0.15);
+    fadeIn(this);
     audio.defeat();
+    this.time.addEvent({
+      delay: 400, loop: true, callback: () => {
+        spawnHitParticles(this, Math.random() * GAME_WIDTH, Math.random() * GAME_HEIGHT * 0.5);
+      },
+    });
     const meta = useGameStore.getState().meta;
 
     this.add
@@ -35,6 +44,6 @@ export class GameOverScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 110, 'Return to Menu', () => this.scene.start('Menu'), { width: 260 });
+    createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 110, 'Return to Menu', () => fadeToScene(this, 'Menu'), { width: 260 });
   }
 }

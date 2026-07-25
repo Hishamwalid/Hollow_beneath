@@ -51,5 +51,5 @@ export function resolveTrap(trap: TrapDef, player: PlayerState, rng: () => numbe
 export function pickEvent(page: number, resonance: number, seen: Set<string>, rng: () => number, flags: Record<string, boolean> = {}): EventDef {
   const pool = eligibleEvents(page, resonance, seen, flags);
   if (pool.length === 0) return EVENTS.quiet_passage;
-  return pick(pool, rng);
+  return pick(pool, rng) ?? EVENTS.quiet_passage;
 }

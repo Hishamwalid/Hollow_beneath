@@ -37,13 +37,13 @@ export function createChoiceMenu(
   const n = Math.max(1, items.length);
 
   const maxSpacingThatFits = n > 1 ? (bottomBound - halfButton - y) / (n - 1) : desiredSpacing;
-  const spacing = n > 1 ? Math.max(36, Math.min(desiredSpacing, maxSpacingThatFits)) : desiredSpacing;
+  const spacing = n > 1 ? Math.max(56, Math.min(desiredSpacing, maxSpacingThatFits)) : desiredSpacing;
 
   const blockBottom = y + (n - 1) * spacing + halfButton;
   const shiftUp = Math.max(0, blockBottom - bottomBound);
   const startY = y - shiftUp;
 
-  const container = scene.add.container(x, startY);
+  const container = scene.add.container(x, startY).setDepth(40);
 
   items.forEach((item, i) => {
     const btn = createButton(scene, 0, i * spacing, item.label, item.onSelect, {

@@ -90,7 +90,7 @@ export const ITEMS: Record<string, ItemDef> = {
   fossil_crown: {
     id: 'fossil_crown',
     name: 'Fossil Crown',
-    description: "The Fossil King's crown. +5 MDEF, +10% Resonance gain.",
+    description: "The Fossil King's crown. +5 MDEF.",
     kind: 'accessory',
     effect: { statBonus: { mdef: 5 } },
     sellValue: 100,

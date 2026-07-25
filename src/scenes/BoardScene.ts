@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import type { BoardNode } from '@data/types';
-import { CHECKPOINTS, LANDMARK_INDICES } from '@systems/BoardGenerator';
+import { CHECKPOINTS, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
 import { rollDie, rollMovement } from '@systems/checks';
 import { pickEvent } from '@systems/EventEngine';
 import { resolveTrap } from '@systems/EventEngine';
@@ -16,6 +16,7 @@ import { createNodePreview } from '@ui/NodePreview';
 import { createButton } from '@ui/Button';
 import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
@@ -36,9 +37,12 @@ export class BoardScene extends Phaser.Scene {
   private playerToken?: Phaser.GameObjects.Image;
   private rollBtn?: ReturnType<typeof createButton>;
   private logText?: Phaser.GameObjects.Text;
+  private logBg?: Phaser.GameObjects.Rectangle;
   private statPanel?: ReturnType<typeof createStatPanel>;
   private preview?: ReturnType<typeof createNodePreview>;
   private diceRoller?: ReturnType<typeof createDiceRoller>;
+  private depthLadder?: Phaser.GameObjects.GameObject[];
+  private pageLabel?: Phaser.GameObjects.Text;
   private busy = false;
 
   constructor() {
@@ -48,14 +52,15 @@ export class BoardScene extends Phaser.Scene {
   create() {
     this.busy = false;
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    fadeIn(this);
     const { player, game } = useGameStore.getState();
     if (!player || !game) {
-      this.scene.start('Menu');
+      fadeToScene(this, 'Menu');
       return;
     }
 
     this.drawBoard(game.nodes);
-    this.playerToken = this.add.image(0, 0, 'tok_player').setDisplaySize(30, 30).setDepth(10);
+    this.playerToken = this.add.image(0, 0, 'tok_player').setDisplaySize(30, 30).setDepth(20);
     this.placeTokenAt(game.currentNodeIndex);
 
     applyResonanceTint(this, player.resonance, GAME_WIDTH, GAME_HEIGHT);
@@ -65,16 +70,26 @@ export class BoardScene extends Phaser.Scene {
 
     this.preview = createNodePreview(this, GAME_WIDTH - 130, 40);
     if (game.currentNodeIndex > 0) this.preview.show(game.nodes[game.currentNodeIndex - 1]);
+    createButton(this, GAME_WIDTH - 100, 160, 'Bag', () => fadeToScene(this, 'Inventory'), { width: 60, height: 30, fontSize: '11px' });
 
-    this.logText = this.add.text(16, GAME_HEIGHT - 100, this.pageFlavor(game.currentPage), {
+    this.pageLabel = this.add.text(GAME_WIDTH / 2, 16, `Page ${game.currentPage} / 20`, {
+      fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.gold,
+    }).setOrigin(0.5, 0).setDepth(5);
+
+    this.buildDepthLadder(game.currentPage);
+
+    const logY = GAME_HEIGHT - 34;
+    this.logBg = this.add.rectangle(GAME_WIDTH / 2, logY, GAME_WIDTH - 40, 32, 0x16191d, 0.7)
+      .setStrokeStyle(1, 0xc9a24b, 0.3).setDepth(5);
+    this.logText = this.add.text(GAME_WIDTH / 2, logY, this.pageFlavor(game.currentPage), {
       fontFamily: FONT_SERIF,
-      fontSize: '13px',
+      fontSize: '12px',
       color: PALETTE_HEX.boneMuted,
-      wordWrap: { width: GAME_WIDTH - 32 },
-    });
+      align: 'center',
+    }).setOrigin(0.5).setDepth(6);
 
-    this.diceRoller = createDiceRoller(this, GAME_WIDTH - 130, GAME_HEIGHT - 150);
-    this.rollBtn = createButton(this, GAME_WIDTH - 130, GAME_HEIGHT - 80, 'Roll (1d4+1)', () => this.handleRoll(), { width: 180 });
+    this.diceRoller = createDiceRoller(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT - 170);
+    this.rollBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 100, 'Roll (1d6)', () => this.handleRoll(), { width: 200 });
 
     if (game.currentNodeIndex >= 100) {
       this.rollBtn.setEnabled(false);
@@ -82,18 +97,44 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private pageFlavor(page: number): string {
-    if (page <= 0) return 'The stair down is behind you now. Ahead: a hundred pages of a book that was never meant to be read twice.';
-    return `Page ${page} of 10. The Hollow does not get shallower from here.`;
+    if (page <= 0) return 'The stair down is behind you now. Ahead: two hundred pages of a book that was never meant to be read twice.';
+    const NAMES = [
+      'The Vestibule', 'Ashfall', 'The Warrens', 'The Archive Threshold', 'The Bone Gallery',
+      'The Chorus Chamber', 'Deep Pages', 'The Fossil Reach', 'The Court of Dust', 'The Loom Gate',
+      'The Echoing Passages', 'The Still Library', 'The Crystal Veins', 'The Sable Bastion', 'The Whispering Step',
+      'The Archive Depths', 'The Covenant Spire', 'The Fossil Tunnels', 'The Mirror Hall', 'The Final Chamber',
+    ];
+    return `Page ${page} / 20 — ${NAMES[Math.min(19, page - 1)]}`;
+  }
+
+  private buildDepthLadder(currentPage: number) {
+    if (this.depthLadder) { this.depthLadder.forEach((o) => o.destroy()); }
+    const ladder: Phaser.GameObjects.GameObject[] = [];
+    const lx = GAME_WIDTH - 20;
+    const topY = 210;
+    const bottomY = GAME_HEIGHT - 90;
+    const stepH = (bottomY - topY) / 9;
+    for (let i = 0; i < 10; i++) {
+      const y = Math.round(topY + i * stepH);
+      const isCurrent = i + 1 === currentPage;
+      const dot = this.add.circle(lx, y, isCurrent ? 6 : 4, isCurrent ? 0xc9a24b : 0x2a2e33)
+        .setStrokeStyle(1, isCurrent ? 0xe9c876 : 0x9a9488, isCurrent ? 1 : 0.4);
+      const label = this.add.text(lx - 14, y, `${i + 1}`, {
+        fontFamily: `"Courier New", monospace`, fontSize: '9px', color: isCurrent ? '#c9a24b' : '#555555',
+      }).setOrigin(1, 0.5);
+      ladder.push(dot, label);
+    }
+    this.depthLadder = ladder;
   }
 
   private drawBoard(nodes: BoardNode[]) {
     for (const node of nodes) {
       const { x, y } = nodePosition(node.index);
       const isLandmark = LANDMARK_INDICES.includes(node.index);
-      const icon = this.add.image(x, y, `node_${node.type}`).setDisplaySize(isLandmark ? 26 : 16, isLandmark ? 26 : 16);
+      const icon = this.add.image(x, y, `node_${node.type}`).setDisplaySize(isLandmark ? 26 : 16, isLandmark ? 26 : 16).setDepth(0);
       icon.setAlpha(node.resolved && !isLandmark ? 0.35 : 0.9);
       if (CHECKPOINTS.includes(node.index)) {
-        this.add.circle(x, y, 16, 0x000000, 0).setStrokeStyle(1, 0xc9a24b, 0.5);
+        this.add.circle(x, y, 16, 0x000000, 0).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(1);
       }
     }
   }
@@ -106,6 +147,7 @@ export class BoardScene extends Phaser.Scene {
 
   private log(msg: string) {
     this.logText?.setText(msg);
+    this.logBg?.setAlpha(0.85);
   }
 
   private handleRoll() {
@@ -118,16 +160,25 @@ export class BoardScene extends Phaser.Scene {
 
     const roll = rollMovement(Math.random);
     let target = Math.min(100, game.currentNodeIndex + roll);
-    // Capture rule: never skip past an unresolved Landmark — stop there instead.
     for (let i = game.currentNodeIndex + 1; i <= target; i++) {
       if (LANDMARK_INDICES.includes(i) && !game.nodes[i - 1].resolved) {
+        target = i;
+        break;
+      }
+      if (CAPTURE_INDICES.includes(i) && !game.nodes[i - 1].resolved) {
         target = i;
         break;
       }
     }
 
     this.diceRoller?.roll(roll, () => {
-      this.moveTo(target);
+      try {
+        this.moveTo(target);
+      } catch (e) {
+        console.error('Roll handler failed', e);
+        this.busy = false;
+        this.rollBtn?.setEnabled(true);
+      }
     });
   }
 
@@ -158,7 +209,7 @@ export class BoardScene extends Phaser.Scene {
 
     const page = Math.min(10, Math.ceil(target / 10));
     player.echoShards += applyShardBonus(player, shardsForNodeVisit());
-    const updatedNodes = game.nodes.map((n) => n);
+    const updatedNodes = game.nodes.map((n) => ({ ...n }));
     const node = updatedNodes[target - 1];
 
     useGameStore.setState({
@@ -166,9 +217,12 @@ export class BoardScene extends Phaser.Scene {
     });
     this.statPanel?.update(player);
     this.preview?.show(node);
-    store.persist();
+    this.pageLabel?.setText(`Page ${page} / 10`);
+    this.buildDepthLadder(page);
+    this.log(this.pageFlavor(page));
 
     this.resolveNode(node);
+    this.applyFactionGearBonus(player);
   }
 
   private resolveNode(node: BoardNode) {
@@ -177,21 +231,28 @@ export class BoardScene extends Phaser.Scene {
     if (!player || !game) return;
 
     if (node.type === 'landmark') {
-      this.scene.start('Landmark', { bossId: node.subtype });
+      fadeToScene(this, 'Landmark', { bossId: node.subtype });
       return;
     }
     if (node.type === 'combat') {
-      this.scene.start('Combat', { mode: 'wild', enemyIds: [node.subtype], page: node.page });
+      fadeToScene(this, 'Combat', { mode: 'wild', enemyIds: [node.subtype], page: node.page });
       return;
     }
     if (node.type === 'event') {
       const seen = new Set(player.history.filter((h) => h.startsWith('event_seen:')).map((h) => h.slice('event_seen:'.length)));
       const event = pickEvent(node.page, player.resonance, seen, Math.random, player.flags);
-      this.scene.start('Event', { eventId: event.id });
+      fadeToScene(this, 'Event', { eventId: event.id });
       return;
     }
     if (node.type === 'trap') {
-      const result = resolveTrap(TRAPS[node.subtype], player, Math.random);
+      const trapDef = TRAPS[node.subtype];
+      if (!trapDef) {
+        this.log('The trap mechanism is rusted and non-functional.');
+        this.markResolved(node);
+        this.afterInlineResolution();
+        return;
+      }
+      const result = resolveTrap(trapDef, player, Math.random);
       audio.hit();
       this.log(result.text);
       this.markResolved(node);
@@ -207,7 +268,7 @@ export class BoardScene extends Phaser.Scene {
     if (node.type === 'discovery') {
       if (node.subtype === 'capture_point' && MINOR_LANDMARKS[node.index]) {
         this.markResolved(node);
-        this.scene.start('Event', { eventId: MINOR_LANDMARKS[node.index].id });
+        fadeToScene(this, 'Event', { eventId: MINOR_LANDMARKS[node.index].id });
         return;
       }
       this.resolveDiscovery(player, node);
@@ -357,6 +418,20 @@ export class BoardScene extends Phaser.Scene {
     audio.shardGain();
   }
 
+  private applyFactionGearBonus(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>) {
+    const FACTION_GEAR: Record<string, keyof typeof player.faction> = {
+      sable_ash_blade: 'sable',
+      archive_field_coat: 'archive',
+      travelers_ledger: 'caravan',
+      muted_stone: 'covenant',
+    };
+    const equipped = [player.equipment.weapon, player.equipment.armour, player.equipment.accessory, player.equipment.focus].filter((id): id is string => !!id);
+    for (const gearId of equipped) {
+      const faction = FACTION_GEAR[gearId];
+      if (faction) player.faction[faction] += 1;
+    }
+  }
+
   private markResolved(node: BoardNode) {
     node.resolved = true;
   }
@@ -386,9 +461,9 @@ export class BoardScene extends Phaser.Scene {
     const hadCheckpoint = !!game?.checkpointSnapshot && (game?.checkpointPage ?? 0) > 0;
     store.handleDeath();
     if (hadCheckpoint) {
-      this.scene.start('Board');
+      fadeToScene(this, 'Board');
     } else {
-      this.scene.start('GameOver');
+      fadeToScene(this, 'GameOver');
     }
   }
 }

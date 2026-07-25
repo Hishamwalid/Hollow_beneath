@@ -45,10 +45,11 @@ export function loadGame(): { meta: MetaState; activeRun: SaveBlob['activeRun'] 
     const blob: SaveBlob = JSON.parse(raw);
     const payload = payloadOf(blob.meta, blob.activeRun);
     if (simpleChecksum(payload) !== blob.checksum) {
-      console.warn('Save checksum mismatch — save may be corrupted. Loading meta only.');
-      return { meta: blob.meta ?? defaultMeta(), activeRun: null };
+      console.warn('Save checksum mismatch — save may be corrupted. Loading fresh meta.');
+      return { meta: defaultMeta(), activeRun: null };
     }
-    return { meta: blob.meta ?? defaultMeta(), activeRun: blob.activeRun ?? null };
+    if (!blob.meta) return { meta: defaultMeta(), activeRun: null };
+    return { meta: blob.meta, activeRun: blob.activeRun ?? null };
   } catch (e) {
     console.error('Load failed', e);
     return { meta: defaultMeta(), activeRun: null };
@@ -74,12 +75,12 @@ export function takeCheckpoint(game: GameState, player: PlayerState): GameState 
 
 /** Restores player + board position to the last checkpoint after a death. */
 export function restoreCheckpoint(game: GameState): { game: GameState; player: PlayerState | null } {
-  if (!game.checkpointSnapshot) return { game, player: null };
+  if (!game.checkpointSnapshot) return { game: { ...game, isDead: false }, player: null };
   const restoredPlayer = JSON.parse(JSON.stringify(game.checkpointSnapshot)) as PlayerState;
-  const checkpointIndex = game.checkpointPage * 10;
+  const firstNodeOfPage = (game.checkpointPage - 1) * 10 + 1;
   const restoredGame: GameState = {
     ...game,
-    currentNodeIndex: checkpointIndex,
+    currentNodeIndex: firstNodeOfPage,
     currentPage: game.checkpointPage,
     isDead: false,
   };

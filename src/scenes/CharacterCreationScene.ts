@@ -5,6 +5,7 @@ import { PRESET_STARTING_SKILL } from '@data/skills';
 import { useGameStore } from '@store/gameStore';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH } from '@/config';
 
@@ -39,6 +40,7 @@ export class CharacterCreationScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    fadeIn(this);
     const cx = GAME_WIDTH / 2;
 
     this.add.text(cx, 60, 'Who Descends?', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
@@ -72,7 +74,7 @@ export class CharacterCreationScene extends Phaser.Scene {
       createButton(this, cx - totalW / 2 + 65 + i * 130, presetY, name, () => {
         this.stats = { ...PRESET_BUILDS[name] };
         this.refresh();
-      }, { width: 118, height: 38, fontSize: '13px' });
+      }, { width: 118, height: 38, fontSize: '13px', textureKey: 'panel_preset', textureHoverKey: 'panel_preset_hover' });
     });
 
     this.beginBtn = createButton(this, cx, presetY + 70, 'Begin the Descent', () => this.begin(), { width: 280 });
@@ -81,12 +83,12 @@ export class CharacterCreationScene extends Phaser.Scene {
   }
 
   private makeStepper(x: number, y: number, key: keyof StatBlock) {
-    createButton(this, x - 40, y, '-', () => this.adjust(key, -1), { width: 40, height: 40, fontSize: '18px' });
+    createButton(this, x - 40, y, '-', () => this.adjust(key, -1), { width: 40, height: 40, fontSize: '18px', textureKey: 'panel_stepper', textureHoverKey: 'panel_stepper' });
     const valueText = this.add
       .text(x + 20, y, '', { fontFamily: FONT_MONO, fontSize: '20px', color: PALETTE_HEX.gold })
       .setOrigin(0.5);
     this.valueTexts[key] = valueText;
-    createButton(this, x + 80, y, '+', () => this.adjust(key, 1), { width: 40, height: 40, fontSize: '18px' });
+    createButton(this, x + 80, y, '+', () => this.adjust(key, 1), { width: 40, height: 40, fontSize: '18px', textureKey: 'panel_stepper', textureHoverKey: 'panel_stepper' });
   }
 
   private adjust(key: keyof StatBlock, delta: number) {
@@ -127,15 +129,17 @@ export class CharacterCreationScene extends Phaser.Scene {
   private begin() {
     if (!isValidBuild(this.stats)) return;
     useGameStore.getState().startNewRun(this.stats);
-    const player = useGameStore.getState().player;
+    const store = useGameStore.getState();
+    const player = store.player;
     const startingSkill = PRESET_STARTING_SKILL[closestPresetName(this.stats)];
     if (player && startingSkill && !player.skillsKnown.includes(startingSkill)) {
-      player.skillsKnown.push(startingSkill);
-      if (startingSkill === 'quickstep') player.derived.speed += 5;
-      if (startingSkill === 'bulwark_stance') player.derived.defense = Math.round(player.derived.defense * 1.15);
-      if (startingSkill === 'steady_hands') player.derived.accuracy += 10;
+      const updatedPlayer = { ...player, skillsKnown: [...player.skillsKnown, startingSkill] };
+      if (startingSkill === 'quickstep') updatedPlayer.derived = { ...updatedPlayer.derived, speed: player.derived.speed + 5 };
+      if (startingSkill === 'bulwark_stance') updatedPlayer.derived = { ...updatedPlayer.derived, defense: Math.round(player.derived.defense * 1.15) };
+      if (startingSkill === 'steady_hands') updatedPlayer.derived = { ...updatedPlayer.derived, accuracy: player.derived.accuracy + 10 };
+      useGameStore.setState({ player: updatedPlayer });
       useGameStore.getState().persist();
     }
-    this.scene.start('Board');
+    fadeToScene(this, 'Board');
   }
 }

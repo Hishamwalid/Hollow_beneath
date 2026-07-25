@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { useGameStore } from '@store/gameStore';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -23,6 +24,7 @@ export class LoreCodexScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    fadeIn(this);
     this.page = 0;
     const cx = GAME_WIDTH / 2;
     const { player, meta } = useGameStore.getState();
@@ -45,7 +47,7 @@ export class LoreCodexScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     createButton(this, cx - 200, GAME_HEIGHT - 50, '< Prev', () => this.changePage(-1), { width: 160, height: 42 });
-    createButton(this, cx, GAME_HEIGHT - 50, 'Back to Menu', () => this.scene.start('Menu'), { width: 220, height: 42 });
+    createButton(this, cx, GAME_HEIGHT - 50, 'Back to Menu', () => fadeToScene(this, 'Menu'), { width: 220, height: 42 });
     createButton(this, cx + 200, GAME_HEIGHT - 50, 'Next >', () => this.changePage(1), { width: 160, height: 42 });
 
     this.renderPage();

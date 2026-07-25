@@ -195,9 +195,14 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   }
 
   // UI chrome
-  panelTexture(scene, 'panel_dialog', 700, 220, PALETTE.stone, PALETTE.gold);
-  panelTexture(scene, 'panel_stat', 260, 140, PALETTE.stone, PALETTE.boneMuted);
-  panelTexture(scene, 'panel_button', 220, 52, PALETTE.stoneLight, PALETTE.gold, 8);
-  panelTexture(scene, 'panel_button_hover', 220, 52, PALETTE.gold, PALETTE.goldBright, 8);
+  panelTexture(scene, 'panel_dialog', 800, 220, PALETTE.stone, PALETTE.gold);
+  panelTexture(scene, 'panel_stat', 300, 165, PALETTE.stone, PALETTE.boneMuted);
+  panelTexture(scene, 'panel_button', 260, 52, PALETTE.stoneLight, PALETTE.gold, 8);
+  panelTexture(scene, 'panel_button_hover', 260, 52, PALETTE.gold, PALETTE.goldBright, 8);
+  panelTexture(scene, 'panel_stepper', 40, 40, PALETTE.stoneLight, PALETTE.gold, 6);
+  panelTexture(scene, 'panel_preset', 120, 38, PALETTE.stoneLight, PALETTE.gold, 6);
+  panelTexture(scene, 'panel_preset_hover', 120, 38, PALETTE.gold, PALETTE.goldBright, 6);
   panelTexture(scene, 'panel_combat_hud', 780, 160, PALETTE.stone, PALETTE.gold);
+  panelTexture(scene, 'panel_enemy', 110, 130, PALETTE.stone, PALETTE.boneMuted, 6);
+  shapeTexture(scene, 'particle', 8, (g) => { g.fillStyle(0xffffff, 1); g.fillCircle(4, 4, 3); });
 }

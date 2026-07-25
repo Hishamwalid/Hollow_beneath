@@ -14,6 +14,7 @@ export function randomSeed(): number {
   return Math.floor(Math.random() * 0xffffffff);
 }
 
-export function pick<T>(arr: T[], rng: () => number): T {
+export function pick<T>(arr: T[], rng: () => number): T | undefined {
+  if (arr.length === 0) return undefined;
   return arr[Math.floor(rng() * arr.length)];
 }

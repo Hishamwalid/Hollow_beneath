@@ -8,6 +8,7 @@ import { createDialogBox, type DialogBox } from '@ui/DialogBox';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 interface EventSceneData {
@@ -31,10 +32,11 @@ export class EventScene extends Phaser.Scene {
 
   create(data: EventSceneData) {
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    fadeIn(this);
     const { player } = useGameStore.getState();
     const event = findEvent(data.eventId);
     if (!player || !event) {
-      this.scene.start('Board');
+      fadeToScene(this, 'Board');
       return;
     }
 
@@ -54,7 +56,7 @@ export class EventScene extends Phaser.Scene {
   private showChoices(choices: EventChoice[]) {
     const { player } = useGameStore.getState();
     if (!player) return;
-    const visible = choices.filter((c) => !c.requirement || c.requirement(player));
+    const visible = choices.filter((c) => !c.requirement || c.requirement?.(player));
 
     this.choiceMenu?.destroy();
     this.choiceMenu = createChoiceMenu(
@@ -70,28 +72,30 @@ export class EventScene extends Phaser.Scene {
   }
 
   private pickChoice(choice: EventChoice) {
-    const store = useGameStore.getState();
-    const { player } = store;
+    const { player } = useGameStore.getState();
     if (!player) return;
     this.choiceMenu?.destroy();
     this.choiceMenu = undefined;
 
     const resolution = resolveEventChoice(player, choice, Math.random);
-    store.persist();
+    useGameStore.getState().persist();
 
     this.dialog?.destroy();
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 590, 820, 150);
     this.dialog = dialog;
     dialog.setText(resolution.text, () => {
-      if (player.currentHP <= 0) {
+      const { player: currentPlayer, game: currentGame } = useGameStore.getState();
+      if (!currentPlayer) return;
+      if (currentPlayer.currentHP <= 0) {
         this.handleDeath();
         return;
       }
       if (resolution.combat) {
-        this.scene.start('Combat', {
+        const page = Math.max(1, Math.ceil((currentGame?.currentNodeIndex ?? 1) / 10));
+        fadeToScene(this, 'Combat', {
           mode: 'event',
           enemyIds: resolution.combat.enemyIds,
-          page: Math.max(1, Math.ceil((store.game?.currentNodeIndex ?? 1) / 10)),
+          page,
           onVictory: resolution.combat.onVictory,
         });
         return;
@@ -104,14 +108,14 @@ export class EventScene extends Phaser.Scene {
 
   private showContinue() {
     this.continueBtn?.destroy();
-    this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 70, 'Continue', () => this.scene.start('Board'), { width: 220 });
+    this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 70, 'Continue', () => fadeToScene(this, 'Board'), { width: 220 });
   }
 
   private handleDeath() {
     const store = useGameStore.getState();
     const hadCheckpoint = !!store.game?.checkpointSnapshot && (store.game?.checkpointPage ?? 0) > 0;
     store.handleDeath();
-    this.scene.start(hadCheckpoint ? 'Board' : 'GameOver');
+    fadeToScene(this, hadCheckpoint ? 'Board' : 'GameOver');
   }
 
   shutdown() {

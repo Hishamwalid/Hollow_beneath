@@ -44,7 +44,7 @@ export const FACTIONS: Record<keyof FactionState, FactionMeta> = {
 export type InfluenceStatus = 'Hostile' | 'Neutral' | 'Friendly' | 'Devoted';
 
 export function influenceStatus(value: number): InfluenceStatus {
-  if (value >= -75 && value <= -25) return 'Hostile';
+  if (value <= -25) return 'Hostile';
   if (value >= 25 && value <= 74) return 'Friendly';
   if (value >= 75) return 'Devoted';
   return 'Neutral';

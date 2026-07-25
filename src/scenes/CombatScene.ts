@@ -13,6 +13,8 @@ import { createEnemyDisplay, createApPips, createActionBar, type EnemyDisplay } 
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { spawnHitParticles, spawnHealParticles, spawnMomentumParticles } from '@systems/particles';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
@@ -43,6 +45,7 @@ export class CombatScene extends Phaser.Scene {
   private statPanel?: ReturnType<typeof createStatPanel>;
   private apPips?: ReturnType<typeof createApPips>;
   private actionBarContainer?: Phaser.GameObjects.Container;
+  private actionBarTooltip?: Phaser.GameObjects.Text;
   private logText?: Phaser.GameObjects.Text;
   private phaseLabelText?: Phaser.GameObjects.Text;
   private overlayMenu?: ChoiceMenu;
@@ -57,20 +60,27 @@ export class CombatScene extends Phaser.Scene {
   create(data: CombatSceneData) {
     this.resultShown = false;
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    fadeIn(this);
     this.sceneData = data;
     const store = useGameStore.getState();
     const player = store.player;
     this.lastPlayerHP = player?.currentHP ?? 0;
     if (!player) {
-      this.scene.start('Board');
+      fadeToScene(this, 'Board');
       return;
     }
     applyResonanceTint(this, player.resonance, GAME_WIDTH, GAME_HEIGHT);
 
     const bossDef = data.mode === 'boss' && data.bossId ? BOSSES[data.bossId] : undefined;
+    const safeEnemyIds = data.enemyIds ?? [];
+    if (safeEnemyIds.length === 0 && !bossDef && data.mode !== 'event') {
+      fadeToScene(this, 'Board');
+      return;
+    }
+
     this.engine = new CombatEngine({
       player,
-      enemyIds: data.enemyIds ?? [],
+      enemyIds: safeEnemyIds,
       page: data.page,
       rng: Math.random,
       bossDef,
@@ -88,17 +98,18 @@ export class CombatScene extends Phaser.Scene {
     const initialSnap = this.engine.beginRound();
     this.buildEnemyDisplays(initialSnap);
 
-    this.statPanel = createStatPanel(this, 16, GAME_HEIGHT - 190, 320);
-    this.apPips = createApPips(this, GAME_WIDTH - 120, GAME_HEIGHT - 190);
+    this.statPanel = createStatPanel(this, 16, GAME_HEIGHT - 200, 240);
+    this.apPips = createApPips(this, GAME_WIDTH - 80, GAME_HEIGHT - 200);
 
-    this.logText = this.add.text(16, GAME_HEIGHT - 280, '', {
+    this.logText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 270, '', {
       fontFamily: FONT_MONO,
       fontSize: '12px',
       color: PALETTE_HEX.boneMuted,
-      wordWrap: { width: GAME_WIDTH - 32 },
-    });
+      align: 'center',
+      wordWrap: { width: 500 },
+    }).setOrigin(0.5, 0);
 
-    this.endTurnBtn = createButton(this, GAME_WIDTH - 110, GAME_HEIGHT - 40, 'End Turn', () => this.onEndTurn(), { width: 180, height: 40 });
+    this.endTurnBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'End Turn', () => this.onEndTurn(), { width: 180, height: 40 });
 
     const whisper = maybePickWhisper(player.resonance, 'combat', Math.random);
     if (whisper) showWhisper(this, GAME_WIDTH / 2, 100, whisper.text, 520);
@@ -140,10 +151,17 @@ export class CombatScene extends Phaser.Scene {
     if (player) this.statPanel?.update(player);
     this.apPips?.update(snap.playerAP);
     this.phaseLabelText?.setText(snap.bossPhaseLabel ?? '');
-    snap.enemies.forEach((e, i) => this.enemyDisplays[i]?.update(e));
-    this.updateTargetHighlight(snap);
-    this.log(snap.log);
+    if (this.selectedTarget && !snap.enemies.some((e) => e.key === this.selectedTarget)) {
+      this.selectedTarget = snap.enemies[0]?.key ?? null;
+    }
+    if (snap.enemies.length !== this.enemyDisplays.length) {
+      this.buildEnemyDisplays(snap);
+    } else {
+      snap.enemies.forEach((e, i) => this.enemyDisplays[i]?.update(e));
+      this.updateTargetHighlight(snap);
+    }
     this.buildActionBar(snap);
+    this.log(snap.log);
     this.endTurnBtn?.setEnabled(snap.phase === 'player');
 
     if (snap.phase === 'momentum_choice') {
@@ -158,89 +176,120 @@ export class CombatScene extends Phaser.Scene {
 
   private buildActionBar(snap: CombatSnapshot) {
     this.actionBarContainer?.destroy();
+    this.actionBarTooltip?.destroy();
     const { player } = useGameStore.getState();
     if (!player) return;
     const activeSkills = player.skillsKnown.filter((id) => (NAMED_SKILLS[id]?.apCost ?? 0) > 0);
     const canAct = snap.phase === 'player';
     const hasFree = snap.freeActionCharges > 0;
     const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
+    const resonanceCost = player.skillsKnown.includes('resonant_study') ? 1 : 2;
+    const analyzeCost = player.skillsKnown.includes('cross_reference') ? 0 : 1;
 
     const items = [
-      { id: 'attack', label: 'Attack', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
-      ...activeSkills.map((id) => ({
-        id,
-        label: NAMED_SKILLS[id].name,
-        apCost: NAMED_SKILLS[id].apCost,
-        disabled: !canAct || !canAfford(NAMED_SKILLS[id].apCost),
-        onClick: () => this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined)),
-      })),
+      { id: 'attack', label: 'Attack', apCost: 1, description: 'Basic melee attack (Slash damage).', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
+      ...activeSkills.map((id) => {
+        const sk = NAMED_SKILLS[id];
+        return {
+          id,
+          label: sk.name,
+          apCost: sk.apCost,
+          description: `${sk.description}${sk.damageType ? ` (${sk.damageType} damage)` : ''}`,
+          disabled: !canAct || !canAfford(sk.apCost),
+          onClick: () => this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined)),
+        };
+      }),
       {
         id: 'resonance',
         label: 'Resonance',
-        apCost: 2,
-        disabled: !canAct || !canAfford(2) || player.resonance < 25,
+        apCost: resonanceCost,
+        description: `Unleash a surge of Resonance (Shadow damage). Requires 25 Resonance. Cost: ${resonanceCost} AP, -1 Resonance.`,
+        disabled: !canAct || !canAfford(resonanceCost) || player.resonance < 25,
         onClick: () => this.doAction('resonance', () => this.engine.resonanceAbility(this.selectedTarget ?? undefined)),
       },
-      { id: 'guard', label: 'Guard', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },
+      { id: 'guard', label: 'Guard', apCost: 1, description: 'Raise your guard. Take 50% less damage until your next turn.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },
       {
         id: 'item',
         label: 'Item',
         apCost: 1,
+        description: 'Use an item from your inventory.',
         disabled: !canAct || !canAfford(1) || player.inventory.length === 0,
         onClick: () => this.openItemMenu(),
       },
-      { id: 'analyze', label: 'Analyze', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction('analyze', () => this.engine.analyze(this.selectedTarget ?? undefined)) },
-      { id: 'sunder', label: 'Sunder', apCost: 2, disabled: !canAct || !canAfford(2), onClick: () => this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)) },
-      { id: 'withdraw', label: 'Withdraw', apCost: 1, disabled: !canAct || !canAfford(1), onClick: () => this.doAction('withdraw', () => this.engine.withdraw()) },
+      { id: 'analyze', label: 'Analyze', apCost: analyzeCost, description: 'Reveal enemy weaknesses and affinities.', disabled: !canAct || !canAfford(analyzeCost), onClick: () => this.doAction('analyze', () => this.engine.analyze(this.selectedTarget ?? undefined)) },
+      { id: 'sunder', label: 'Sunder', apCost: 2, description: 'Sunder an enemy: reduce its Defense by 50% for 2 turns.', disabled: !canAct || !canAfford(2), onClick: () => this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)) },
+      { id: 'withdraw', label: 'Withdraw', apCost: 1, description: 'Attempt to flee from combat. Speed-based success chance.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('withdraw', () => this.engine.withdraw()) },
     ];
+
+    const sharedTooltip = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 200, '', {
+      fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.boneMuted,
+      align: 'center', wordWrap: { width: 500 },
+    }).setOrigin(0.5, 1).setAlpha(0).setDepth(100);
+    this.actionBarTooltip = sharedTooltip;
 
     const cols = 4;
     const rowH = 52;
-    const wrapper = this.add.container(450, GAME_HEIGHT - 130);
-    const { container: row1 } = createActionBar(this, 0, 0, items.slice(0, cols));
+    const wrapper = this.add.container(GAME_WIDTH / 2 - ((Math.min(items.length, cols)) * (120 + 6)) / 2 + 60, GAME_HEIGHT - 150);
+    const { container: row1 } = createActionBar(this, 0, 0, items.slice(0, cols), sharedTooltip);
     wrapper.add(row1);
     if (items.length > cols) {
-      const { container: row2 } = createActionBar(this, 0, rowH, items.slice(cols, cols * 2));
+      const { container: row2 } = createActionBar(this, 0, rowH, items.slice(cols, cols * 2), sharedTooltip);
       wrapper.add(row2);
     }
     this.actionBarContainer = wrapper;
   }
 
   private doAction(type: string, fn: () => CombatSnapshot) {
-    audio.click();
-    const prevHP = this.lastPlayerHP;
-    const prevEnemyHP = new Map(this.engine.snapshot().enemies.map((e) => [e.key, e.hp]));
-    const snap = fn();
-    this.refresh(snap);
-    this.animateAction(type, this.selectedTarget ?? undefined, snap, prevHP, prevEnemyHP);
+    try {
+      audio.click();
+      const prevHP = this.lastPlayerHP;
+      const prevEnemyHP = new Map(this.engine.snapshot().enemies.map((e) => [e.key, e.hp]));
+      const snap = fn();
+      this.refresh(snap);
+      this.animateAction(type, this.selectedTarget ?? undefined, snap, prevHP, prevEnemyHP);
+    } catch (err) {
+      console.error('doAction error:', err);
+      this.log([`Error: ${err instanceof Error ? err.message : String(err)}`]);
+      try { this.refresh(this.engine.snapshot()); } catch (_) { /* noop */ }
+    }
   }
 
   private animateAction(type: string, targetKey: string | undefined, snap: CombatSnapshot, prevPlayerHP: number, prevEnemyHP: Map<string, number>) {
     const display = targetKey ? this.enemyKeyMap.get(targetKey) : undefined;
-    const showEnemyDamage = () => {
-      if (!targetKey || !display) return;
-      const before = prevEnemyHP.get(targetKey);
-      const after = snap.enemies.find((en) => en.key === targetKey)?.hp;
-      if (before !== undefined && after !== undefined && after < before) {
-        this.floatingText(display.container.x, display.container.y - 55, `-${before - after}`, PALETTE_HEX.danger);
-      } else if (before !== undefined && after !== undefined && after > before) {
-        this.floatingText(display.container.x, display.container.y - 55, `+${after - before}`, PALETTE_HEX.ok);
+    const showAllEnemyDamage = () => {
+      for (const e of snap.enemies) {
+        const before = prevEnemyHP.get(e.key);
+        if (before === undefined || before === e.hp) continue;
+        const ed = this.enemyKeyMap.get(e.key);
+        if (!ed) continue;
+        if (e.hp < before) {
+          this.floatingText(ed.container.x, ed.container.y - 55, `-${before - e.hp}`, PALETTE_HEX.danger);
+        } else {
+          this.floatingText(ed.container.x, ed.container.y - 55, `+${e.hp - before}`, PALETTE_HEX.ok);
+        }
       }
     };
+    const playerHealed = snap.playerHP > prevPlayerHP;
+    if (playerHealed && this.statPanel) {
+      spawnHealParticles(this, this.statPanel.container.x + 40, this.statPanel.container.y + 10);
+    }
+    if (snap.momentum === 3 && this.statPanel) {
+      spawnMomentumParticles(this, this.statPanel.container.x + 260, this.statPanel.container.y + 68);
+    }
     switch (type) {
       case 'attack': {
-        if (display) { this.flashTarget(display.container, 0xff4444); this.shakeTarget(display.container); }
-        showEnemyDamage();
+        if (display) { this.flashTarget(display.container, 0xff4444); this.shakeTarget(display.container); spawnHitParticles(this, display.container.x, display.container.y, 0xb0453f); }
+        showAllEnemyDamage();
         break;
       }
       case 'skill': {
-        if (display) { this.flashTarget(display.container, 0x9b59b6); this.shakeTarget(display.container); }
-        showEnemyDamage();
+        if (display) { this.flashTarget(display.container, 0x9b59b6); this.shakeTarget(display.container); spawnHitParticles(this, display.container.x, display.container.y, 0x9b59b6); }
+        showAllEnemyDamage();
         break;
       }
       case 'resonance': {
-        if (display) { this.flashTarget(display.container, 0x2c3e50); this.shakeTarget(display.container, 10); }
-        showEnemyDamage();
+        if (display) { this.flashTarget(display.container, 0x2c3e50); this.shakeTarget(display.container, 10); spawnHitParticles(this, display.container.x, display.container.y, 0x7a7a86); }
+        showAllEnemyDamage();
         break;
       }
       case 'guard': {
@@ -262,11 +311,15 @@ export class CombatScene extends Phaser.Scene {
       case 'sunder': {
         if (display) { this.flashTarget(display.container, 0xe67e22); this.shakeTarget(display.container); }
         if (targetKey) this.floatingText(200, 260, 'ARMOR BROKEN', '#e67e22');
-        showEnemyDamage();
+        showAllEnemyDamage();
         break;
       }
       case 'withdraw': {
         this.cameras.main.shake(200, 0.005);
+        break;
+      }
+      default: {
+        showAllEnemyDamage();
         break;
       }
     }
@@ -319,7 +372,7 @@ export class CombatScene extends Phaser.Scene {
     if (!player) return;
     this.overlayBg?.destroy();
     this.overlayMenu?.destroy();
-    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive();
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive().setDepth(35);
     this.overlayBg.on('pointerdown', () => this.closeOverlay());
     this.overlayMenu = createChoiceMenu(
       this,
@@ -345,10 +398,11 @@ export class CombatScene extends Phaser.Scene {
   }
 
   private showMomentumModal() {
+    if (this.overlayBg && this.overlayMenu) return;
     this.closeOverlay();
     audio.momentumFull();
-    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75);
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 170, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75).setDepth(35);
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 170, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold }).setOrigin(0.5).setDepth(36);
     const choices: MomentumChoice[] = ['extra_turn', 'chorus_heal', 'clarity', 'forgotten_technique', 'unravel'];
     this.overlayMenu = createChoiceMenu(
       this,
@@ -375,7 +429,8 @@ export class CombatScene extends Phaser.Scene {
   }
 
   private onEndTurn() {
-    audio.click();
+    const cur = this.engine.snapshot();
+    if (cur.phase !== 'player') return;
     const prevHP = this.lastPlayerHP;
     const snap = this.engine.endPlayerPhase();
     this.refresh(snap);
@@ -410,13 +465,13 @@ export class CombatScene extends Phaser.Scene {
       audio.defeat();
       const hadCheckpoint = !!store.game?.checkpointSnapshot && (store.game?.checkpointPage ?? 0) > 0;
       store.handleDeath();
-      this.scene.start(hadCheckpoint ? 'Board' : 'GameOver');
+      fadeToScene(this, hadCheckpoint ? 'Board' : 'GameOver');
       return;
     }
 
     if (phase === 'fled') {
       store.persist();
-      this.scene.start('Board');
+      fadeToScene(this, 'Board');
       return;
     }
 
@@ -430,7 +485,7 @@ export class CombatScene extends Phaser.Scene {
       player.bossesDefeated.push(this.sceneData.bossId);
       store.recordCheckpoint();
       store.persist();
-      this.scene.start('Landmark', { stage: 'aftermath', bossId: this.sceneData.bossId, combatFlags: this.engine.getFlags() });
+      fadeToScene(this, 'Landmark', { stage: 'aftermath', bossId: this.sceneData.bossId, combatFlags: this.engine.getFlags() });
       return;
     }
 
@@ -457,10 +512,16 @@ export class CombatScene extends Phaser.Scene {
     this.showVictorySummary(null, xp);
   }
 
+  shutdown() {
+    this.closeOverlay();
+    this.actionBarContainer?.destroy();
+    this.actionBarTooltip?.destroy();
+  }
+
   private showVictorySummary(extraText: string | null, xp: number) {
     this.closeOverlay();
-    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75);
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 120, 'Victory', { fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75).setDepth(35);
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 120, 'Victory', { fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold }).setOrigin(0.5).setDepth(36);
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 70, `+${xp} XP${extraText ? '\n\n' + extraText : ''}`, {
         fontFamily: FONT_SERIF,
@@ -470,6 +531,6 @@ export class CombatScene extends Phaser.Scene {
         wordWrap: { width: 640 },
       })
       .setOrigin(0.5, 0);
-    createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140, 'Continue', () => this.scene.start('Board'), { width: 220 });
+    createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140, 'Continue', () => fadeToScene(this, 'Board'), { width: 220 });
   }
 }

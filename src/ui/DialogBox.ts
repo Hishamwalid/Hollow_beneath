@@ -23,6 +23,7 @@ export function createDialogBox(scene: Phaser.Scene, x: number, y: number, width
     .setVisible(false);
 
   const container = scene.add.container(x, y, [bg, text, prompt]);
+  container.setDepth(30);
   container.setAlpha(0);
   scene.tweens.add({ targets: container, alpha: 1, duration: 240, ease: 'Sine.easeOut' });
 

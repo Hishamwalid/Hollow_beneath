@@ -49,10 +49,10 @@ export function generateBoard(rng: () => number): BoardNode[] {
     const type = weightedNodeType(rng);
     let subtype = '';
     if (type === 'combat') {
-      const pool = enemiesForPage(page, 0); // resonance-gated enemies (memory wraith) resolved live at encounter time
-      subtype = pick(pool, rng);
+      const pool = enemiesForPage(page, 0);
+      subtype = pick(pool, rng) ?? 'dust_road_raider';
     } else if (type === 'trap') {
-      subtype = pick(trapPool, rng);
+      subtype = pick(trapPool, rng) ?? 'memory_trap';
     } else if (type === 'event') {
       subtype = ''; // resolved live by EventEngine (depends on live resonance/seen-set)
     } else if (type === 'discovery') {

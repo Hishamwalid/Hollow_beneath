@@ -3,6 +3,8 @@ import { useGameStore } from '@store/gameStore';
 import { evaluateEnding } from '@data/endings';
 import { createDialogBox } from '@ui/DialogBox';
 import { createButton } from '@ui/Button';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { spawnHealParticles } from '@systems/particles';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -14,15 +16,22 @@ export class EndingScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    fadeIn(this);
     const store = useGameStore.getState();
     const player = store.player;
     if (!player) {
-      this.scene.start('Menu');
+      fadeToScene(this, 'Menu');
       return;
     }
 
     const ending = evaluateEnding(player);
     audio.victory();
+
+    this.time.addEvent({
+      delay: 300, loop: true, callback: () => {
+        spawnHealParticles(this, Math.random() * GAME_WIDTH, Math.random() * GAME_HEIGHT * 0.3);
+      },
+    });
 
     this.add.text(GAME_WIDTH / 2, 70, 'PAGE 100', { fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5);
     this.add.text(GAME_WIDTH / 2, 110, ending.name, { fontFamily: FONT_SERIF, fontSize: '40px', color: PALETTE_HEX.gold }).setOrigin(0.5);
@@ -37,11 +46,12 @@ export class EndingScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    this.add.text(GAME_WIDTH / 2, 195, `— ${ending.unlock} —`, { fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.gold, fontStyle: 'italic' }).setOrigin(0.5);
+
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 380, 880, 260);
     dialog.setText(ending.epilogue, () => {
-      this.add.text(GAME_WIDTH / 2, 560, `Unlocked: ${ending.unlock}`, { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.gold }).setOrigin(0.5);
       store.finalizeRun(ending.id);
-      createButton(this, GAME_WIDTH / 2, 640, 'Return to the Surface', () => this.scene.start('Menu'), { width: 300 });
+      createButton(this, GAME_WIDTH / 2, 640, 'Return to the Surface', () => fadeToScene(this, 'Menu'), { width: 300 });
     });
     this.input.on('pointerdown', () => dialog.skip());
   }

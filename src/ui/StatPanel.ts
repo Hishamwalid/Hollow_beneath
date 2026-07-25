@@ -33,7 +33,10 @@ export interface StatPanelHandle {
 }
 
 export function createStatPanel(scene: Phaser.Scene, x: number, y: number, width = 300): StatPanelHandle {
-  const container = scene.add.container(x, y);
+  const container = scene.add.container(x, y).setDepth(10);
+  const panelHeight = 164;
+  const bg = scene.add.image(width / 2, panelHeight / 2, 'panel_stat').setDisplaySize(width, panelHeight).setAlpha(0.85);
+  container.add(bg);
   const barW = width - 90;
 
   const hpLabel = scene.add.text(0, -6, 'HP', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone });

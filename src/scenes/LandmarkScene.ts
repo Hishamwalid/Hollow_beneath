@@ -3,11 +3,13 @@ import { BOSSES } from '@data/bosses';
 import type { BossPreCombatChoice } from '@data/types';
 import { useGameStore } from '@store/gameStore';
 import { NAMED_SKILLS } from '@data/skills';
+import { ITEMS } from '@data/items';
 import { clampInfluence } from '@data/factions';
 import { createDialogBox, type DialogBox } from '@ui/DialogBox';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { applyShardBonus } from '@systems/EchoShardSystem';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -29,10 +31,11 @@ export class LandmarkScene extends Phaser.Scene {
 
   create(data: LandmarkSceneData) {
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    fadeIn(this);
     const boss = BOSSES[data.bossId];
     const { player } = useGameStore.getState();
     if (!boss || !player) {
-      this.scene.start('Board');
+      fadeToScene(this, 'Board');
       return;
     }
     audio.bossPhase();
@@ -96,9 +99,9 @@ export class LandmarkScene extends Phaser.Scene {
         useGameStore.getState().recordCheckpoint();
         useGameStore.getState().persist();
         this.continueBtn?.destroy();
-        this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'Continue', () => this.scene.start('Board'), { width: 220 });
+        this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'Continue', () => fadeToScene(this, 'Board'), { width: 220 });
       } else {
-        this.scene.start('Combat', { mode: 'boss', bossId, page: BOSSES[bossId].page, precombatFlags: combatFlags });
+        fadeToScene(this, 'Combat', { mode: 'boss', bossId, page: BOSSES[bossId].page, precombatFlags: combatFlags });
       }
     });
     this.input.removeAllListeners('pointerdown');
@@ -110,7 +113,7 @@ export class LandmarkScene extends Phaser.Scene {
     const store = useGameStore.getState();
     const player = store.player;
     if (!player) {
-      this.scene.start('Board');
+      fadeToScene(this, 'Board');
       return;
     }
 
@@ -144,6 +147,16 @@ export class LandmarkScene extends Phaser.Scene {
       player.loreFragments.push(rewards.loreFragment);
       notes.push('Lore Fragment recovered');
     }
+    if (rewards.itemReward) {
+      const existing = player.inventory.find((i) => i.id === rewards.itemReward);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        player.inventory.push({ id: rewards.itemReward, qty: 1 });
+      }
+      const itemDef = ITEMS[rewards.itemReward];
+      notes.push(`Item: ${itemDef?.name ?? rewards.itemReward}`);
+    }
     if (!player.flags[rewards.flag]) {
       player.flags[rewards.flag] = true;
       player.history.push(rewards.flag);
@@ -166,9 +179,9 @@ export class LandmarkScene extends Phaser.Scene {
         bossId === 'reflection' ? 'See how it ends' : 'Continue',
         () => {
           if (bossId === 'reflection') {
-            this.scene.start('Ending');
+            fadeToScene(this, 'Ending');
           } else {
-            this.scene.start('Board');
+            fadeToScene(this, 'Board');
           }
         },
         { width: 260 },

@@ -501,10 +501,10 @@ export const FOSSIL_KING: BossDef = {
         ctx.log.push(`${ctx.self.name} summons an Echo of the Court — Memory Wraiths rise.`);
         return;
       }
-      ctx.applyStatusToPlayer('blind', 2);
+      ctx.flags.fossilLastLaw = 1;
       const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 1.2);
       ctx.applyDamageToPlayer(dmg, 'sacred', 'the Last Law');
-      ctx.log.push(`${ctx.self.name} invokes the Last Law — ${dmg} damage, your focus wavers (Blind, 2 turns).`);
+      ctx.log.push(`${ctx.self.name} invokes the Last Law — ${dmg} damage, you cannot repeat a skill on your next turn.`);
       return;
     }
     // fossil phase
@@ -534,6 +534,7 @@ export const FOSSIL_KING: BossDef = {
     echoShards: 8,
     skillUnlock: undefined,
     loreFragment: 'fossil_kings_court',
+    itemReward: 'fossil_crown',
     flag: 'fossil_king_defeated',
   }),
 };

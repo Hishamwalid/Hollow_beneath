@@ -3,6 +3,7 @@ import type { EnemyView } from '@systems/CombatEngine';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { weaknessLabel } from '@data/damageTypes';
 import { statusLabel } from '@data/statusEffects';
+import { GAME_WIDTH } from '@/config';
 
 export interface EnemyDisplay {
   container: Phaser.GameObjects.Container;
@@ -18,17 +19,18 @@ export function createEnemyDisplay(
   textureKey: string,
   onClick: () => void,
 ): EnemyDisplay {
-  const container = scene.add.container(x, y);
+  const container = scene.add.container(x, y).setDepth(5);
+  const panelBg = scene.add.image(0, 0, 'panel_enemy').setAlpha(0.75);
   const selectRing = scene.add.circle(0, 0, 40, 0x000000, 0).setStrokeStyle(3, 0xc9a24b, 0).setVisible(false);
-  const token = scene.add.image(0, 0, textureKey).setDisplaySize(72, 72).setInteractive({ useHandCursor: true });
-  const nameText = scene.add.text(0, 48, '', { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone }).setOrigin(0.5, 0);
-  const hpBg = scene.add.rectangle(0, 70, 84, 8, 0x2a2e33);
-  const hpFg = scene.add.rectangle(-42, 70, 84, 8, 0xb0453f).setOrigin(0, 0.5);
-  const hpText = scene.add.text(0, 78, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5, 0);
-  const affinityText = scene.add.text(0, -52, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold, align: 'center' }).setOrigin(0.5, 1);
-  const statusText = scene.add.text(0, 94, '', { fontFamily: FONT_MONO, fontSize: '9px', color: '#e67e22', align: 'center', wordWrap: { width: 100 } }).setOrigin(0.5, 0);
+  const token = scene.add.image(0, -18, textureKey).setDisplaySize(72, 72).setInteractive({ useHandCursor: true });
+  const nameText = scene.add.text(0, 30, '', { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone }).setOrigin(0.5, 0);
+  const hpBg = scene.add.rectangle(0, 52, 84, 8, 0x2a2e33);
+  const hpFg = scene.add.rectangle(-42, 52, 84, 8, 0xb0453f).setOrigin(0, 0.5);
+  const hpText = scene.add.text(0, 60, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5, 0);
+  const affinityText = scene.add.text(0, -64, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold, align: 'center' }).setOrigin(0.5, 1);
+  const statusText = scene.add.text(0, 76, '', { fontFamily: FONT_MONO, fontSize: '9px', color: '#e67e22', align: 'center', wordWrap: { width: 100 } }).setOrigin(0.5, 0);
 
-  container.add([selectRing, token, nameText, hpBg, hpFg, hpText, affinityText, statusText]);
+  container.add([panelBg, selectRing, token, nameText, hpBg, hpFg, hpText, affinityText, statusText]);
   token.on('pointerdown', onClick);
 
   return {
@@ -81,29 +83,59 @@ export interface ActionBarItem {
   label: string;
   apCost: number;
   disabled?: boolean;
+  description?: string;
   onClick: () => void;
 }
 
-export function createActionBar(scene: Phaser.Scene, x: number, y: number, items: ActionBarItem[]): { container: Phaser.GameObjects.Container } {
-  const container = scene.add.container(x, y);
-  const w = 118;
+export function createActionBar(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  items: ActionBarItem[],
+  sharedTooltip: Phaser.GameObjects.Text,
+): { container: Phaser.GameObjects.Container } {
+  const container = scene.add.container(x, y).setDepth(10);
+  const w = 120;
+  const h = 44;
+  let tooltipTimer: Phaser.Time.TimerEvent | null = null;
+
   items.forEach((item, i) => {
-    const bx = i * (w + 8);
-    const bg = scene.add
-      .rectangle(bx, 0, w, 44, 0x22262c)
-      .setStrokeStyle(1, item.disabled ? 0x555555 : 0xc9a24b)
-      .setAlpha(item.disabled ? 0.4 : 1);
+    const bx = i * (w + 6);
+    const bg = scene.add.image(bx, 0, 'panel_button').setDisplaySize(w, h);
+    if (item.disabled) bg.setAlpha(0.4);
     const label = scene.add
-      .text(bx, -6, item.label, { fontFamily: FONT_SERIF, fontSize: '13px', color: item.disabled ? PALETTE_HEX.boneMuted : PALETTE_HEX.bone })
+      .text(bx, -7, item.label, { fontFamily: FONT_SERIF, fontSize: '13px', color: item.disabled ? PALETTE_HEX.boneMuted : PALETTE_HEX.bone })
       .setOrigin(0.5);
-    const cost = scene.add
+    const costText = scene.add
       .text(bx, 12, `${item.apCost} AP`, { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold })
       .setOrigin(0.5);
-    container.add([bg, label, cost]);
+    container.add([bg, label, costText]);
     if (!item.disabled) {
       bg.setInteractive({ useHandCursor: true });
-      bg.on('pointerover', () => bg.setFillStyle(0x33383f));
-      bg.on('pointerout', () => bg.setFillStyle(0x22262c));
+      bg.on('pointerover', () => {
+        bg.setTexture('panel_button_hover');
+        scene.tweens.killTweensOf(bg);
+        bg.setScale(1);
+        scene.tweens.add({ targets: bg, scale: 1.03, duration: 120, ease: 'Sine.easeOut' });
+        if (item.description) {
+          tooltipTimer?.remove();
+          tooltipTimer = scene.time.delayedCall(300, () => {
+            if (!sharedTooltip.scene) return;
+            sharedTooltip.setText(item.description!);
+            sharedTooltip.setAlpha(0);
+            scene.tweens.killTweensOf(sharedTooltip);
+            scene.tweens.add({ targets: sharedTooltip, alpha: 1, duration: 150, ease: 'Sine.easeOut' });
+          });
+        }
+      });
+      bg.on('pointerout', () => {
+        bg.setTexture('panel_button');
+        scene.tweens.killTweensOf(bg);
+        bg.setScale(1);
+        tooltipTimer?.remove();
+        scene.tweens.killTweensOf(sharedTooltip);
+        sharedTooltip.setAlpha(0);
+      });
       bg.on('pointerdown', item.onClick);
     }
   });

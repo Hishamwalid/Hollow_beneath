@@ -17,6 +17,7 @@ import { resonanceEnemyHpMultiplier, resonanceEnemyAtkMultiplier, resonancePlaye
 import {
   applyBarrier,
   applyStatus,
+  getStatus,
   hasStatus,
   removeAllBuffs,
   setBarrier,
@@ -103,6 +104,8 @@ export class CombatEngine {
   private analyzeBonusMultiplier = 1;
   private veilStepGuaranteed = false;
   private firstAttackUsed = false;
+  /** Tracks whether the player used resonanceAbility or a magic-type skill last turn, for venn_custodian AI. */
+  private _playerUsedMagicLastTurn = false;
 
   constructor(setup: CombatSetup) {
     this.player = setup.player;
@@ -214,6 +217,12 @@ export class CombatEngine {
     this.lastActionRepeated = false;
 
     const alive = this.aliveEnemies();
+    for (const e of alive) {
+      if (e.defId === 'venn_custodian') {
+        e.flags.playerCastMagicLastTurn = this._playerUsedMagicLastTurn ? 1 : 0;
+      }
+    }
+    this._playerUsedMagicLastTurn = false;
     const playerSpd = this.effectivePlayerSpeed();
     const faster = alive.filter((e) => e.spd > playerSpd).sort((a, b) => b.spd - a.spd);
     for (const e of faster) this.resolveEnemyTurn(e);
@@ -238,6 +247,14 @@ export class CombatEngine {
     if (playerDot.damage > 0) {
       this.player.currentHP = Math.max(0, this.player.currentHP - playerDot.damage);
       this.log.push(...playerDot.lines);
+    }
+    if (playerDot.speedPenalty > 0) {
+      // applied implicitly via statMultiplier('spd') using status effects; frostbite speed penalty is informational for now
+    }
+    if (hasStatus(this.playerStatuses, 'regeneration')) {
+      const regenAmt = Math.round(this.player.derived.maxHP * 0.05);
+      this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + regenAmt);
+      this.log.push(`Regeneration restores ${regenAmt} HP.`);
     }
     tickDurations(this.playerStatuses).forEach((m) => this.log.push(m));
 
@@ -345,7 +362,10 @@ export class CombatEngine {
 
   private spawnAdd(enemyId: string, hpOverride?: number): void {
     if (this.enemies.filter((e) => e.hp > 0).length >= 4) return; // capacity cap
-    this.enemies.push(this.buildEnemyCombatant(enemyId, hpOverride));
+    const uniqueKey = `${enemyId}_${this.enemies.length}_${this.round}`;
+    const enemy = this.buildEnemyCombatant(enemyId, hpOverride);
+    enemy._key = uniqueKey;
+    this.enemies.push(enemy);
   }
 
   private playerCombatView() {
@@ -416,7 +436,32 @@ export class CombatEngine {
 
   // ---- Player actions --------------------------------------------------------
 
+  private playerCanAct(): boolean {
+    if (hasStatus(this.playerStatuses, 'stun')) {
+      this.log.push('You are stunned and cannot act.');
+      return false;
+    }
+    if (hasStatus(this.playerStatuses, 'sleep')) {
+      this.log.push('You are asleep and cannot act.');
+      return false;
+    }
+    if (hasStatus(this.playerStatuses, 'fear') && this.rng() < 0.4) {
+      this.log.push('You are overcome with fear and cannot act.');
+      return false;
+    }
+    if (hasStatus(this.playerStatuses, 'confuse') && this.rng() < 0.5) {
+      this.log.push('You are confused and flail wildly, wasting your action.');
+      return false;
+    }
+    return true;
+  }
+
   private gainMomentum(n = 1): void {
+    if (hasStatus(this.playerStatuses, 'seal_mind')) {
+      this.log.push('Seal Mind prevents you from gaining Momentum.');
+      return;
+    }
+    if (hasStatus(this.playerStatuses, 'fragile_perception')) n *= 2;
     this.player.momentum = Math.min(3, this.player.momentum + n);
     if (this.player.momentum >= 3) {
       this.phase = 'momentum_choice';
@@ -425,14 +470,17 @@ export class CombatEngine {
 
   private pickTarget(targetKey?: string): InternalEnemy | undefined {
     const alive = this.aliveEnemies();
-    if (targetKey) return alive.find((e) => e._key === targetKey || e.name === targetKey);
+    if (targetKey) return alive.find((e) => e._key === targetKey);
     return alive[0];
   }
 
   private rollHit(target: InternalEnemy): boolean {
     let acc = this.player.derived.accuracy + (this.player.skillsKnown.includes('steady_hands') ? 10 : 0);
     if (hasStatus(this.playerStatuses, 'blind')) acc *= 0.7;
-    const chance = Math.max(5, Math.min(99, acc - target.dodge));
+    let shockMiss = 0;
+    const sd = getStatus(this.playerStatuses, 'shock_dot');
+    if (sd) shockMiss = 15 * sd.stacks;
+    const chance = Math.max(5, Math.min(99, acc - target.dodge - shockMiss));
     return this.rng() * 100 < chance;
   }
 
@@ -460,21 +508,43 @@ export class CombatEngine {
     if (crit) dmg = Math.round(dmg * 1.5);
     const resonanceBonus = target._isBoss ? 1 : resonancePlayerDamageBonus(this.player.resonance);
     dmg = Math.round(dmg * resonanceBonus);
+    if (damageType === 'sacred' && hasStatus(this.playerStatuses, 'blessing')) {
+      dmg = Math.round(dmg * 1.25);
+    }
+    if (weakness < 0) {
+      let absorbDmg = dmg;
+      if (damageType === 'shadow' && this.player.skillsKnown.includes('loom_touched')) {
+        absorbDmg = Math.round(absorbDmg * 1.3);
+      }
+      if (damageType === 'shadow' && this.player.skillsKnown.includes('parting_words') && target.hp / target.maxHp < 0.3) {
+        absorbDmg = Math.round(absorbDmg * 1.4);
+      }
+      target.hp = Math.min(target.maxHp, target.hp + Math.abs(absorbDmg));
+      this.log.push(`${label} is absorbed — ${target.name} heals ${Math.abs(absorbDmg)} instead.`);
+      return { dmg: 0, hit: true, crit, weak: false };
+    }
     if (damageType === 'shadow' && this.player.skillsKnown.includes('loom_touched')) {
       dmg = Math.round(dmg * 1.3);
     }
     if (damageType === 'shadow' && this.player.skillsKnown.includes('parting_words') && target.hp / target.maxHp < 0.3) {
       dmg = Math.round(dmg * 1.4);
     }
-    if (weakness < 0) {
-      // Absorb — heals the enemy instead
-      target.hp = Math.min(target.maxHp, target.hp + Math.abs(dmg));
-      this.log.push(`${label} is absorbed — ${target.name} heals ${Math.abs(dmg)} instead.`);
-      return { dmg: 0, hit: true, crit, weak: false };
-    }
     const mitigated = applyBarrier(target.statuses, dmg);
     if (mitigated < dmg) this.log.push(`${target.name}'s Barrier absorbs part of the blow.`);
     target.hp = Math.max(0, target.hp - mitigated);
+
+    // Echo-Soldier Phalanx: when one is damaged, allies share the remaining damage
+    if (target.defId === 'echo_soldier' && mitigated > 0) {
+      const phalanxAllies = this.aliveEnemies().filter((e) => e.defId === 'echo_soldier' && e._key !== target._key);
+      if (phalanxAllies.length > 0) {
+        const shared = Math.round(mitigated * 0.5);
+        for (const ally of phalanxAllies) {
+          ally.hp = Math.max(0, ally.hp - shared);
+        }
+        this.log.push(`The phalanx shares the blow — ${phalanxAllies.map((a) => a.name).join(', ')} each take ${shared} redirected damage.`);
+      }
+    }
+
     const weak = weakness > 1;
     this.log.push(`${label} hits ${target.name} for ${mitigated} damage${crit ? ' (Critical!)' : ''}${weak ? ' — weakness exploited!' : ''}.`);
     if (weak || crit) this.gainMomentum(1);
@@ -483,6 +553,7 @@ export class CombatEngine {
 
   attack(targetKey?: string): CombatSnapshot {
     if (this.phase !== 'player' || (this.playerAP < 1 && this.freeActionCharges < 1)) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     const target = this.pickTarget(targetKey);
     if (!target) return this.snapshot();
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.attack;
@@ -491,8 +562,8 @@ export class CombatEngine {
     if (!this.firstAttackUsed && this.player.skillsKnown.includes('opening_strike')) {
       atk = Math.round(atk * 1.2);
     }
-    this.firstAttackUsed = true;
-    this.computeAndApplyDamage(target, atk, target.def, 'slash', 'Your attack');
+    const result = this.computeAndApplyDamage(target, atk, target.def, 'slash', 'Your attack');
+    if (result.hit) this.firstAttackUsed = true;
     this.lastActionId = 'attack';
     this.lastActionType = 'slash';
     this.checkOutcome();
@@ -501,14 +572,10 @@ export class CombatEngine {
 
   useSkill(skillId: string, targetKey?: string): CombatSnapshot {
     if (this.phase !== 'player') return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     const skill = NAMED_SKILLS[skillId];
     if (!skill || !this.player.skillsKnown.includes(skillId)) return this.snapshot();
     if (skill.apCost === 0) return this.snapshot(); // passives aren't activated
-
-    const cost = this.freeActionCharges > 0 ? 0 : skill.apCost;
-    if (this.playerAP < cost) return this.snapshot();
-    this.playerAP -= cost;
-    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
 
     if (hasStatus(this.playerStatuses, 'silence')) {
       this.log.push('You are Silenced and cannot use skills.');
@@ -516,9 +583,22 @@ export class CombatEngine {
       return this.snapshot();
     }
 
+    // Last Law: fossil_king prevents repeating the same skill twice in a row
+    if (this.flags.fossilLastLaw === 1 && this.lastActionId === `skill:${skillId}`) {
+      this.log.push('The Last Law prohibits repeating the same skill. The action is wasted.');
+      this.flags.fossilLastLaw = 0;
+      this.checkOutcome();
+      return this.snapshot();
+    }
+
+    const cost = this.freeActionCharges > 0 ? 0 : skill.apCost;
+    if (this.playerAP < cost) return this.snapshot();
+    this.playerAP -= cost;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+
     if (skill.tag === 'active_martyrs_flame') {
       this.player.currentHP = Math.max(1, this.player.currentHP - 10);
-      const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk');
+      const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk') * (skill.skillPower ?? 1);
       for (const e of this.aliveEnemies()) {
         this.computeAndApplyDamage(e, matk, e.mdef, 'sacred', "Martyr's Flame", 'mdef');
       }
@@ -527,9 +607,9 @@ export class CombatEngine {
       const target = this.pickTarget(targetKey);
       if (target) {
         const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk');
-        this.computeAndApplyDamage(target, atk, target.def, 'sacred', 'Sealing Strike');
+        const result = this.computeAndApplyDamage(target, atk, target.def, 'sacred', 'Sealing Strike');
+        if (result.hit) this.player.resonance = Math.max(0, this.player.resonance - 2);
       }
-      this.player.resonance = Math.max(0, this.player.resonance - 2);
     } else if (skill.tag === 'active_reckless_swing') {
       const target = this.pickTarget(targetKey);
       if (target) {
@@ -567,12 +647,17 @@ export class CombatEngine {
     }
     this.lastActionId = `skill:${skillId}`;
     this.lastActionType = skill.damageType ?? null;
+    const MAGIC_TYPES = ['shadow', 'sacred', 'shock', 'frost', 'flame'];
+    if (skill.damageType && MAGIC_TYPES.includes(skill.damageType)) {
+      this._playerUsedMagicLastTurn = true;
+    }
     this.checkOutcome();
     return this.snapshot();
   }
 
   resonanceAbility(targetKey?: string): CombatSnapshot {
     if (this.phase !== 'player' || this.player.resonance < 25) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     const baseCost = this.player.skillsKnown.includes('resonant_study') ? 1 : ACTION_AP_COST.resonance_ability;
     const cost = this.freeActionCharges > 0 ? 0 : baseCost;
     if (this.playerAP < cost) return this.snapshot();
@@ -584,15 +669,18 @@ export class CombatEngine {
       const effMdef = Math.round(target.mdef * 0.8);
       this.computeAndApplyDamage(target, matk, effMdef, 'shadow', 'Resonance Surge', 'mdef');
     }
-    this.player.resonance = Math.max(0, this.player.resonance - 1);
+    const resonanceCost = hasStatus(this.playerStatuses, 'fragile_perception') ? 2 : 1;
+    this.player.resonance = Math.max(0, this.player.resonance - resonanceCost);
     this.lastActionId = 'resonance_ability';
     this.lastActionType = 'shadow';
+    this._playerUsedMagicLastTurn = true;
     this.checkOutcome();
     return this.snapshot();
   }
 
   guard(): CombatSnapshot {
     if (this.phase !== 'player' || (this.playerAP < 1 && this.freeActionCharges < 1)) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.guard;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.guarding = true;
@@ -604,6 +692,7 @@ export class CombatEngine {
 
   useItem(itemId: string): CombatSnapshot {
     if (this.phase !== 'player' || (this.playerAP < 1 && this.freeActionCharges < 1)) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     const item = ITEMS[itemId];
     const entry = this.player.inventory.find((i) => i.id === itemId && i.qty > 0);
     if (!item || !entry) return this.snapshot();
@@ -630,8 +719,10 @@ export class CombatEngine {
   }
 
   analyze(targetKey?: string): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     const analyzeCost = this.player.skillsKnown.includes('cross_reference') ? 0 : ACTION_AP_COST.analyze;
-    if (this.phase !== 'player' || (this.playerAP < analyzeCost && this.freeActionCharges < 1)) return this.snapshot();
+    if (this.playerAP < analyzeCost && this.freeActionCharges < 1) return this.snapshot();
     this.playerAP -= this.freeActionCharges > 0 ? 0 : analyzeCost;
     if (this.freeActionCharges > 0 && analyzeCost > 0) this.freeActionCharges -= 1;
     const target = this.pickTarget(targetKey);
@@ -646,7 +737,9 @@ export class CombatEngine {
   }
 
   sunder(targetKey?: string): CombatSnapshot {
-    if (this.phase !== 'player' || (this.playerAP < ACTION_AP_COST.sunder && this.freeActionCharges < 1)) return this.snapshot();
+    if (this.phase !== 'player') return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    if (this.playerAP < ACTION_AP_COST.sunder && this.freeActionCharges < 1) return this.snapshot();
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.sunder;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     const target = this.pickTarget(targetKey);
@@ -661,6 +754,12 @@ export class CombatEngine {
 
   withdraw(): CombatSnapshot {
     if (this.phase !== 'player' || (this.playerAP < 1 && this.freeActionCharges < 1)) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    if (hasStatus(this.playerStatuses, 'root')) {
+      this.log.push('You are rooted and cannot flee.');
+      this.checkOutcome();
+      return this.snapshot();
+    }
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.withdraw;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     const alive = this.aliveEnemies();
@@ -717,7 +816,8 @@ export class CombatEngine {
   getXpEarned(): number {
     const base = this.enemies.filter((e) => e.hp <= 0).reduce((s, e) => s + e.xp, 0);
     const bonus = this.player.skillsKnown.includes('archival_insight') ? 1.1 : 1;
-    return Math.round(base * bonus);
+    const pageMult = 1 + (this.page - 1) * 0.15;
+    return Math.round(base * bonus * pageMult);
   }
 
   snapshot(): CombatSnapshot {

@@ -8,6 +8,8 @@ export interface ButtonOptions {
   fontSize?: string;
   disabled?: boolean;
   subtitle?: string;
+  textureKey?: string;
+  textureHoverKey?: string;
 }
 
 export interface Button {
@@ -26,7 +28,9 @@ export function createButton(
 ): Button {
   const width = opts.width ?? 260;
   const height = opts.height ?? 52;
-  const bg = scene.add.image(0, 0, 'panel_button').setDisplaySize(width, height);
+  const texKey = opts.textureKey ?? 'panel_button';
+  const texHoverKey = opts.textureHoverKey ?? 'panel_button_hover';
+  const bg = scene.add.image(0, 0, texKey).setDisplaySize(width, height);
   const text = scene.add
     .text(0, opts.subtitle ? -8 : 0, label, {
       fontFamily: FONT_SERIF,
@@ -54,17 +58,22 @@ export function createButton(
     bg.setInteractive({ useHandCursor: true });
     bg.on('pointerover', () => {
       if (!enabled) return;
-      bg.setTexture('panel_button_hover');
+      bg.setTexture(texHoverKey);
+      scene.tweens.killTweensOf(container);
+      container.setScale(1);
       scene.tweens.add({ targets: container, scale: 1.03, duration: 120, ease: 'Sine.easeOut' });
     });
     bg.on('pointerout', () => {
       if (!enabled) return;
-      bg.setTexture('panel_button');
-      scene.tweens.add({ targets: container, scale: 1, duration: 120, ease: 'Sine.easeOut' });
+      bg.setTexture(texKey);
+      scene.tweens.killTweensOf(container);
+      container.setScale(1);
     });
     bg.on('pointerdown', () => {
       if (!enabled) return;
       audio.click();
+      scene.tweens.killTweensOf(container);
+      container.setScale(1);
       scene.tweens.add({ targets: container, scale: 0.96, duration: 70, yoyo: true, ease: 'Sine.easeOut' });
       onClick();
     });
@@ -74,9 +83,11 @@ export function createButton(
     container,
     setEnabled: (v: boolean) => {
       enabled = v;
+      scene.tweens.killTweensOf(container);
+      container.setScale(1);
       bg.setAlpha(v ? 1 : 0.4);
       text.setAlpha(v ? 1 : 0.5);
-      bg.setTexture('panel_button');
+      bg.setTexture(texKey);
       if (v) bg.setInteractive({ useHandCursor: true });
       else bg.disableInteractive();
     },

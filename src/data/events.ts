@@ -306,10 +306,13 @@ export const EVENTS: Record<string, EventDef> = {
         id: 'help_understand',
         label: '"Let me help you understand." (Covenant)',
         requirement: (p) => p.faction.covenant >= 25,
-        onSuccess: (player) => {
+        onSuccess: (player, ctx) => {
           player.faction.covenant += 15;
           player.resonance = Math.min(100, player.resonance + 10);
-          player.derived.maxHP = Math.round(player.derived.maxHP * 0.9);
+          if (!ctx.hasFlag('loom_hp_reduced')) {
+            player.derived.maxHP = Math.round(player.derived.maxHP * 0.9);
+            ctx.setFlag('loom_hp_reduced');
+          }
           player.currentHP = Math.min(player.currentHP, player.derived.maxHP);
           player.skillsKnown.push('loom_touched');
           return "Something in you opens that probably shouldn't have. (+15 Covenant, +10 Resonance, Max HP -10%, Skill: Loom-Touched)";
@@ -852,9 +855,10 @@ export const EVENTS: Record<string, EventDef> = {
         label: 'Take stock of everything that brought you here.',
         onSuccess: (player) => {
           player.resonance = Math.min(100, player.resonance + 2);
-          const highest = (Object.keys(player.faction) as (keyof typeof player.faction)[]).reduce((a, b) =>
-            player.faction[a] >= player.faction[b] ? a : b
-          );
+          const factionKeys = Object.keys(player.faction) as (keyof typeof player.faction)[];
+          const highest = factionKeys.length > 0
+            ? factionKeys.reduce((a, b) => player.faction[a] >= player.faction[b] ? a : b)
+            : 'archive';
           player.faction[highest] += 3;
           return `You sit with it a while — the choices, the ones you'd make again and the ones you wouldn't. Whatever you've become, you've become it on purpose. (+2 Resonance, +3 ${highest})`;
         },
@@ -948,8 +952,8 @@ export const EVENTS: Record<string, EventDef> = {
       {
         id: 'take_their_supplies',
         label: 'Take what supplies are still usable and move on.',
-        onSuccess: (player) => {
-          const gold = 15 + Math.floor(Math.random() * 20);
+        onSuccess: (player, ctx) => {
+          const gold = 15 + Math.floor(ctx.rng() * 20);
           player.gold += gold;
           player.faction.caravan += 5;
           return `Practical, if nothing else. Whoever they were, they don't need any of it anymore. +${gold} gold. (+5 Caravan)`;

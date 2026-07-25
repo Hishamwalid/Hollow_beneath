@@ -24,7 +24,7 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     id: 'the_hymn_of_unbecoming',
     title: 'The Hymn of Unbecoming',
     category: 'faction',
-    text: "Half-remembered through stone, the tune keeps slipping a quarter-step flat, as if the singer's throat were changing shape mid-note. The words that survive: '...not lost, only loosened. Not gone, only generous. Give the shape back. It was only ever borrowed.' Ash Covenant novices are made to learn it before they understand what it is asking of them.',",
+    text: "Half-remembered through stone, the tune keeps slipping a quarter-step flat, as if the singer's throat were changing shape mid-note. The words that survive: '...not lost, only loosened. Not gone, only generous. Give the shape back. It was only ever borrowed.' Ash Covenant novices are made to learn it before they understand what it is asking of them.",
   },
   sentinels_confession: {
     id: 'sentinels_confession',

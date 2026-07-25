@@ -13,10 +13,12 @@ export function createDiceRoller(scene: Phaser.Scene, x: number, y: number): Dic
     .text(0, 0, '?', { fontFamily: FONT_SERIF, fontSize: '32px', color: PALETTE_HEX.gold })
     .setOrigin(0.5);
   const container = scene.add.container(x, y, [box, text]);
+  let activeTimer: Phaser.Time.TimerEvent | null = null;
 
   return {
     container,
     roll: (finalValue: number, onDone: () => void) => {
+      activeTimer?.remove();
       let ticks = 0;
       const total = 10;
       const timer = scene.time.addEvent({
@@ -25,6 +27,7 @@ export function createDiceRoller(scene: Phaser.Scene, x: number, y: number): Dic
         callback: () => {
           ticks += 1;
           if (ticks >= total) {
+            activeTimer = null;
             text.setText(String(finalValue));
             scene.tweens.add({ targets: container, scale: 1.25, duration: 90, yoyo: true });
             onDone();
@@ -33,8 +36,11 @@ export function createDiceRoller(scene: Phaser.Scene, x: number, y: number): Dic
           }
         },
       });
-      void timer;
+      activeTimer = timer;
     },
-    destroy: () => container.destroy(),
+    destroy: () => {
+      activeTimer?.remove();
+      container.destroy();
+    },
   };
 }

@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
+import { ENDINGS } from '@data/endings';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 export class MenuScene extends Phaser.Scene {
@@ -12,15 +14,17 @@ export class MenuScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     const cx = GAME_WIDTH / 2;
+    fadeIn(this);
 
     const { meta, loadActiveRun } = useGameStore.getState();
     const canContinue = loadActiveRun();
 
     const buttons: { label: string; onClick: () => void }[] = [];
-    if (canContinue) buttons.push({ label: 'Continue', onClick: () => this.scene.start('Board') });
-    buttons.push({ label: 'New Descent', onClick: () => this.scene.start('CharacterCreation') });
-    buttons.push({ label: 'Echo Shard Shop', onClick: () => this.scene.start('ShardShop') });
-    buttons.push({ label: 'Lore Codex', onClick: () => this.scene.start('LoreCodex') });
+    if (canContinue) buttons.push({ label: 'Continue', onClick: () => fadeToScene(this, 'Board') });
+    buttons.push({ label: 'New Descent', onClick: () => fadeToScene(this, 'CharacterCreation') });
+    buttons.push({ label: 'Echo Shard Shop', onClick: () => fadeToScene(this, 'ShardShop') });
+    buttons.push({ label: 'Lore Codex', onClick: () => fadeToScene(this, 'LoreCodex') });
+    buttons.push({ label: 'Settings', onClick: () => fadeToScene(this, 'Settings') });
 
     const btnH = 52;
     const btnGap = 70;
@@ -44,7 +48,7 @@ export class MenuScene extends Phaser.Scene {
     y += 16 + 30;
 
     this.add
-      .text(cx, y, `Echo Shards: ${meta.echoShards}    Runs: ${meta.totalRuns}    Endings seen: ${meta.endingsAchieved.length}/6`, {
+      .text(cx, y, `Echo Shards: ${meta.echoShards}    Runs: ${meta.totalRuns}    Endings seen: ${meta.endingsAchieved.length}/${ENDINGS.length}`, {
         fontFamily: FONT_SERIF,
         fontSize: '14px',
         color: PALETTE_HEX.boneMuted,

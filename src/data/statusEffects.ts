@@ -49,7 +49,7 @@ export function statusLabel(id: StatusId): string {
   if (id in DOT_TABLE) return DOT_TABLE[id as DotId].label;
   if (id in CONTROL_LABELS) return CONTROL_LABELS[id as ControlId];
   if (id in BUFF_LABELS) return BUFF_LABELS[id as BuffId];
-  return DEBUFF_LABELS[id as DebuffId];
+  return DEBUFF_LABELS[id as DebuffId] ?? id;
 }
 
 export const DEFAULT_BARRIER_AMOUNT = 25;

@@ -26,7 +26,7 @@ export function applyStatus(
     return;
   }
   if (existing) {
-    existing.turnsRemaining = turns;
+    existing.turnsRemaining = Math.max(existing.turnsRemaining, turns);
     if (meta) existing.meta = { ...(existing.meta ?? {}), ...meta };
   } else {
     statuses.push({ id, stacks: 1, turnsRemaining: turns, meta });
@@ -101,6 +101,11 @@ export function statMultiplier(statuses: StatusInstance[], stat: 'atk' | 'def' |
   if (stat === 'def' && hasStatus(statuses, 'defense_down')) mult *= 0.7;
   if (stat === 'def' && hasStatus(statuses, 'armour_break')) mult *= 0.5;
   if (stat === 'spd' && hasStatus(statuses, 'slow')) mult *= 0.75;
+  if (stat === 'spd' && hasStatus(statuses, 'root')) mult *= 0.5;
+  if (stat === 'spd' && hasStatus(statuses, 'frostbite')) {
+    const fb = getStatus(statuses, 'frostbite');
+    if (fb) mult *= Math.max(0.25, 1 - fb.stacks * 0.15);
+  }
   return mult;
 }
 

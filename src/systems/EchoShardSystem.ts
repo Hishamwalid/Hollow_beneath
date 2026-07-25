@@ -50,7 +50,7 @@ export function purchase(meta: MetaState, entryId: string): MetaState {
 export function applyUnlocksToNewRun(player: PlayerState, unlocks: string[]): void {
   if (unlocks.includes('rusty_dagger_plus')) player.derived.attack += 1;
   if (unlocks.includes('scholars_coat')) player.derived.defense += 1;
-  if (unlocks.includes('venn_fragment') && player.loreFragments.length === 0) {
+  if (unlocks.includes('venn_fragment') && !player.loreFragments.includes('venn_fragment_starter')) {
     player.loreFragments.push('venn_fragment_starter');
   }
   if (unlocks.includes('sable_blessing')) player.faction.sable += 10;

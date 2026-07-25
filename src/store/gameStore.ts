@@ -129,6 +129,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const { game: restoredGame, player: restoredPlayer } = restoreCheckpoint({ ...game, isDead: true });
     if (restoredPlayer) {
+      restoredPlayer.echoShards = Math.max(0, restoredPlayer.echoShards - refund);
       set({ meta: newMeta, player: restoredPlayer, game: restoredGame });
     } else {
       set({ meta: newMeta, player: null, game: null });

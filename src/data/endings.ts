@@ -11,10 +11,10 @@ export const ENDINGS: EndingDef[] = [
     secret: true,
     condition: (p) =>
       p.resonance >= 100 &&
-      p.faction.sable < 40 &&
-      p.faction.archive < 40 &&
-      p.faction.covenant < 40 &&
-      p.faction.caravan < 40 &&
+      p.faction.sable <= 25 &&
+      p.faction.archive <= 25 &&
+      p.faction.covenant <= 25 &&
+      p.faction.caravan <= 25 &&
       p.loreFragments.length >= 6,
     epilogue:
       'The mirrors do not shatter. They simply stop reflecting. You realize, too late and too calmly, that there was never anyone reading you. There was only the shape of a question no one asked. The chamber is silent. You are, for the first time since Keth-7, entirely alone — and entirely yourself.',

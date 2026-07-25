@@ -13,6 +13,12 @@ import { CombatScene } from '@scenes/CombatScene';
 import { LandmarkScene } from '@scenes/LandmarkScene';
 import { EndingScene } from '@scenes/EndingScene';
 import { GameOverScene } from '@scenes/GameOverScene';
+import { SettingsScene } from '@scenes/SettingsScene';
+import { InventoryScene } from '@scenes/InventoryScene';
+
+window.addEventListener('error', (e) => {
+  console.error('GLOBAL ERROR:', e.error ?? e.message, e);
+});
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -37,6 +43,8 @@ const config: Phaser.Types.Core.GameConfig = {
     LandmarkScene,
     EndingScene,
     GameOverScene,
+    SettingsScene,
+    InventoryScene,
   ],
 };
 

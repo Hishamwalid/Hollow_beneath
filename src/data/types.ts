@@ -215,6 +215,7 @@ export interface BossRewards {
   echoShards: number;
   skillUnlock?: string;
   loreFragment?: string;
+  itemReward?: string; // item id rewarded to the player on defeat
   flag: string;
 }
 

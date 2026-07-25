@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SHARD_SHOP } from '@data/shardShop';
 import { useGameStore } from '@store/gameStore';
 import { canAfford, purchase } from '@systems/EchoShardSystem';
+import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { audio } from '@placeholder/PlaceholderAudio';
@@ -17,6 +18,7 @@ export class ShardShopScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    fadeIn(this);
     const cx = GAME_WIDTH / 2;
     this.rows = [];
 
@@ -67,7 +69,7 @@ export class ShardShopScene extends Phaser.Scene {
       this.rows.push({ refresh });
     });
 
-    createButton(this, cx, 155 + SHARD_SHOP.length * 52 + 24, 'Back', () => this.scene.start('Menu'), { width: 200 });
+    createButton(this, cx, 155 + SHARD_SHOP.length * 52 + 24, 'Back', () => fadeToScene(this, 'Menu'), { width: 200 });
 
     this.refreshAll();
   }
