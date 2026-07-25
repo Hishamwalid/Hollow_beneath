@@ -20,6 +20,7 @@ export class MenuScene extends Phaser.Scene {
     if (canContinue) buttons.push({ label: 'Continue', onClick: () => this.scene.start('Board') });
     buttons.push({ label: 'New Descent', onClick: () => this.scene.start('CharacterCreation') });
     buttons.push({ label: 'Echo Shard Shop', onClick: () => this.scene.start('ShardShop') });
+    buttons.push({ label: 'Lore Codex', onClick: () => this.scene.start('LoreCodex') });
 
     const btnH = 52;
     const btnGap = 70;

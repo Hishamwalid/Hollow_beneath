@@ -95,6 +95,158 @@ export const ITEMS: Record<string, ItemDef> = {
     effect: { statBonus: { mdef: 5 } },
     sellValue: 100,
   },
+
+  // ---- New: weapons ----------------------------------------------------------
+  sable_ash_blade: {
+    id: 'sable_ash_blade',
+    name: 'Sable Ash Blade',
+    description: 'Ash-tempered steel, Sable-forged. +4 ATK.',
+    kind: 'weapon',
+    effect: { statBonus: { atk: 4 } },
+    sellValue: 35,
+  },
+  dust_road_cleaver: {
+    id: 'dust_road_cleaver',
+    name: 'Dust-Road Cleaver',
+    description: "A raider's cleaver, well-used and well-balanced. +5 ATK.",
+    kind: 'weapon',
+    effect: { statBonus: { atk: 5 } },
+    sellValue: 45,
+  },
+  sealed_edge: {
+    id: 'sealed_edge',
+    name: 'Sealed Edge',
+    description: "Bought, not found. Whoever sold it didn't want questions asked. +7 ATK.",
+    kind: 'weapon',
+    effect: { statBonus: { atk: 7 } },
+    sellValue: 90,
+  },
+
+  // ---- New: armour ------------------------------------------------------------
+  ash_marked_wrap: {
+    id: 'ash_marked_wrap',
+    name: 'Ash-Marked Wrap',
+    description: 'Cloth marked for purification, worn instead of burned. +3 DEF.',
+    kind: 'armour',
+    effect: { statBonus: { def: 3 } },
+    sellValue: 30,
+  },
+  archive_field_coat: {
+    id: 'archive_field_coat',
+    name: 'Archive Field Coat',
+    description: 'Standard Argent Archive field issue. +2 DEF, +2 MDEF.',
+    kind: 'armour',
+    effect: { statBonus: { def: 2, mdef: 2 } },
+    sellValue: 40,
+  },
+  dominion_plate_scrap: {
+    id: 'dominion_plate_scrap',
+    name: 'Dominion Plate Scrap',
+    description: 'A shard of Dominion war-plate, still sound after all this time. +5 DEF.',
+    kind: 'armour',
+    effect: { statBonus: { def: 5 } },
+    sellValue: 55,
+  },
+
+  // ---- New: focus ---------------------------------------------------------------
+  venn_glyph_lens: {
+    id: 'venn_glyph_lens',
+    name: 'Venn Glyph Lens',
+    description: 'Ground from a Venn reading-stone. +4 MATK.',
+    kind: 'focus',
+    effect: { statBonus: { matk: 4 } },
+    sellValue: 50,
+  },
+  choir_tuning_fork: {
+    id: 'choir_tuning_fork',
+    name: 'Choir Tuning Fork',
+    description: "Struck, it hums in a key that isn't quite music. +2 MATK, +1 MDEF.",
+    kind: 'focus',
+    effect: { statBonus: { matk: 2, mdef: 1 } },
+    sellValue: 35,
+  },
+  archivists_stylus: {
+    id: 'archivists_stylus',
+    name: "Archivist's Stylus",
+    description: "Mira Tol's own design. Writes faster than thought. +3 MATK.",
+    kind: 'focus',
+    effect: { statBonus: { matk: 3 } },
+    sellValue: 45,
+  },
+
+  // ---- New: accessories -----------------------------------------------------------
+  travelers_ledger: {
+    id: 'travelers_ledger',
+    name: "Traveler's Ledger",
+    description: "A dust-road merchant's account book, oddly reassuring to carry. +3 MDEF.",
+    kind: 'accessory',
+    effect: { statBonus: { mdef: 3 } },
+    sellValue: 40,
+  },
+  keth7_tablet_shard: {
+    id: 'keth7_tablet_shard',
+    name: 'Keth-7 Tablet Shard',
+    description: 'A broken piece of a Venn translation tablet. Warm to the touch, always. +2 ATK, +2 MATK.',
+    kind: 'accessory',
+    effect: { statBonus: { atk: 2, matk: 2 } },
+    sellValue: 70,
+  },
+  raiders_charm: {
+    id: 'raiders_charm',
+    name: "Raider's Charm",
+    description: 'Taken, not given. +2 ATK, +2 DEF.',
+    kind: 'accessory',
+    effect: { statBonus: { atk: 2, def: 2 } },
+    sellValue: 35,
+  },
+  unread_echo: {
+    id: 'unread_echo',
+    name: 'Unread Echo',
+    description: "Something The Unread left behind. It shouldn't still be humming. +6 MATK.",
+    kind: 'accessory',
+    effect: { statBonus: { matk: 6 } },
+    sellValue: 120,
+  },
+
+  // ---- New: materials (no combat effect, sell/collect value) ----------------------
+  venn_glyph_tablet: {
+    id: 'venn_glyph_tablet',
+    name: 'Venn Glyph Tablet',
+    description: 'Dense with four-dimensional grammar. Worth a great deal to the right buyer.',
+    kind: 'material',
+    sellValue: 65,
+  },
+  dominion_boundary_seal: {
+    id: 'dominion_boundary_seal',
+    name: 'Dominion Boundary Seal',
+    description: 'An unbroken Dominion seal. Collectors pay well for these.',
+    kind: 'material',
+    sellValue: 45,
+  },
+  auctioneers_token: {
+    id: 'auctioneers_token',
+    name: "Auctioneer's Token",
+    description: 'Proof of a winning bid at a market that officially does not exist.',
+    kind: 'material',
+    sellValue: 55,
+  },
+  pressed_page: {
+    id: 'pressed_page',
+    name: 'Pressed Page',
+    description: 'A page pressed flat between two others for longer than anyone alive has been alive.',
+    kind: 'material',
+    sellValue: 20,
+  },
+
+  // ---- New: consumable --------------------------------------------------------------
+  traveler_salve: {
+    id: 'traveler_salve',
+    name: "Traveler's Salve",
+    description: 'A Caravan remedy for the long, cold road. Restores 15% HP, cures Frostbite.',
+    kind: 'consumable',
+    effect: { healPercent: 15, cureStatus: ['frostbite'] },
+    sellValue: 12,
+  },
 };
 
 export const STARTING_INVENTORY: InventoryEntry[] = [

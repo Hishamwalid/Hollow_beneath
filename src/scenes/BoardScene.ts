@@ -6,11 +6,15 @@ import { rollDie, rollMovement } from '@systems/checks';
 import { pickEvent } from '@systems/EventEngine';
 import { resolveTrap } from '@systems/EventEngine';
 import { TRAPS } from '@data/events';
-import { shardsForNodeVisit } from '@systems/EchoShardSystem';
+import { MINOR_LANDMARKS } from '@data/minorLandmarks';
+import { DISCOVERABLE_SKILLS } from '@data/skills';
+import { shardsForNodeVisit, applyShardBonus } from '@systems/EchoShardSystem';
+import { maybePickWhisper } from '@systems/WhisperSystem';
 import { createStatPanel } from '@ui/StatPanel';
 import { createDiceRoller } from '@ui/DiceRoller';
 import { createNodePreview } from '@ui/NodePreview';
 import { createButton } from '@ui/Button';
+import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -53,6 +57,8 @@ export class BoardScene extends Phaser.Scene {
     this.drawBoard(game.nodes);
     this.playerToken = this.add.image(0, 0, 'tok_player').setDisplaySize(30, 30).setDepth(10);
     this.placeTokenAt(game.currentNodeIndex);
+
+    applyResonanceTint(this, player.resonance, GAME_WIDTH, GAME_HEIGHT);
 
     this.statPanel = createStatPanel(this, 16, 16, 300);
     this.statPanel.update(player);
@@ -151,7 +157,7 @@ export class BoardScene extends Phaser.Scene {
     if (!player || !game) return;
 
     const page = Math.min(10, Math.ceil(target / 10));
-    player.echoShards += shardsForNodeVisit();
+    player.echoShards += applyShardBonus(player, shardsForNodeVisit());
     const updatedNodes = game.nodes.map((n) => n);
     const node = updatedNodes[target - 1];
 
@@ -180,7 +186,7 @@ export class BoardScene extends Phaser.Scene {
     }
     if (node.type === 'event') {
       const seen = new Set(player.history.filter((h) => h.startsWith('event_seen:')).map((h) => h.slice('event_seen:'.length)));
-      const event = pickEvent(node.page, player.resonance, seen, Math.random);
+      const event = pickEvent(node.page, player.resonance, seen, Math.random, player.flags);
       this.scene.start('Event', { eventId: event.id });
       return;
     }
@@ -199,6 +205,11 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
     if (node.type === 'discovery') {
+      if (node.subtype === 'capture_point' && MINOR_LANDMARKS[node.index]) {
+        this.markResolved(node);
+        this.scene.start('Event', { eventId: MINOR_LANDMARKS[node.index].id });
+        return;
+      }
       this.resolveDiscovery(player, node);
       this.markResolved(node);
       this.afterInlineResolution();
@@ -213,8 +224,9 @@ export class BoardScene extends Phaser.Scene {
       this.log('You look for somewhere to rest. The floor here remembers your last fall, and offers nothing.');
       return;
     }
-    const healPct = player.flags.next_rest_double ? 50 : 25;
+    let healPct = player.flags.next_rest_double ? 50 : 25;
     if (player.flags.next_rest_double) delete player.flags.next_rest_double;
+    if (player.skillsKnown.includes('deep_breath')) healPct += 10;
     const heal = Math.round(player.derived.maxHP * (healPct / 100));
     player.currentHP = Math.min(player.derived.maxHP, player.currentHP + heal);
     player.resonance = Math.max(0, player.resonance - 1);
@@ -223,14 +235,124 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private resolveDiscovery(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {
-    const isCapture = node.subtype === 'capture_point';
-    const gold = isCapture ? 20 + rollDie(20, Math.random) : 5 + rollDie(10, Math.random);
-    player.gold += gold;
-    if (isCapture) {
-      player.echoShards += 3;
-      this.log(`A waypoint, marked and half-remembered. +${gold} gold, +3 Echo Shards.`);
-    } else {
-      this.log(`You find something left behind by whoever came through last. +${gold} gold.`);
+    // Capture points are handled separately in resolveNode (routed to a minor-landmark vignette).
+    const LORE_POOL = [
+      'the_hundredth_page', 'a_pressed_flower_that_isnt', 'the_counting_room', 'names_carved_then_scratched_out',
+      'the_weight_of_unread_mail', 'a_childs_height_marks', 'the_last_entry', 'the_recipe_that_isnt_food',
+      'the_map_that_updates_itself', 'the_second_moon_that_isnt_there', 'the_apology_never_sent',
+      'the_borrowed_hour', 'sera_voss_ledger_entry',
+    ].filter((id) => !player.loreFragments.includes(id));
+    const RELIC_POOL = ['sable_ash_blade', 'archive_field_coat', 'raiders_charm', 'dominion_boundary_seal', 'auctioneers_token', 'pressed_page'];
+    const SUPPLY_POOL = ['ration', 'bandage', 'waterskin', 'traveler_salve'];
+    const unknownSkills = DISCOVERABLE_SKILLS.filter((id) => !player.skillsKnown.includes(id));
+
+    type Template = { id: string; weight: number };
+    const templates: Template[] = [
+      { id: 'gold_cache', weight: 4 },
+      { id: 'lost_supplies', weight: 2 },
+      { id: 'forgotten_relic', weight: 2 },
+      { id: 'lore_cache', weight: LORE_POOL.length > 0 ? 2 : 0 },
+      { id: 'training_notes', weight: unknownSkills.length > 0 ? 2 : 0 },
+      { id: 'hidden_stash', weight: 1 },
+      { id: 'quiet_moment', weight: 1 },
+      { id: 'echo_residue', weight: 1 },
+      { id: 'old_marker', weight: 1 },
+      { id: 'small_cache_faction', weight: 1 },
+      { id: 'nothing_here', weight: 1 },
+    ].filter((t) => t.weight > 0);
+
+    const totalWeight = templates.reduce((s, t) => s + t.weight, 0);
+    let roll = Math.random() * totalWeight;
+    let chosen = templates[0].id;
+    for (const t of templates) {
+      if (roll < t.weight) { chosen = t.id; break; }
+      roll -= t.weight;
+    }
+
+    switch (chosen) {
+      case 'lost_supplies': {
+        const gold = 3 + rollDie(6, Math.random);
+        const itemId = SUPPLY_POOL[Math.floor(Math.random() * SUPPLY_POOL.length)];
+        player.gold += gold;
+        player.inventory.push({ id: itemId, qty: 1 });
+        this.log(`Supplies, left behind in a hurry. +${gold} gold, an item.`);
+        break;
+      }
+      case 'forgotten_relic': {
+        const pool = player.resonance >= 50 ? [...RELIC_POOL, 'unread_echo'] : RELIC_POOL;
+        const gold = 3 + rollDie(6, Math.random);
+        const itemId = pool[Math.floor(Math.random() * pool.length)];
+        player.gold += gold;
+        player.inventory.push({ id: itemId, qty: 1 });
+        this.log(`Something worth carrying, worked in by someone who isn't here anymore. +${gold} gold, an item.`);
+        break;
+      }
+      case 'lore_cache': {
+        const gold = 3 + rollDie(6, Math.random);
+        const id = LORE_POOL[Math.floor(Math.random() * LORE_POOL.length)];
+        player.gold += gold;
+        if (!player.loreFragments.includes(id)) {
+          player.loreFragments.push(id);
+          player.echoShards += applyShardBonus(player, 1);
+        }
+        this.log(`Something written, worth reading twice. +${gold} gold, a lore fragment.`);
+        break;
+      }
+      case 'training_notes': {
+        const skillId = unknownSkills[Math.floor(Math.random() * unknownSkills.length)];
+        player.skillsKnown.push(skillId);
+        this.log(`Training notes, thorough and half-legible. You learn something from them.`);
+        break;
+      }
+      case 'hidden_stash': {
+        const gold = 10 + rollDie(15, Math.random);
+        player.gold += gold;
+        this.log(`A stash, properly hidden this time. +${gold} gold.`);
+        break;
+      }
+      case 'quiet_moment': {
+        const gold = 3 + rollDie(6, Math.random);
+        player.gold += gold;
+        player.resonance = Math.max(0, player.resonance - 1);
+        this.log(`A moment of quiet that costs nothing to take. +${gold} gold, -1 Resonance.`);
+        break;
+      }
+      case 'echo_residue': {
+        const gold = 3 + rollDie(6, Math.random);
+        player.gold += gold;
+        player.echoShards += applyShardBonus(player, 1);
+        this.log(`A trace of something spent. +${gold} gold, +1 Echo Shard.`);
+        break;
+      }
+      case 'old_marker': {
+        const gold = 3 + rollDie(6, Math.random);
+        player.gold += gold;
+        const w = maybePickWhisper(player.resonance, 'movement', Math.random, 1);
+        if (w) showWhisper(this, GAME_WIDTH / 2, 178, w.text, 460);
+        this.log(`An old marker, half-erased. +${gold} gold.`);
+        break;
+      }
+      case 'small_cache_faction': {
+        const gold = 3 + rollDie(6, Math.random);
+        player.gold += gold;
+        const leading = (Object.keys(player.faction) as (keyof typeof player.faction)[]).reduce((a, b) =>
+          player.faction[a] >= player.faction[b] ? a : b
+        );
+        player.faction[leading] += 1;
+        this.log(`Something that confirms a path you're already on. +${gold} gold, +1 ${leading}.`);
+        break;
+      }
+      case 'nothing_here': {
+        const gold = 1 + rollDie(4, Math.random);
+        player.gold += gold;
+        this.log(`Nothing here worth the detour, in the end. +${gold} gold.`);
+        break;
+      }
+      default: {
+        const gold = 5 + rollDie(10, Math.random);
+        player.gold += gold;
+        this.log(`You find something left behind by whoever came through last. +${gold} gold.`);
+      }
     }
     audio.shardGain();
   }
@@ -250,6 +372,9 @@ export class BoardScene extends Phaser.Scene {
       this.handleDeathFlow();
       return;
     }
+
+    const whisper = maybePickWhisper(player.resonance, 'movement', Math.random);
+    if (whisper) showWhisper(this, GAME_WIDTH / 2, 178, whisper.text, 460);
 
     this.busy = false;
     if (game.currentNodeIndex < 100) this.rollBtn?.setEnabled(true);

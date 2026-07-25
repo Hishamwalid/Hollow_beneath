@@ -156,6 +156,10 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     sable_inquisitor: 0xa23a3a,
     ash_mutant: 0x5a3a6e,
     echo_soldier: 0x556b78,
+    dust_wight: 0x7a6a52,
+    dust_road_raider: 0xc08a3e,
+    archive_cipher_wraith: 0x4a6fa5,
+    the_unread: 0x2c1f3d,
     sera_voss: 0xb08a4e,
   };
   for (const id of Object.keys({ ...ENEMIES, ...SUMMON_ENEMIES })) {

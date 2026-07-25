@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { StatBlock } from '@data/types';
 import { computeDerivedStats, isValidBuild, pointsSpent, POINT_BUY_TOTAL, PRESET_BUILDS, STARTING_EQUIPMENT_BONUSES, STAT_MAX, STAT_MIN } from '@data/stats';
+import { PRESET_STARTING_SKILL } from '@data/skills';
 import { useGameStore } from '@store/gameStore';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
@@ -9,6 +10,21 @@ import { GAME_WIDTH } from '@/config';
 
 const STAT_KEYS: Array<keyof StatBlock> = ['str', 'dex', 'con', 'int', 'will'];
 const STAT_LABELS: Record<keyof StatBlock, string> = { str: 'Strength', dex: 'Dexterity', con: 'Constitution', int: 'Intellect', will: 'Will' };
+
+/** Whichever preset archetype the final stat spread most resembles, even if hand-tuned after a preset click. */
+function closestPresetName(stats: StatBlock): string {
+  let best = 'Balanced';
+  let bestDist = Infinity;
+  for (const name of Object.keys(PRESET_BUILDS)) {
+    const preset = PRESET_BUILDS[name];
+    const dist = STAT_KEYS.reduce((sum, k) => sum + (stats[k] - preset[k]) ** 2, 0);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = name;
+    }
+  }
+  return best;
+}
 
 export class CharacterCreationScene extends Phaser.Scene {
   private stats: StatBlock = { str: 6, dex: 6, con: 6, int: 6, will: 6 };
@@ -111,6 +127,15 @@ export class CharacterCreationScene extends Phaser.Scene {
   private begin() {
     if (!isValidBuild(this.stats)) return;
     useGameStore.getState().startNewRun(this.stats);
+    const player = useGameStore.getState().player;
+    const startingSkill = PRESET_STARTING_SKILL[closestPresetName(this.stats)];
+    if (player && startingSkill && !player.skillsKnown.includes(startingSkill)) {
+      player.skillsKnown.push(startingSkill);
+      if (startingSkill === 'quickstep') player.derived.speed += 5;
+      if (startingSkill === 'bulwark_stance') player.derived.defense = Math.round(player.derived.defense * 1.15);
+      if (startingSkill === 'steady_hands') player.derived.accuracy += 10;
+      useGameStore.getState().persist();
+    }
     this.scene.start('Board');
   }
 }

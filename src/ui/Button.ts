@@ -52,11 +52,20 @@ export function createButton(
 
   if (enabled) {
     bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerover', () => { if (enabled) bg.setTexture('panel_button_hover'); });
-    bg.on('pointerout', () => { if (enabled) bg.setTexture('panel_button'); });
+    bg.on('pointerover', () => {
+      if (!enabled) return;
+      bg.setTexture('panel_button_hover');
+      scene.tweens.add({ targets: container, scale: 1.03, duration: 120, ease: 'Sine.easeOut' });
+    });
+    bg.on('pointerout', () => {
+      if (!enabled) return;
+      bg.setTexture('panel_button');
+      scene.tweens.add({ targets: container, scale: 1, duration: 120, ease: 'Sine.easeOut' });
+    });
     bg.on('pointerdown', () => {
       if (!enabled) return;
       audio.click();
+      scene.tweens.add({ targets: container, scale: 0.96, duration: 70, yoyo: true, ease: 'Sine.easeOut' });
       onClick();
     });
   }

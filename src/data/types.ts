@@ -77,6 +77,8 @@ export interface SkillDef {
   description: string;
   /** custom effect hook invoked by CombatEngine; may apply status, heal, buff, etc. */
   tag?: string;
+  /** organizational grouping only (Warrior/Ranger/Scholar/Guardian/Shadow/Universal); no separate spend-points system */
+  tree?: 'warrior' | 'ranger' | 'scholar' | 'guardian' | 'shadow' | 'universal';
 }
 
 // ---- Combatants ----------------------------------------------------------------
@@ -281,8 +283,28 @@ export interface EventDef {
   minResonance?: number;
   maxResonance?: number;
   repeatable?: boolean;
+  /** if set, at least one of these player.flags keys must be true for the event to be eligible */
+  requiresAnyFlag?: string[];
   flavorText: string;
   choices: EventChoice[];
+}
+
+// ---- Lore & Whispers ----------------------------------------------------------------
+
+export interface LoreFragmentDef {
+  id: string;
+  title: string;
+  text: string;
+  /** loose category for Codex grouping/sorting: venn|faction|loom|personal|dominion */
+  category: 'venn' | 'faction' | 'loom' | 'personal' | 'dominion';
+}
+
+export interface WhisperDef {
+  id: string;
+  text: string;
+  tier: ResonanceTier;
+  /** which moment can trigger it; used for cadence/variety, not a hard filter */
+  context: 'movement' | 'combat' | 'menu';
 }
 
 // ---- Endings ------------------------------------------------------------------------

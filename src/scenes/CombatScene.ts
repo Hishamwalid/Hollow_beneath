@@ -5,6 +5,9 @@ import { ITEMS } from '@data/items';
 import { NAMED_SKILLS } from '@data/skills';
 import type { EventApplyCtx, PlayerState } from '@data/types';
 import { CombatEngine, type CombatSnapshot, type MomentumChoice } from '@systems/CombatEngine';
+import { applyShardBonus } from '@systems/EchoShardSystem';
+import { maybePickWhisper } from '@systems/WhisperSystem';
+import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
 import { createStatPanel } from '@ui/StatPanel';
 import { createEnemyDisplay, createApPips, createActionBar, type EnemyDisplay } from '@ui/CombatHUD';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
@@ -62,6 +65,7 @@ export class CombatScene extends Phaser.Scene {
       this.scene.start('Board');
       return;
     }
+    applyResonanceTint(this, player.resonance, GAME_WIDTH, GAME_HEIGHT);
 
     const bossDef = data.mode === 'boss' && data.bossId ? BOSSES[data.bossId] : undefined;
     this.engine = new CombatEngine({
@@ -96,6 +100,9 @@ export class CombatScene extends Phaser.Scene {
 
     this.endTurnBtn = createButton(this, GAME_WIDTH - 110, GAME_HEIGHT - 40, 'End Turn', () => this.onEndTurn(), { width: 180, height: 40 });
 
+    const whisper = maybePickWhisper(player.resonance, 'combat', Math.random);
+    if (whisper) showWhisper(this, GAME_WIDTH / 2, 100, whisper.text, 520);
+
     this.refresh(initialSnap);
   }
 
@@ -124,7 +131,7 @@ export class CombatScene extends Phaser.Scene {
 
   private log(lines: string[]) {
     if (!this.logText) return;
-    const recent = lines.slice(-6);
+    const recent = lines.slice(-4);
     this.logText.setText(recent.join('\n'));
   }
 
@@ -202,26 +209,38 @@ export class CombatScene extends Phaser.Scene {
   private doAction(type: string, fn: () => CombatSnapshot) {
     audio.click();
     const prevHP = this.lastPlayerHP;
+    const prevEnemyHP = new Map(this.engine.snapshot().enemies.map((e) => [e.key, e.hp]));
     const snap = fn();
     this.refresh(snap);
-    this.animateAction(type, this.selectedTarget ?? undefined, snap, prevHP);
+    this.animateAction(type, this.selectedTarget ?? undefined, snap, prevHP, prevEnemyHP);
   }
 
-  private animateAction(type: string, targetKey: string | undefined, snap: CombatSnapshot, prevPlayerHP: number) {
+  private animateAction(type: string, targetKey: string | undefined, snap: CombatSnapshot, prevPlayerHP: number, prevEnemyHP: Map<string, number>) {
     const display = targetKey ? this.enemyKeyMap.get(targetKey) : undefined;
+    const showEnemyDamage = () => {
+      if (!targetKey || !display) return;
+      const before = prevEnemyHP.get(targetKey);
+      const after = snap.enemies.find((en) => en.key === targetKey)?.hp;
+      if (before !== undefined && after !== undefined && after < before) {
+        this.floatingText(display.container.x, display.container.y - 55, `-${before - after}`, PALETTE_HEX.danger);
+      } else if (before !== undefined && after !== undefined && after > before) {
+        this.floatingText(display.container.x, display.container.y - 55, `+${after - before}`, PALETTE_HEX.ok);
+      }
+    };
     switch (type) {
       case 'attack': {
         if (display) { this.flashTarget(display.container, 0xff4444); this.shakeTarget(display.container); }
-        const e = snap.enemies.find((en) => en.key === targetKey);
-        const dmg = e ? prevPlayerHP - snap.playerHP - 9999 : prevPlayerHP - snap.playerHP;
+        showEnemyDamage();
         break;
       }
       case 'skill': {
         if (display) { this.flashTarget(display.container, 0x9b59b6); this.shakeTarget(display.container); }
+        showEnemyDamage();
         break;
       }
       case 'resonance': {
         if (display) { this.flashTarget(display.container, 0x2c3e50); this.shakeTarget(display.container, 10); }
+        showEnemyDamage();
         break;
       }
       case 'guard': {
@@ -243,6 +262,7 @@ export class CombatScene extends Phaser.Scene {
       case 'sunder': {
         if (display) { this.flashTarget(display.container, 0xe67e22); this.shakeTarget(display.container); }
         if (targetKey) this.floatingText(200, 260, 'ARMOR BROKEN', '#e67e22');
+        showEnemyDamage();
         break;
       }
       case 'withdraw': {
@@ -425,7 +445,7 @@ export class CombatScene extends Phaser.Scene {
         addLoreFragment: (id) => {
           if (!player.loreFragments.includes(id)) player.loreFragments.push(id);
         },
-        addEchoShards: (n) => { player.echoShards += n; },
+        addEchoShards: (n) => { player.echoShards += applyShardBonus(player, n); },
       };
       const text = this.sceneData.onVictory(player, ctx);
       store.persist();

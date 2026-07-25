@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { EVENTS } from '@data/events';
-import type { EventChoice } from '@data/types';
+import { MINOR_LANDMARKS } from '@data/minorLandmarks';
+import type { EventChoice, EventDef } from '@data/types';
 import { useGameStore } from '@store/gameStore';
 import { resolveEventChoice } from '@systems/EventEngine';
-import { createDialogBox } from '@ui/DialogBox';
+import { createDialogBox, type DialogBox } from '@ui/DialogBox';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
@@ -13,9 +14,16 @@ interface EventSceneData {
   eventId: string;
 }
 
+/** Resolves an id against the main pool first, then the minor-landmark vignettes (never in the random pool). */
+function findEvent(id: string): EventDef | undefined {
+  if (EVENTS[id]) return EVENTS[id];
+  return Object.values(MINOR_LANDMARKS).find((e) => e.id === id);
+}
+
 export class EventScene extends Phaser.Scene {
   private choiceMenu?: ChoiceMenu;
   private continueBtn?: ReturnType<typeof createButton>;
+  private dialog?: DialogBox;
 
   constructor() {
     super('Event');
@@ -24,7 +32,7 @@ export class EventScene extends Phaser.Scene {
   create(data: EventSceneData) {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     const { player } = useGameStore.getState();
-    const event = EVENTS[data.eventId];
+    const event = findEvent(data.eventId);
     if (!player || !event) {
       this.scene.start('Board');
       return;
@@ -36,10 +44,11 @@ export class EventScene extends Phaser.Scene {
 
     this.add.text(GAME_WIDTH / 2, 90, event.title, { fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold }).setOrigin(0.5);
 
-    const dialog = createDialogBox(this, GAME_WIDTH / 2, 260, 820, 220);
-    dialog.setText(event.flavorText, () => this.showChoices(event.choices));
+    this.dialog?.destroy();
+    this.dialog = createDialogBox(this, GAME_WIDTH / 2, 260, 820, 220);
+    this.dialog.setText(event.flavorText, () => this.showChoices(event.choices));
 
-    this.input.on('pointerdown', () => dialog.skip());
+    this.input.on('pointerdown', () => this.dialog?.skip());
   }
 
   private showChoices(choices: EventChoice[]) {
@@ -70,7 +79,9 @@ export class EventScene extends Phaser.Scene {
     const resolution = resolveEventChoice(player, choice, Math.random);
     store.persist();
 
+    this.dialog?.destroy();
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 590, 820, 150);
+    this.dialog = dialog;
     dialog.setText(resolution.text, () => {
       if (player.currentHP <= 0) {
         this.handleDeath();
@@ -101,5 +112,12 @@ export class EventScene extends Phaser.Scene {
     const hadCheckpoint = !!store.game?.checkpointSnapshot && (store.game?.checkpointPage ?? 0) > 0;
     store.handleDeath();
     this.scene.start(hadCheckpoint ? 'Board' : 'GameOver');
+  }
+
+  shutdown() {
+    this.input.removeAllListeners('pointerdown');
+    this.choiceMenu?.destroy();
+    this.dialog?.destroy();
+    this.continueBtn?.destroy();
   }
 }

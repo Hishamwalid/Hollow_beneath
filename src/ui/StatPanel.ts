@@ -20,7 +20,8 @@ function bar(
   return {
     fg,
     setPct: (p: number) => {
-      fg.width = Math.max(0, Math.min(1, p)) * w;
+      const targetWidth = Math.max(0, Math.min(1, p)) * w;
+      scene.tweens.add({ targets: fg, width: targetWidth, duration: 350, ease: 'Sine.easeOut' });
     },
   };
 }

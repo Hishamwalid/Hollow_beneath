@@ -116,7 +116,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { player, game, meta } = get();
     if (!player || !game) return;
     const refund = deathRefund(player.echoShards);
-    const newMeta = { ...meta, echoShards: meta.echoShards + refund, deathCount: meta.deathCount + 1 };
+    const newMeta = {
+      ...meta,
+      echoShards: meta.echoShards + refund,
+      deathCount: meta.deathCount + 1,
+      loreFragmentsSeen: Array.from(new Set([...meta.loreFragmentsSeen, ...player.loreFragments])),
+    };
     if (game.checkpointPage === 0) {
       set({ meta: newMeta, player: null, game: null });
       get().persist();

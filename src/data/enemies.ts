@@ -181,6 +181,96 @@ export const ENEMIES: Record<string, EnemyDef> = {
       return basicAttack(ctx, 'pierce');
     },
   },
+
+  dust_wight: {
+    id: 'dust_wight',
+    name: 'Dust Wight',
+    hp: 22, atk: 7, matk: 2, def: 3, mdef: 2, spd: 10,
+    attackType: 'pierce',
+    affinities: { flame: 1.5, blunt: 1.3, sacred: 1.3, pierce: 0.7 },
+    xp: 8,
+    description: 'Something small that learned to survive on what the Loom leaves behind.',
+    act(ctx) {
+      if (ctx.rng() < 0.25) {
+        ctx.applyStatusToPlayer('bleed', 2);
+        return `${ctx.self.name} claws at you. Bleeding (2 turns).`;
+      }
+      return basicAttack(ctx, 'pierce', 0.9, 'gnaws');
+    },
+  },
+
+  dust_road_raider: {
+    id: 'dust_road_raider',
+    name: 'Dust-Road Raider',
+    hp: 38, atk: 13, matk: 4, def: 5, mdef: 4, spd: 20,
+    dodge: 20,
+    attackType: 'pierce',
+    affinities: { blunt: 1.4, shock: 1.2, pierce: 0.6, slash: 0.8 },
+    xp: 16,
+    description: 'Not everyone on the Dust Road walked away from the Archive as clean as Sera Voss did.',
+    act(ctx) {
+      const hpPct = ctx.player.hp / ctx.player.maxHp;
+      if (hpPct < 0.5 && ctx.rng() < 0.5) {
+        const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * 1.3)), 'pierce', ctx.self.name);
+        return `${ctx.self.name} presses the advantage for ${dmg} damage.`;
+      }
+      if (ctx.rng() < 0.3) {
+        ctx.applyStatusToPlayer('slow', 2);
+        return `${ctx.self.name} hamstrings your footing. Slowed (2 turns).`;
+      }
+      return basicAttack(ctx, 'pierce', 1.0, 'strikes fast and low');
+    },
+  },
+
+  archive_cipher_wraith: {
+    id: 'archive_cipher_wraith',
+    name: 'Archive Cipher-Wraith',
+    hp: 50, atk: 6, matk: 15, def: 6, mdef: 12, spd: 16,
+    attackType: 'shock',
+    affinities: { shadow: 1.5, flame: 1.2, shock: 0.5, frost: 0.8 },
+    xp: 24,
+    description: 'A cataloguer that redacted itself once too often.',
+    act(ctx) {
+      if (ctx.player.statuses.some((s) => ['focus', 'fortify', 'blessing', 'haste', 'barrier', 'reflection'].includes(s.id)) && ctx.rng() < 0.5) {
+        ctx.removePlayerBuffs();
+        ctx.healSelf(Math.round(ctx.self.maxHp * 0.1));
+        return `${ctx.self.name} redacts your advantages and files them away, healing itself.`;
+      }
+      if (ctx.rng() < 0.35) {
+        ctx.applyStatusToPlayer('blind', 2);
+        return `${ctx.self.name} strikes out your relevant lines. Blinded (2 turns).`;
+      }
+      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shock', ctx.self.name);
+      return `${ctx.self.name} cross-references your weaknesses for ${dmg} damage.`;
+    },
+  },
+
+  the_unread: {
+    id: 'the_unread',
+    name: 'The Unread',
+    hp: 65, atk: 4, matk: 22, def: 8, mdef: 18, spd: 24,
+    dodge: 15,
+    attackType: 'shadow',
+    affinities: { sacred: 1.4, shadow: 0.3, shock: 0.7 },
+    xp: 45,
+    minResonance: 50,
+    description: 'Not a creature. A sentence the Loom never finished, wearing a shape to say it in.',
+    act(ctx) {
+      if (ctx.turn === 1) {
+        ctx.applyStatusToPlayer('seal_mind', 2);
+        const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shadow', ctx.self.name);
+        return `${ctx.self.name} reads you first, then answers — ${dmg} damage, Seal Mind (2 turns).`;
+      }
+      const hpPct = ctx.self.hp / ctx.self.maxHp;
+      if (hpPct < 0.5 && !ctx.self.flags.unraveled) {
+        ctx.self.flags.unraveled = 1;
+        ctx.applyStatusToPlayer('weakness', 3);
+        return `${ctx.self.name} finds the sentence's true ending. Weakness (3 turns).`;
+      }
+      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shadow', ctx.self.name);
+      return `${ctx.self.name} continues, uninvited, for ${dmg} damage.`;
+    },
+  },
 };
 
 // ---- Minor summons used by boss fights (Sable Inquisitor's ally, Reflection's Echoes) ----
@@ -240,9 +330,15 @@ export const SUMMON_ENEMIES: Record<string, EnemyDef> = {
 
 /** Which enemies are eligible per page range, for BoardGenerator's combat-node resolution. */
 export function enemiesForPage(page: number, resonance: number): string[] {
+  const veryEarly = ['dust_wight'];
   const early = ['echo_skeleton', 'venn_custodian', 'sable_zealot', 'ash_seer'];
+  const mid = ['dust_road_raider', 'archive_cipher_wraith'];
   const late = ['sable_inquisitor', 'ash_mutant', 'echo_soldier'];
-  const pool = page <= 5 ? [...early] : [...early, ...late];
+  let pool: string[];
+  if (page <= 2) pool = [...veryEarly, ...early];
+  else if (page <= 5) pool = [...early, ...mid];
+  else pool = [...early, ...mid, ...late];
   if (resonance >= 25) pool.push('memory_wraith');
+  if (resonance >= 50 && page >= 6) pool.push('the_unread');
   return pool;
 }

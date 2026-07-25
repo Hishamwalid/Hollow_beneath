@@ -42,7 +42,8 @@ export function createEnemyDisplay(
       if (view.revealed) {
         const entries = Object.entries(view.affinities)
           .filter(([, v]) => v !== 1)
-          .slice(0, 2)
+          .sort(([, a], [, b]) => (b as number) - (a as number))
+          .slice(0, view.revealCount)
           .map(([t, v]) => `${t}: ${weaknessLabel(v as number)}`);
         affinityText.setText(entries.join('\n'));
       } else {

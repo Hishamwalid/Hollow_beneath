@@ -17,6 +17,14 @@ export function shardsForLoreFragment(): number {
   return ECHO_SHARD_RATES.perLoreFragment;
 }
 
+/** Wraps a raw Echo Shard amount with the Archival Insight passive's +10% bonus, if known. Use at every shard-granting site. */
+export function applyShardBonus(player: PlayerState, amount: number): number {
+  if (player.skillsKnown.includes('archival_insight')) {
+    return Math.round(amount * 1.1);
+  }
+  return amount;
+}
+
 export function deathRefund(earnedThisRun: number): number {
   return Math.floor((earnedThisRun * ECHO_SHARD_RATES.deathRefundPercent) / 100);
 }

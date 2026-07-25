@@ -6,6 +6,7 @@ import { PreloadScene } from '@scenes/PreloadScene';
 import { MenuScene } from '@scenes/MenuScene';
 import { CharacterCreationScene } from '@scenes/CharacterCreationScene';
 import { ShardShopScene } from '@scenes/ShardShopScene';
+import { LoreCodexScene } from '@scenes/LoreCodexScene';
 import { BoardScene } from '@scenes/BoardScene';
 import { EventScene } from '@scenes/EventScene';
 import { CombatScene } from '@scenes/CombatScene';
@@ -29,6 +30,7 @@ const config: Phaser.Types.Core.GameConfig = {
     MenuScene,
     CharacterCreationScene,
     ShardShopScene,
+    LoreCodexScene,
     BoardScene,
     EventScene,
     CombatScene,

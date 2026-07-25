@@ -2,7 +2,7 @@ import type { EventApplyCtx, EventChoice, EventDef, PlayerState, TrapDef } from 
 import { eligibleEvents, EVENTS } from '@data/events';
 import { statCheck } from './checks';
 import { pick } from './rng';
-import { shardsForLoreFragment } from './EchoShardSystem';
+import { shardsForLoreFragment, applyShardBonus } from './EchoShardSystem';
 
 export function buildEventCtx(player: PlayerState, rng: () => number): EventApplyCtx {
   return {
@@ -18,7 +18,7 @@ export function buildEventCtx(player: PlayerState, rng: () => number): EventAppl
         player.echoShards += shardsForLoreFragment();
       }
     },
-    addEchoShards: (n) => { player.echoShards += n; },
+    addEchoShards: (n) => { player.echoShards += applyShardBonus(player, n); },
   };
 }
 
@@ -48,8 +48,8 @@ export function resolveTrap(trap: TrapDef, player: PlayerState, rng: () => numbe
   return { avoided, text };
 }
 
-export function pickEvent(page: number, resonance: number, seen: Set<string>, rng: () => number): EventDef {
-  const pool = eligibleEvents(page, resonance, seen);
+export function pickEvent(page: number, resonance: number, seen: Set<string>, rng: () => number, flags: Record<string, boolean> = {}): EventDef {
+  const pool = eligibleEvents(page, resonance, seen, flags);
   if (pool.length === 0) return EVENTS.quiet_passage;
   return pick(pool, rng);
 }

@@ -47,6 +47,7 @@ export interface EnemyView {
   alive: boolean;
   statuses: StatusInstance[];
   revealed: boolean;
+  revealCount: number;
   affinities: AffinityMap;
 }
 
@@ -100,6 +101,8 @@ export class CombatEngine {
   private freeActionCharges = 0;
   private awaitingMomentumChoice = false;
   private analyzeBonusMultiplier = 1;
+  private veilStepGuaranteed = false;
+  private firstAttackUsed = false;
 
   constructor(setup: CombatSetup) {
     this.player = setup.player;
@@ -108,6 +111,10 @@ export class CombatEngine {
     this.bossDef = setup.bossDef;
     this.flags = { ...(setup.precombatFlags ?? {}) };
     this.playerHistorySet = setup.playerHistory;
+
+    if (this.player.skillsKnown.includes('chorus_echo')) {
+      this.player.momentum = Math.max(this.player.momentum, 1);
+    }
 
     if (setup.bossDef) {
       this.enemies.push(this.buildBossCombatant(setup.bossDef));
@@ -182,7 +189,19 @@ export class CombatEngine {
   }
 
   private effectivePlayerSpeed(): number {
-    return this.player.derived.speed * statMultiplier(this.playerStatuses, 'spd');
+    const base = this.player.derived.speed * statMultiplier(this.playerStatuses, 'spd');
+    return base + (this.player.skillsKnown.includes('quickstep') ? 5 : 0);
+  }
+
+  private readonly CONTROL_STATUSES: StatusId[] = ['stun', 'sleep', 'fear', 'silence', 'confuse', 'seal_mind', 'blind'];
+
+  /** Applies a status to the player, honoring Unshakeable's chance to resist Control-type effects. */
+  private applyStatusToPlayerChecked(id: StatusId, turns: number, stacks?: number, meta?: Record<string, number>): void {
+    if (this.CONTROL_STATUSES.includes(id) && this.player.skillsKnown.includes('unshakeable') && this.rng() < 0.5) {
+      this.log.push(`Unshakeable resists ${id.replace('_', ' ')}.`);
+      return;
+    }
+    applyStatus(this.playerStatuses, id, turns, stacks, meta);
   }
 
   // ---- Round flow -------------------------------------------------------------
@@ -190,7 +209,7 @@ export class CombatEngine {
   beginRound(): CombatSnapshot {
     if (this.phase === 'victory' || this.phase === 'defeat' || this.phase === 'fled') return this.snapshot();
     this.round += 1;
-    this.playerAP = 2;
+    this.playerAP = 2 + (this.round === 1 && this.player.skillsKnown.includes('borrowed_time') ? 1 : 0);
     this.guarding = false;
     this.lastActionRepeated = false;
 
@@ -237,8 +256,8 @@ export class CombatEngine {
 
   private checkOutcome(): void {
     if (this.player.currentHP <= 0) {
-      if (this.player.skillsKnown.includes('unfinished_sentence') && !this.flags.deathWardUsed) {
-        this.flags.deathWardUsed = 1;
+      if (this.player.skillsKnown.includes('unfinished_sentence') && !this.player.flags.deathWardUsed) {
+        this.player.flags.deathWardUsed = true;
         this.player.currentHP = 1;
         this.log.push('Unfinished Sentence: the killing blow leaves you at 1 HP instead.');
       } else {
@@ -283,7 +302,7 @@ export class CombatEngine {
         log: this.log,
         flags: this.flags,
         applyDamageToPlayer: (amount, type, label, bypassGuard) => this.dealDamageToPlayer(amount, type, label, bypassGuard),
-        applyStatusToPlayer: (id, turns, stacks, meta) => applyStatus(this.playerStatuses, id, turns, stacks, meta),
+        applyStatusToPlayer: (id, turns, stacks, meta) => this.applyStatusToPlayerChecked(id, turns, stacks, meta),
         applyStatusToSelf: (id, turns, stacks, meta) => applyStatus(enemy.statuses, id, turns, stacks, meta),
         healSelf: (amount) => { enemy.hp = Math.min(enemy.maxHp, enemy.hp + amount); },
         damageSelf: (amount) => { enemy.hp = Math.max(0, enemy.hp - amount); },
@@ -313,7 +332,7 @@ export class CombatEngine {
       turn: this.round,
       rng: this.rng,
       applyDamageToPlayer: (amount, type, label) => this.dealDamageToPlayer(amount, type, label, false),
-      applyStatusToPlayer: (id, turns, stacks, meta) => applyStatus(this.playerStatuses, id, turns, stacks, meta),
+      applyStatusToPlayer: (id, turns, stacks, meta) => this.applyStatusToPlayerChecked(id, turns, stacks, meta),
       healSelf: (amount) => { enemy.hp = Math.min(enemy.maxHp, enemy.hp + amount); },
       applyStatusToSelf: (id, turns, stacks, meta) => applyStatus(enemy.statuses, id, turns, stacks, meta),
       spawnAlly: (enemyId, hpOverride) => this.spawnAdd(enemyId, hpOverride),
@@ -330,11 +349,12 @@ export class CombatEngine {
   }
 
   private playerCombatView() {
+    const defMult = this.player.skillsKnown.includes('bulwark_stance') ? 1.15 : 1;
     return {
       name: 'You',
       hp: this.player.currentHP,
       maxHp: this.player.derived.maxHP,
-      def: Math.round(this.player.derived.defense * statMultiplier(this.playerStatuses, 'def')),
+      def: Math.round(this.player.derived.defense * statMultiplier(this.playerStatuses, 'def') * defMult),
       mdef: this.player.derived.magicDefense,
       atk: this.player.derived.attack,
       matk: this.player.derived.magicAttack,
@@ -347,16 +367,49 @@ export class CombatEngine {
     };
   }
 
-  /** Applies incoming damage to the player, honoring Guard / Barrier / Reflection. */
+  /** Applies incoming damage to the player, honoring Dodge / Guard / Barrier / Reflection. */
   private dealDamageToPlayer(amount: number, type: DamageType, label: string, bypassGuard = false): number {
+    let dodge = this.player.derived.dodge + (this.player.skillsKnown.includes('chorus_step') ? 10 : 0);
+    if (this.veilStepGuaranteed) {
+      dodge = 100;
+      this.veilStepGuaranteed = false;
+    }
+    if (this.rng() * 100 < dodge) {
+      this.log.push(`You dodge ${label}.`);
+      return 0;
+    }
+
     let dmg = amount;
-    if (this.guarding && !bypassGuard) dmg = Math.round(dmg * 0.5);
+    if (this.guarding && !bypassGuard) {
+      const guardMultiplier = this.player.skillsKnown.includes('iron_resolve') ? 0.35 : 0.5;
+      dmg = Math.round(dmg * guardMultiplier);
+      if (this.player.skillsKnown.includes('retaliation')) {
+        const blocked = amount - dmg;
+        const reflected = Math.round(blocked * 0.2);
+        const firstEnemy = this.aliveEnemies()[0];
+        if (firstEnemy && reflected > 0) {
+          firstEnemy.hp = Math.max(0, firstEnemy.hp - reflected);
+          this.log.push(`Retaliation reflects ${reflected} damage back.`);
+        }
+      }
+    }
     dmg = applyBarrier(this.playerStatuses, dmg);
     this.player.currentHP = Math.max(0, this.player.currentHP - dmg);
     if (hasStatus(this.playerStatuses, 'reflection') && dmg > 0) {
       const reflected = Math.round(dmg * 0.25);
       const firstEnemy = this.aliveEnemies()[0];
       if (firstEnemy) firstEnemy.hp = Math.max(0, firstEnemy.hp - reflected);
+    }
+    if (
+      this.player.skillsKnown.includes('second_wind') &&
+      !this.flags.secondWindUsed &&
+      this.player.currentHP > 0 &&
+      this.player.currentHP / this.player.derived.maxHP < 0.25
+    ) {
+      this.flags.secondWindUsed = 1;
+      const heal = Math.round(this.player.derived.maxHP * 0.15);
+      this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
+      this.log.push(`Second Wind: you catch yourself and recover ${heal} HP.`);
     }
     return dmg;
   }
@@ -377,7 +430,7 @@ export class CombatEngine {
   }
 
   private rollHit(target: InternalEnemy): boolean {
-    let acc = this.player.derived.accuracy;
+    let acc = this.player.derived.accuracy + (this.player.skillsKnown.includes('steady_hands') ? 10 : 0);
     if (hasStatus(this.playerStatuses, 'blind')) acc *= 0.7;
     const chance = Math.max(5, Math.min(99, acc - target.dodge));
     return this.rng() * 100 < chance;
@@ -407,6 +460,12 @@ export class CombatEngine {
     if (crit) dmg = Math.round(dmg * 1.5);
     const resonanceBonus = target._isBoss ? 1 : resonancePlayerDamageBonus(this.player.resonance);
     dmg = Math.round(dmg * resonanceBonus);
+    if (damageType === 'shadow' && this.player.skillsKnown.includes('loom_touched')) {
+      dmg = Math.round(dmg * 1.3);
+    }
+    if (damageType === 'shadow' && this.player.skillsKnown.includes('parting_words') && target.hp / target.maxHp < 0.3) {
+      dmg = Math.round(dmg * 1.4);
+    }
     if (weakness < 0) {
       // Absorb — heals the enemy instead
       target.hp = Math.min(target.maxHp, target.hp + Math.abs(dmg));
@@ -428,7 +487,11 @@ export class CombatEngine {
     if (!target) return this.snapshot();
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.attack;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
-    const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk');
+    let atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk');
+    if (!this.firstAttackUsed && this.player.skillsKnown.includes('opening_strike')) {
+      atk = Math.round(atk * 1.2);
+    }
+    this.firstAttackUsed = true;
     this.computeAndApplyDamage(target, atk, target.def, 'slash', 'Your attack');
     this.lastActionId = 'attack';
     this.lastActionType = 'slash';
@@ -467,6 +530,35 @@ export class CombatEngine {
         this.computeAndApplyDamage(target, atk, target.def, 'sacred', 'Sealing Strike');
       }
       this.player.resonance = Math.max(0, this.player.resonance - 2);
+    } else if (skill.tag === 'active_reckless_swing') {
+      const target = this.pickTarget(targetKey);
+      if (target) {
+        const selfCost = Math.max(1, Math.round(this.player.currentHP * 0.08));
+        this.player.currentHP = Math.max(1, this.player.currentHP - selfCost);
+        const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk') * (skill.skillPower ?? 1);
+        this.computeAndApplyDamage(target, atk, target.def, 'slash', 'Reckless Swing');
+        this.log.push(`Reckless Swing costs you ${selfCost} HP.`);
+      }
+    } else if (skill.tag === 'active_hunters_mark') {
+      const target = this.pickTarget(targetKey);
+      if (target) {
+        const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk') * (skill.skillPower ?? 1);
+        const weakness = target.affinities.pierce ?? 1.0;
+        const variance = 0.9 + this.rng() * 0.2;
+        const raw = Math.max(3, Math.round((atk - target.def / 2) * weakness * variance));
+        const mitigated = applyBarrier(target.statuses, raw);
+        target.hp = Math.max(0, target.hp - mitigated);
+        this.log.push(`Hunter's Mark cannot miss — hits ${target.name} for ${mitigated} damage.`);
+      }
+    } else if (skill.tag === 'active_overwritten_truth') {
+      const target = this.pickTarget(targetKey);
+      if (target) {
+        const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk') * (skill.skillPower ?? 1);
+        this.computeAndApplyDamage(target, matk, target.mdef, 'shock', 'Overwritten Truth', 'mdef');
+      }
+    } else if (skill.tag === 'active_veil_step') {
+      this.veilStepGuaranteed = true;
+      this.log.push('You go still, ready to slip the next blow entirely.');
     }
 
     if (!this.momentumUsedSkillThisCombat) {
@@ -481,7 +573,8 @@ export class CombatEngine {
 
   resonanceAbility(targetKey?: string): CombatSnapshot {
     if (this.phase !== 'player' || this.player.resonance < 25) return this.snapshot();
-    const cost = this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.resonance_ability;
+    const baseCost = this.player.skillsKnown.includes('resonant_study') ? 1 : ACTION_AP_COST.resonance_ability;
+    const cost = this.freeActionCharges > 0 ? 0 : baseCost;
     if (this.playerAP < cost) return this.snapshot();
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
@@ -537,9 +630,10 @@ export class CombatEngine {
   }
 
   analyze(targetKey?: string): CombatSnapshot {
-    if (this.phase !== 'player' || (this.playerAP < 1 && this.freeActionCharges < 1)) return this.snapshot();
-    this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.analyze;
-    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    const analyzeCost = this.player.skillsKnown.includes('cross_reference') ? 0 : ACTION_AP_COST.analyze;
+    if (this.phase !== 'player' || (this.playerAP < analyzeCost && this.freeActionCharges < 1)) return this.snapshot();
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : analyzeCost;
+    if (this.freeActionCharges > 0 && analyzeCost > 0) this.freeActionCharges -= 1;
     const target = this.pickTarget(targetKey);
     if (target) {
       (target as InternalEnemy)._revealed = true;
@@ -621,7 +715,9 @@ export class CombatEngine {
   }
 
   getXpEarned(): number {
-    return this.enemies.filter((e) => e.hp <= 0).reduce((s, e) => s + e.xp, 0);
+    const base = this.enemies.filter((e) => e.hp <= 0).reduce((s, e) => s + e.xp, 0);
+    const bonus = this.player.skillsKnown.includes('archival_insight') ? 1.1 : 1;
+    return Math.round(base * bonus);
   }
 
   snapshot(): CombatSnapshot {
@@ -648,6 +744,7 @@ export class CombatEngine {
           alive: e.hp > 0,
           statuses: e.statuses,
           revealed: e._revealed,
+          revealCount: this.player.skillsKnown.includes('librarians_eye') ? 2 : 1,
           affinities: e.affinities,
         })),
       log: this.log,

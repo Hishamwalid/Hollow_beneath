@@ -4,9 +4,10 @@ import type { BossPreCombatChoice } from '@data/types';
 import { useGameStore } from '@store/gameStore';
 import { NAMED_SKILLS } from '@data/skills';
 import { clampInfluence } from '@data/factions';
-import { createDialogBox } from '@ui/DialogBox';
+import { createDialogBox, type DialogBox } from '@ui/DialogBox';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
+import { applyShardBonus } from '@systems/EchoShardSystem';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -19,6 +20,8 @@ interface LandmarkSceneData {
 
 export class LandmarkScene extends Phaser.Scene {
   private choiceMenu?: ChoiceMenu;
+  private dialog?: DialogBox;
+  private continueBtn?: ReturnType<typeof createButton>;
 
   constructor() {
     super('Landmark');
@@ -47,8 +50,11 @@ export class LandmarkScene extends Phaser.Scene {
     this.add.text(GAME_WIDTH / 2, 96, boss.theme, { fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' }).setOrigin(0.5);
     this.add.image(GAME_WIDTH / 2, 230, `tok_${bossId}`).setDisplaySize(140, 140);
 
+    this.dialog?.destroy();
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 420, 860, 190);
+    this.dialog = dialog;
     dialog.setText(boss.approachText, () => this.showPreCombatChoices(bossId));
+    this.input.removeAllListeners('pointerdown');
     this.input.on('pointerdown', () => dialog.skip());
   }
 
@@ -82,16 +88,21 @@ export class LandmarkScene extends Phaser.Scene {
     const text = choice.apply(player, combatFlags, Math.random);
     useGameStore.getState().persist();
 
+    this.dialog?.destroy();
     const dialog = createDialogBox(this, GAME_WIDTH / 2, GAME_HEIGHT - 140, 820, 160);
+    this.dialog = dialog;
     dialog.setText(text || '...', () => {
       if (choice.skipsCombat) {
         useGameStore.getState().recordCheckpoint();
         useGameStore.getState().persist();
-        createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'Continue', () => this.scene.start('Board'), { width: 220 });
+        this.continueBtn?.destroy();
+        this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'Continue', () => this.scene.start('Board'), { width: 220 });
       } else {
         this.scene.start('Combat', { mode: 'boss', bossId, page: BOSSES[bossId].page, precombatFlags: combatFlags });
       }
     });
+    this.input.removeAllListeners('pointerdown');
+    this.input.on('pointerdown', () => dialog.skip());
   }
 
   private showAftermath(bossId: string, flags: Record<string, number>) {
@@ -121,8 +132,9 @@ export class LandmarkScene extends Phaser.Scene {
       notes.push(`Max HP ${rewards.maxHpPercentDelta > 0 ? '+' : ''}${rewards.maxHpPercentDelta}%`);
     }
     if (rewards.echoShards) {
-      player.echoShards += rewards.echoShards;
-      notes.push(`+${rewards.echoShards} Echo Shards`);
+      const shards = applyShardBonus(player, rewards.echoShards);
+      player.echoShards += shards;
+      notes.push(`+${shards} Echo Shards`);
     }
     if (rewards.skillUnlock && !player.skillsKnown.includes(rewards.skillUnlock)) {
       player.skillsKnown.push(rewards.skillUnlock);
@@ -139,12 +151,15 @@ export class LandmarkScene extends Phaser.Scene {
     store.persist();
 
     this.add.text(GAME_WIDTH / 2, 70, `${boss.name} — Aftermath`, { fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    this.dialog?.destroy();
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 280, 860, 220);
+    this.dialog = dialog;
     dialog.setText(boss.aftermathText(flags), () => {
       this.add
         .text(GAME_WIDTH / 2, 440, notes.join('   ·   '), { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.boneMuted })
         .setOrigin(0.5);
-      createButton(
+      this.continueBtn?.destroy();
+      this.continueBtn = createButton(
         this,
         GAME_WIDTH / 2,
         GAME_HEIGHT - 80,
@@ -159,6 +174,14 @@ export class LandmarkScene extends Phaser.Scene {
         { width: 260 },
       );
     });
+    this.input.removeAllListeners('pointerdown');
     this.input.on('pointerdown', () => dialog.skip());
+  }
+
+  shutdown() {
+    this.input.removeAllListeners('pointerdown');
+    this.choiceMenu?.destroy();
+    this.dialog?.destroy();
+    this.continueBtn?.destroy();
   }
 }
