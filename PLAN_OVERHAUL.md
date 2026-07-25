@@ -48,32 +48,31 @@ Based on comparison between current codebase and [`THE_HOLLOW_BENEATH_Improved_G
 | Page | Nodes | Content | Type |
 |------|-------|---------|------|
 | 1 | 1-10 | Capture point at 10 | Minor Landmark |
-| 2 | 11-20 | **Mini-boss** at 20 | ★ Elite Fight |
+| 2 | 11-20 | — | — |
 | 3 | 21-30 | Capture point at 30 | Minor Landmark |
 | 4 | 31-40 | **Major Boss** at 40 (Sentinel) | ★ Boss + Checkpoint |
 | 5 | 41-50 | Capture point at 50 | Minor Landmark |
-| 6 | 51-60 | **Mini-boss** at 60 | ★ Elite Fight |
+| 6 | 51-60 | — | — |
 | 7 | 61-70 | Capture point at 70 | Minor Landmark |
 | 8 | 71-80 | **Major Boss** at 80 (Patriarch) | ★ Boss + Checkpoint |
 | 9 | 81-90 | Capture point at 90 | Minor Landmark |
-| 10 | 91-100 | **Mini-boss** at 100 | ★ Elite Fight |
+| 10 | 91-100 | — | — |
 | 11 | 101-110 | Capture point at 110 | Minor Landmark |
 | 12 | 111-120 | **Major Boss** at 120 (Chorus) | ★ Boss + Checkpoint |
 | 13 | 121-130 | Capture point at 130 | Minor Landmark |
-| 14 | 131-140 | **Mini-boss** at 140 | ★ Elite Fight |
+| 14 | 131-140 | — | — |
 | 15 | 141-150 | Capture point at 150 | Minor Landmark |
 | 16 | 151-160 | **Major Boss** at 160 (Fossil King) | ★ Boss + Checkpoint |
 | 17 | 161-170 | Capture point at 170 | Minor Landmark |
-| 18 | 171-180 | **Mini-boss** at 180 | ★ Elite Fight |
+| 18 | 171-180 | — | — |
 | 19 | 181-190 | Capture point at 190 | Minor Landmark |
 | 20 | 191-200 | **Major Boss** at 200 (Reflection) | ★ Boss + Ending |
 
 #### Each Chapter
 
 Each chapter (the 40 nodes between major bosses) contains:
-- ~22 free landings (events / combat / rest / discovery / trap)
+- ~25 free landings (events / combat / rest / discovery / trap)
 - 2 capture points (minor landmarks with lore fragments)
-- 1 mini-boss (elite enemy encounter)
 
 #### Movement
 
@@ -105,69 +104,18 @@ The current board draws a serpentine grid of all 100 nodes. For 200 nodes:
 - **Decision:** 10 columns × 20 rows, serpentine layout. The board scrolls naturally as the player progresses.
 
 **Files to change:**
-- `src/systems/BoardGenerator.ts` — increase to 200 nodes, add mini-boss indices and scaling multipliers
-- `src/scenes/BoardScene.ts` — fog of war, extra rows, mini-boss node icons, checkpoint visual
-- `src/data/types.ts` — add `MINI_BOSS_INDICES`, update `LANDMARK_INDICES`
+- `src/systems/BoardGenerator.ts` — increase to 200 nodes, update indices and scaling multipliers
+- `src/scenes/BoardScene.ts` — fog of war, extra rows, checkpoint visual
+- `src/data/types.ts` — add `CAPTURE_INDICES`, `CHECKPOINTS`, update `LANDMARK_INDICES`
 - `src/config.ts` — add `TOTAL_NODES = 200`, `PAGES = 20`
 
 ---
 
 ### 1.2 Mini-Boss Encounters
 
-5 mini-bosses at forced indices: **20, 60, 100, 140, 180**.
+**Stripped per audit recommendation.** Mini-bosses (originally at indices 20, 60, 100, 140, 180) are removed from scope. Those 5 node slots revert to regular weighted-random nodes. No `miniBosses.ts`, no special AI handlers, no elite rewards.
 
-Each is an upgraded version of a regular enemy with the following template:
-
-| Mini-Boss | Base Enemy | HP Mult | ATK Mult | Special Ability |
-|-----------|-----------|---------|----------|-----------------|
-| Warden of Ash | echo_skeleton | 2.0× | 1.5× | **"War Cry"** — buffs own ATK by 30% for 2 turns. Activates on turn 1. |
-| Archive Purifier | venn_custodian | 1.8× | 1.4× | **"Reset"** — clears all player buffs and removes 1 stack of each DoT from self. Triggers at 50% HP. |
-| Ash-Touched Speaker | ash_seer | 1.8× | 1.3× | **"Echo"** — copies the last skill the player used and uses it against them at 0.7× power. Triggers every 2 turns. |
-| Sable Justicar | sable_inquisitor | 1.6× | 1.4× | **"Condemn"** — applies Seal Mind + Weakness for 2 turns. Opens combat with this. |
-| Dust-Road Khan | dust_road_raider | 2.0× | 1.5× | **"Ambush"** — starts combat with 2 Momentum already gained. No other special AI. |
-
-#### Rewards
-
-- **XP:** 1.5× the base enemy's XP value
-- **Gold:** 2× the base enemy's gold value
-- **Item:** Guaranteed drop from a mini-boss reward table (higher-tier versions of regular consumables)
-
-#### Implementation
-
-1. **New file:** `src/data/miniBosses.ts`
-
-```typescript
-export interface MiniBossDef {
-  id: string;
-  baseEnemyId: string;
-  hpMultiplier: number;
-  atkMultiplier: number;
-  specialAbility: string;  // references a new AI handler
-  specialAbilityTrigger: 'turn1' | 'turn2' | 'hp50' | 'every2';
-}
-
-export const MINI_BOSSES: MiniBossDef[] = [
-  { id: 'warden_of_ash', baseEnemyId: 'echo_skeleton', hpMultiplier: 2.0, atkMultiplier: 1.5, specialAbility: 'war_cry', specialAbilityTrigger: 'turn1' },
-  { id: 'archive_purifier', baseEnemyId: 'venn_custodian', hpMultiplier: 1.8, atkMultiplier: 1.4, specialAbility: 'reset', specialAbilityTrigger: 'hp50' },
-  { id: 'ash_touched_speaker', baseEnemyId: 'ash_seer', hpMultiplier: 1.8, atkMultiplier: 1.3, specialAbility: 'echo', specialAbilityTrigger: 'every2' },
-  { id: 'sable_justicar', baseEnemyId: 'sable_inquisitor', hpMultiplier: 1.6, atkMultiplier: 1.4, specialAbility: 'condemn', specialAbilityTrigger: 'turn1' },
-  { id: 'dust_road_khan', baseEnemyId: 'dust_road_raider', hpMultiplier: 2.0, atkMultiplier: 1.5, specialAbility: 'ambush', specialAbilityTrigger: 'turn1' },
-];
-```
-
-2. **Modify** `src/systems/CombatEngine.ts`:
-   - Accept a `isMiniBoss` flag in enemy config
-   - Apply stat multipliers at creation
-   - Add AI handlers for each special ability
-
-3. **Modify** `src/systems/BoardGenerator.ts`:
-   - Place mini-boss nodes at indices 20, 60, 100, 140, 180
-   - Assign subtype as mini-boss id
-
-4. **Modify** `src/scenes/CombatScene.ts`:
-   - Show a different label for mini-boss encounters ("Elite" badge)
-   - Increase particle effects for mini-boss kills
-   - Award bonus XP and gold after victory
+Rationale: adding 5 mini-boss encounters on top of 5 major bosses and 200 nodes would inflate session length beyond the GDD v2's stated 20-30 minute target without any playtest data justifying the increase. The freed engineering effort (~5 hours) is redirected to core system work (level-up, skill tree, MP activation).
 
 ---
 
@@ -209,15 +157,14 @@ Based on 200 nodes, 1d6 movement, ~57 landings:
 
 | Source | Count | XP Each | Total |
 |--------|-------|---------|-------|
-| Regular combat (~7) | 7 | 20 | 140 |
-| Major bosses (5) | 5 | 40 | 200 |
-| Mini-bosses (5) | 5 | 30 | 150 |
-| Event XP rewards | ~10 | 15 | 150 |
-| Discovery rewards | ~5 | 20 | 100 |
+| Regular combat | ~8 | 20 | 160 |
+| Major bosses | 5 | 40 | 200 |
+| Event XP rewards | ~12 | 15 | 180 |
+| Discovery rewards | ~6 | 20 | 120 |
 | Traps survived | ~3 | 10 | 30 |
-| **Estimated Total** | | | **~770** |
+| **Estimated Total** | | | **~690** |
 
-**Expected level range per full run: Level 6-8.** Enough to fill 1-2 skill trees or spread points across 3-4 trees partially.
+**Expected level range per full run: Level 5-7.** Enough to fill 1-2 skill trees or spread points across 3-4 trees partially.
 
 #### Level-Up Flow
 
@@ -1117,9 +1064,7 @@ When any faction's influence ≤ -25 (Hostile):
 - Restore only 50% of normal HP/MP
 - Text: *"You wake to the sound of blades being drawn. Not enough rest."*
 
-**5. Mini-Boss Bonus**
-- If the faction associated with an upcoming mini-boss is Hostile, the mini-boss gets +10% HP
-- This creates a natural consequence: angering a faction makes their mini-boss harder
+*(Mini-boss bonus removed — no mini-bosses in scope.)*
 
 #### Implementation
 
@@ -1149,7 +1094,7 @@ const availableChoices = event.choices.filter(choice => {
 - **Modify:** `src/scenes/EventScene.ts` — lock choices by faction hostility
 - **Modify:** `src/data/events.ts` — add `factionGate` field to choices, hostile flavor text variants
 - **Modify:** `src/data/types.ts` — add `factionGate?: string` to `EventChoice`
-- **Modify:** `src/scenes/CombatScene.ts` — mini-boss HP bonus if related faction is hostile
+*(No mini-boss changes needed in CombatScene.ts.)*
 
 ---
 
@@ -1178,7 +1123,6 @@ Two entry points:
 ║  ║  Nodes visited    ║  ║   42 / 200   58   ║ ║
 ║  ║  Enemies killed   ║  ║   17         24   ║ ║
 ║  ║  Major bosses     ║  ║   3 / 5      4    ║ ║
-║  ║  Mini-bosses      ║  ║   3 / 5      4    ║ ║
 ║  ║  Level reached    ║  ║   6          7    ║ ║
 ║  ║  Resonance peak   ║  ║   62         71   ║ ║
 ║  ║  Choices made     ║  ║   19         24   ║ ║
@@ -1210,7 +1154,6 @@ interface RunStats {
   nodesVisited: number;
   enemiesKilled: number;
   majorBossesDefeated: number;  // /5
-  miniBossesDefeated: number;   // /5
   levelReached: number;
   resonancePeak: number;
   resonanceTierPeak: string;
@@ -1611,20 +1554,27 @@ The ghost persists only for the first checkpoing-resumed run. It's cleared when 
 
 ## 7. Implementation Order
 
+### Phase 0 — Quick Fixes (from Repo Audit)
+
+| Order | Item | Files | Est. Time |
+|-------|------|-------|-----------|
+| 0a | **Fix CombatEngine crash** (`defId` vs `_key`) | CombatEngine.ts | 5min |
+| 0b | **Fix Resonance Anchor** (bump to 25) | ShardShop or store | 30min |
+| 0c | **Vite code-splitting** (`manualChunks`) | vite.config.ts | 30min |
+
 ### Phase A — Core Systems
 
 | Order | Item | Files | Est. Time | Depends On |
 |-------|------|-------|-----------|------------|
 | A1 | **Board Expansion: 200 nodes + 1d6** | BoardGenerator.ts, BoardScene.ts, types.ts, config.ts, checks.ts | 3h | — |
-| A2 | **Mini-Bosses** | miniBosses.ts (new), CombatEngine.ts, BoardGenerator.ts | 3h | A1 |
-| A3 | **Level-Up System** | LevelSystem.ts (new), gameStore.ts, types.ts, LevelUpModal.ts (new), StatPanel.ts | 4h | — |
-| A4 | **Skill Tree** | skillTree.ts (new), SkillTreeScene.ts (new), gameStore.ts, types.ts, BoardScene.ts | 6h | A3 |
-| A5 | **MP System Activation** | types.ts, skills.ts, CombatEngine.ts, CombatHUD.ts, BoardScene.ts | 2h | — |
-| A6 | **Equipment Change UI** | InventoryScene.ts (rewrite), stats.ts | 3h | — |
-| A7 | **Fog of War (4-node visibility)** | BoardScene.ts | 2h | A1 |
-| A8 | **Turn Order Indicator** | CombatHUD.ts, CombatScene.ts | 2h | — |
+| A2 | **Level-Up System** | LevelSystem.ts (new), gameStore.ts, types.ts, LevelUpModal.ts (new), StatPanel.ts | 4h | — |
+| A3 | **Skill Tree** | skillTree.ts (new), SkillTreeScene.ts (new), gameStore.ts, types.ts, BoardScene.ts | 6h | A2 |
+| A4 | **MP System Activation** | types.ts, skills.ts, CombatEngine.ts, CombatHUD.ts, BoardScene.ts | 2h | — |
+| A5 | **Equipment Change UI** | InventoryScene.ts (rewrite), stats.ts | 3h | — |
+| A6 | **Fog of War (4-node visibility)** | BoardScene.ts | 2h | A1 |
+| A7 | **Turn Order Indicator** | CombatHUD.ts, CombatScene.ts | 2h | — |
 
-**Phase A total: ~25 hours**
+**Phase A total: ~22 hours**
 
 ---
 
@@ -1679,11 +1629,12 @@ The ghost persists only for the first checkpoing-resumed run. It's cleared when 
 
 | Phase | Hours |
 |-------|-------|
-| Phase A — Core Systems | ~25 |
+| Phase 0 — Quick Fixes | ~1 |
+| Phase A — Core Systems | ~22 |
 | Phase B — Content | ~12 |
 | Phase C — Polish | ~23 |
 | Phase D — Integration & Test | ~6 |
-| **Grand Total** | **~66 hours** |
+| **Grand Total** | **~64 hours** |
 
 ---
 
@@ -1699,15 +1650,14 @@ These are design decisions confirmed or deferred during planning:
 
 4. **Level-up stat point UI** — +/- steppers like character creation, or a dropdown? **Steppers** — consistent with existing character creation UX.
 
-5. **Mini-boss special abilities** — should they use AI from the existing enemy system or bespoke handlers? **Bespoke handlers** (one per mini-boss) for variety.
+5. **Settings: volume implementation** — Phaser's built-in sound manager or Howler.js? **Phaser's built-in sound** — already the audio approach. Add volume multipliers per channel.
 
-6. **Settings: volume implementation** — Phaser's built-in sound manager or Howler.js? **Phaser's built-in sound** — already the audio approach. Add volume multipliers per channel.
+6. **Ghost token on death** — show at death node or at checkpoint? **At death node** — to show the player "you made it this far."
 
-7. **Ghost token on death** — show at death node or at checkpoint? **At death node** — to show the player "you made it this far."
-
-8. **End-of-run stats comparison** — compare to best run only, or show last 3 runs? **Best run only** — simpler, cleaner UI.
+7. **End-of-run stats comparison** — compare to best run only, or show last 3 runs? **Best run only** — simpler, cleaner UI.
 
 ---
 
-*Plan version: 1.0 — July 2026*
+*Plan version: 1.1 — July 2026*
+*Changes: Stripped 5 mini-bosses per audit recommendation; added Phase 0 quick fixes; adjusted XP table for 200-node board without mini-bosses; expected level range adjusted to 5-7.*
 *Based on: THE_HOLLOW_BENEATH_Improved_GDD_v2.md*

@@ -3,6 +3,7 @@ import { useGameStore } from '@store/gameStore';
 import type { BoardNode } from '@data/types';
 import { CHECKPOINTS, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
 import { rollDie, rollMovement } from '@systems/checks';
+import { TOTAL_NODES, PAGES, NODES_PER_PAGE } from '@/config';
 import { pickEvent } from '@systems/EventEngine';
 import { resolveTrap } from '@systems/EventEngine';
 import { TRAPS } from '@data/events';
@@ -91,7 +92,7 @@ export class BoardScene extends Phaser.Scene {
     this.diceRoller = createDiceRoller(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT - 170);
     this.rollBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 100, 'Roll (1d6)', () => this.handleRoll(), { width: 200 });
 
-    if (game.currentNodeIndex >= 100) {
+    if (game.currentNodeIndex >= TOTAL_NODES) {
       this.rollBtn.setEnabled(false);
     }
   }
@@ -113,8 +114,8 @@ export class BoardScene extends Phaser.Scene {
     const lx = GAME_WIDTH - 20;
     const topY = 210;
     const bottomY = GAME_HEIGHT - 90;
-    const stepH = (bottomY - topY) / 9;
-    for (let i = 0; i < 10; i++) {
+    const stepH = (bottomY - topY) / (PAGES - 1);
+    for (let i = 0; i < PAGES; i++) {
       const y = Math.round(topY + i * stepH);
       const isCurrent = i + 1 === currentPage;
       const dot = this.add.circle(lx, y, isCurrent ? 6 : 4, isCurrent ? 0xc9a24b : 0x2a2e33)
@@ -159,7 +160,7 @@ export class BoardScene extends Phaser.Scene {
     audio.diceRoll();
 
     const roll = rollMovement(Math.random);
-    let target = Math.min(100, game.currentNodeIndex + roll);
+    let target = Math.min(TOTAL_NODES, game.currentNodeIndex + roll);
     for (let i = game.currentNodeIndex + 1; i <= target; i++) {
       if (LANDMARK_INDICES.includes(i) && !game.nodes[i - 1].resolved) {
         target = i;
@@ -207,7 +208,7 @@ export class BoardScene extends Phaser.Scene {
     const { player, game } = store;
     if (!player || !game) return;
 
-    const page = Math.min(10, Math.ceil(target / 10));
+    const page = Math.min(PAGES, Math.ceil(target / NODES_PER_PAGE));
     player.echoShards += applyShardBonus(player, shardsForNodeVisit());
     const updatedNodes = game.nodes.map((n) => ({ ...n }));
     const node = updatedNodes[target - 1];
@@ -217,7 +218,7 @@ export class BoardScene extends Phaser.Scene {
     });
     this.statPanel?.update(player);
     this.preview?.show(node);
-    this.pageLabel?.setText(`Page ${page} / 10`);
+    this.pageLabel?.setText(`Page ${page} / ${PAGES}`);
     this.buildDepthLadder(page);
     this.log(this.pageFlavor(page));
 
@@ -452,7 +453,7 @@ export class BoardScene extends Phaser.Scene {
     if (whisper) showWhisper(this, GAME_WIDTH / 2, 178, whisper.text, 460);
 
     this.busy = false;
-    if (game.currentNodeIndex < 100) this.rollBtn?.setEnabled(true);
+    if (game.currentNodeIndex < TOTAL_NODES) this.rollBtn?.setEnabled(true);
   }
 
   private handleDeathFlow() {

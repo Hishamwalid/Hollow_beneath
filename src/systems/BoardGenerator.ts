@@ -1,10 +1,11 @@
 import type { BoardNode, NodeType } from '@data/types';
 import { enemiesForPage } from '@data/enemies';
 import { pick } from './rng';
+import { TOTAL_NODES, NODES_PER_PAGE, PAGES } from '@/config';
 
-export const CHECKPOINTS = [20, 40, 60, 80];
-export const LANDMARK_INDICES = [20, 40, 60, 80, 100];
-export const CAPTURE_INDICES = [10, 30, 50, 70, 90];
+export const CHECKPOINTS = [40, 80, 120, 160];
+export const LANDMARK_INDICES = [40, 80, 120, 160, 200];
+export const CAPTURE_INDICES = [10, 30, 50, 70, 90, 110, 130, 150, 170, 190];
 
 const NODE_WEIGHTS: Array<[NodeType, number]> = [
   ['event', 45],
@@ -25,19 +26,19 @@ function weightedNodeType(rng: () => number): NodeType {
 }
 
 export function pageForIndex(index: number): number {
-  return Math.min(10, Math.ceil(index / 10));
+  return Math.min(PAGES, Math.ceil(index / NODES_PER_PAGE));
 }
 
-/** Builds the full 100-node board. Deterministic given the same seeded rng. */
+/** Builds the full 200-node board. Deterministic given the same seeded rng. */
 export function generateBoard(rng: () => number): BoardNode[] {
   const nodes: BoardNode[] = [];
   const trapPool = ['memory_trap', 'collapsing_floor'];
 
-  for (let i = 1; i <= 100; i++) {
+  for (let i = 1; i <= TOTAL_NODES; i++) {
     const page = pageForIndex(i);
 
     if (LANDMARK_INDICES.includes(i)) {
-      const bossId = { 20: 'sentinel', 40: 'patriarch', 60: 'chorus', 80: 'fossil_king', 100: 'reflection' }[i]!;
+      const bossId = { 40: 'sentinel', 80: 'patriarch', 120: 'chorus', 160: 'fossil_king', 200: 'reflection' }[i]!;
       nodes.push({ index: i, page, type: 'landmark', subtype: bossId, resolved: false });
       continue;
     }

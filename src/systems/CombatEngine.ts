@@ -341,7 +341,7 @@ export class CombatEngine {
       return;
     }
 
-    const def = ALL_ENEMY_DEFS[enemy._key];
+    const def = ALL_ENEMY_DEFS[enemy.defId];
     const ctx: EnemyTurnContext = {
       self: enemy,
       player: this.playerCombatView(),

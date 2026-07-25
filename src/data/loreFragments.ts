@@ -182,6 +182,36 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     category: 'loom',
     text: 'This close to the end, the waystone carvings stop describing the road and start describing the traveler. Yours is not carved yet. There is, unmistakably, room.',
   },
+  the_eleventh_marker: {
+    id: 'the_eleventh_marker',
+    title: 'The Eleventh Marker',
+    category: 'venn',
+    text: 'A cracked waystone split by a root that grows deeper than it should. The fracture was deliberate — the marker was placed on a seam, as if the Venn intended the message to break in two. Beneath: more writing, incomplete, waiting for a pen that was never coming.',
+  },
+  the_thirteenth_marker: {
+    id: 'the_thirteenth_marker',
+    title: 'The Thirteenth Marker',
+    category: 'venn',
+    text: 'A circle of thirteen faces carved in sequence, each expressing a different stage of what looks like grief or understanding. The thirteenth face is blank — not unfinished, but reserved. The Archive record suggests the observer is meant to see their own expression reflected in it, which means the stone is watching back.',
+  },
+  the_fifteenth_marker: {
+    id: 'the_fifteenth_marker',
+    title: 'The Fifteenth Marker',
+    category: 'loom',
+    text: 'At the convergence of three paths, a single word: "Choose." The Venn word carries connotations the Common translation does not — it means not only "pick" but "commit to the consequence of having picked." The paths do not reconverge.',
+  },
+  the_seventeenth_marker: {
+    id: 'the_seventeenth_marker',
+    title: 'The Seventeenth Marker',
+    category: 'loom',
+    text: 'Etched into a bridge railing above a chasm of impossible depth. The carving says nothing about the chasm itself — only that "the one who crosses here must not be carrying anything they were given." What counts as given is left deliberately undefined.',
+  },
+  the_nineteenth_marker: {
+    id: 'the_nineteenth_marker',
+    title: 'The Nineteenth Marker',
+    category: 'venn',
+    text: 'The penultimate marker is the smallest, the carving hurried, almost desperate. "Almost," it says. And then, in a postscript so faint it is nearly invisible: "For Lyra." The name is correct. The stone should not know it.',
+  },
 
   // ---- New: discovery-node flavor (10) --------------------------------------
 

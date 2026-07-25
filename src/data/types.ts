@@ -397,7 +397,7 @@ export interface GameState {
   landings: number;
   combatRounds: number;
   choicesMade: number;
-  checkpointPage: number; // last checkpoint reached (0/20/40/60/80)
+  checkpointPage: number; // last checkpoint reached (0/40/80/120/160)
   checkpointSnapshot: PlayerState | null;
   nodes: BoardNode[];
   isRunActive: boolean;

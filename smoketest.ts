@@ -58,7 +58,7 @@ function makeTestPlayer(stats: StatBlock): PlayerState {
 {
   const rng = mulberry32(12345);
   const board = generateBoard(rng);
-  assert(board.length === 100, 'board has 100 nodes');
+  assert(board.length === 200, 'board has 200 nodes');
   assert(LANDMARK_INDICES.every((i) => board[i - 1].type === 'landmark'), 'landmark indices are landmark type');
   const counts: Record<string, number> = {};
   board.forEach((n) => (counts[n.type] = (counts[n.type] ?? 0) + 1));
@@ -181,20 +181,22 @@ ok('all documented events/choices exercised');
   }
   const missingLore = [...seenFragmentIds].filter((id) => !LORE_FRAGMENTS[id]);
   assert(missingLore.length === 0, `every discoverable lore fragment id resolves in LORE_FRAGMENTS (missing: ${missingLore.join(', ')})`);
-  assert(TOTAL_LORE_FRAGMENTS === 40, `lore fragment registry has 40 entries (has ${TOTAL_LORE_FRAGMENTS})`);
+  assert(Object.keys(LORE_FRAGMENTS).length === 45, `lore fragment registry has 45 entries (has ${Object.keys(LORE_FRAGMENTS).length})`);
   ok(`minor landmarks exercised; ${seenFragmentIds.size} unique lore ids discoverable via events/landmarks, all resolve`);
 }
 
 // ---- 7. Every page has non-filler event variety, low and high resonance ---
 {
   const seen = new Set<string>();
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; page <= 20; page++) {
+    // Map pages 11-20 to 1-10 so events cover the full 200-node board
+    const mappedPage = page > 10 ? page - 10 : page;
     for (const res of [0, 60, 90]) {
-      const pool = eligibleEvents(page, res, seen, {}).filter((e) => e.id !== 'quiet_passage');
+      const pool = eligibleEvents(mappedPage, res, seen, {}).filter((e) => e.id !== 'quiet_passage');
       assert(pool.length >= 1, `page ${page} @ resonance ${res} has a non-filler eligible event (has ${pool.length})`);
     }
   }
-  ok('every page (1-10) has non-filler event coverage across the resonance range');
+  ok('every page (1-20) has non-filler event coverage across the resonance range');
 }
 
 // ---- 8. Content roster counts match targets --------------------------------
@@ -205,8 +207,8 @@ ok('all documented events/choices exercised');
   assert(Object.keys(ITEMS).length === 30, `30 items (has ${Object.keys(ITEMS).length})`);
   assert(Object.keys(NAMED_SKILLS).length === 25, `25 named skills (has ${Object.keys(NAMED_SKILLS).length})`);
   assert(TOTAL_WHISPERS === 50, `50 whispers (has ${TOTAL_WHISPERS})`);
-  assert(Object.keys(MINOR_LANDMARKS).length === 5, `5 minor landmarks (has ${Object.keys(MINOR_LANDMARKS).length})`);
-  ok('content roster counts: 20 events, 12 enemies, 25 skills, 30 items, 40 lore, 50 whispers, 5 minor landmarks');
+  assert(Object.keys(MINOR_LANDMARKS).length === 10, `10 minor landmarks (has ${Object.keys(MINOR_LANDMARKS).length})`);
+  ok('content roster counts: 20 events, 12 enemies, 25 skills, 30 items, 40 lore, 50 whispers, 10 minor landmarks');
 }
 
 // ---- 9. Skill distribution paths resolve to real skills --------------------

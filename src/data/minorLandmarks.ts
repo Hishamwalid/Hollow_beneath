@@ -177,6 +177,169 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
       },
     ],
   },
+
+  110: {
+    id: 'landmark_eleventh_marker',
+    title: 'The Eleventh Marker',
+    pageRange: [11, 11],
+    flavorText:
+      'The stone here is cracked clean through, split by a root that should not grow this deep. The fracture is deliberate — this marker was placed on a fault, as if the Venn wanted it to break.',
+    choices: [
+      {
+        id: 'keep_moving',
+        label: 'Keep moving. The floor feels unstable.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          return `You step around the crack. The root pulses faintly as you pass. +${gold} gold, +3 Echo Shards.`;
+        },
+      },
+      {
+        id: 'touch_the_root',
+        label: 'Touch the root.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          ctx.addLoreFragment('the_eleventh_marker');
+          player.resonance += 2;
+          return `The root is warm. It knows you are here. +${gold} gold, +3 Echo Shards, a lore fragment, +2 Resonance.`;
+        },
+      },
+    ],
+  },
+
+  130: {
+    id: 'landmark_thirteenth_marker',
+    title: 'The Thirteenth Marker',
+    pageRange: [13, 13],
+    flavorText:
+      'A circle of standing stones, each carved with a face. Thirteen faces, each expressing a different emotion, arranged in sequence. The thirteenth face is blank.',
+    choices: [
+      {
+        id: 'keep_moving',
+        label: 'Keep moving. Some questions answer themselves badly.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          return `You do not look back at the circle. +${gold} gold, +3 Echo Shards.`;
+        },
+      },
+      {
+        id: 'study_the_faces',
+        label: 'Study the faces in order.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          ctx.addLoreFragment('the_thirteenth_marker');
+          player.faction.archive += 2;
+          return `The sequence tells a story you almost understand. The blank face, you realise, is not unfinished — it is waiting. +${gold} gold, +3 Echo Shards, a lore fragment, +2 Archive.`;
+        },
+      },
+    ],
+  },
+
+  150: {
+    id: 'landmark_fifteenth_marker',
+    title: 'The Fifteenth Marker',
+    pageRange: [15, 15],
+    flavorText:
+      'Three paths converge on this marker, each from a different direction, each worn to a different depth. The marker itself bears only one word, carved in Venn: "Choose."',
+    choices: [
+      {
+        id: 'keep_moving',
+        label: 'You already chose. Keep walking.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          return `The word follows you for a few steps, then fades into the stone. +${gold} gold, +3 Echo Shards.`;
+        },
+      },
+      {
+        id: 'read_aloud',
+        label: 'Read the word aloud.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          ctx.addLoreFragment('the_fifteenth_marker');
+          const leading = (Object.keys(player.faction) as (keyof typeof player.faction)[]).reduce((a, b) =>
+            player.faction[a] >= player.faction[b] ? a : b
+          );
+          player.faction[leading] += 2;
+          return `The word vibrates in your throat long after you speak it. The stones remember your voice now. +${gold} gold, +3 Echo Shards, a lore fragment, +2 ${leading}.`;
+        },
+      },
+    ],
+  },
+
+  170: {
+    id: 'landmark_seventeenth_marker',
+    title: 'The Seventeenth Marker',
+    pageRange: [17, 17],
+    flavorText:
+      'A bridge crosses a chasm so deep that light does not reach its bottom. The marker is set into the bridge\'s railing, half-gripped by rust. On the far side: darkness that moves.',
+    choices: [
+      {
+        id: 'cross_quickly',
+        label: 'Cross quickly. Do not look down.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          return `The bridge groans but holds. You do not look back. +${gold} gold, +3 Echo Shards.`;
+        },
+      },
+      {
+        id: 'look_down',
+        label: 'Look into the chasm.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          ctx.addLoreFragment('the_seventeenth_marker');
+          player.resonance += 3;
+          return `Something looks back. Not eyes — attention. It has been waiting for someone to notice it. +${gold} gold, +3 Echo Shards, a lore fragment, +3 Resonance.`;
+        },
+      },
+    ],
+  },
+
+  190: {
+    id: 'landmark_nineteenth_marker',
+    title: 'The Nineteenth Marker',
+    pageRange: [19, 19],
+    flavorText:
+      'The penultimate marker. It is smaller than the others — almost an afterthought. The carving is hurried, as if whoever placed it was running out of time. "Almost," it says. "Almost."',
+    choices: [
+      {
+        id: 'keep_moving',
+        label: 'Keep moving. Almost there.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          return `You repeat the word to yourself like a prayer. +${gold} gold, +3 Echo Shards.`;
+        },
+      },
+      {
+        id: 'read_carefully',
+        label: 'Read every mark on the stone.',
+        onSuccess: (player, ctx) => {
+          const gold = 20 + rollDie(20, ctx.rng);
+          player.gold += gold;
+          ctx.addEchoShards(3);
+          ctx.addLoreFragment('the_nineteenth_marker');
+          ctx.setFlag('read_nineteenth_marker');
+          return `There is a postscript, nearly invisible: "For Lyra." Your blood runs cold. +${gold} gold, +3 Echo Shards, a lore fragment, a flag set.`;
+        },
+      },
+    ],
+  },
 };
 
 /** Same landmarks, keyed by event id instead of node index, so EventScene can resolve them by id. */

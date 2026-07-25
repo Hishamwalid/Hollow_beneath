@@ -49,7 +49,9 @@ export function resolveTrap(trap: TrapDef, player: PlayerState, rng: () => numbe
 }
 
 export function pickEvent(page: number, resonance: number, seen: Set<string>, rng: () => number, flags: Record<string, boolean> = {}): EventDef {
-  const pool = eligibleEvents(page, resonance, seen, flags);
+  // Map pages 11-20 to 1-10 so events with pageRange [1,10] cover the full 200-node board
+  const mappedPage = page > 10 ? page - 10 : page;
+  const pool = eligibleEvents(mappedPage, resonance, seen, flags);
   if (pool.length === 0) return EVENTS.quiet_passage;
   return pick(pool, rng) ?? EVENTS.quiet_passage;
 }

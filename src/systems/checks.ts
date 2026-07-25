@@ -8,9 +8,9 @@ export function statCheck(statValue: number, dc: number, rng: () => number): boo
   return roll + statValue * 2 >= dc + 10;
 }
 
-/** 1d4+1 movement die (GDD 3.1). */
+/** 1d6 movement die (PLAN_OVERHAUL §1.1). */
 export function rollMovement(rng: () => number): number {
-  return Math.floor(rng() * 4) + 1 + 1;
+  return Math.floor(rng() * 6) + 1;
 }
 
 /** Generic 1dN helper, e.g. 1d3 backward movement, 1d4 resonance loss. */
