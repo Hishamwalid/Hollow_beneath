@@ -57,7 +57,7 @@ export function applyUnlocksToNewRun(player: PlayerState, unlocks: string[]): vo
   if (unlocks.includes('archive_clearance')) player.faction.archive += 10;
   if (unlocks.includes('covenant_whisper')) player.faction.covenant += 10;
   if (unlocks.includes('caravan_map')) player.faction.caravan += 10;
-  if (unlocks.includes('resonance_anchor')) player.resonance = Math.max(player.resonance, 10);
+  if (unlocks.includes('resonance_anchor')) player.resonance = Math.max(player.resonance, 25);
   if (unlocks.includes('survivors_mark')) player.derived.dodge = Math.min(45, player.derived.dodge + 5);
   if (unlocks.includes('true_sight')) player.flags.true_sight = true;
 }

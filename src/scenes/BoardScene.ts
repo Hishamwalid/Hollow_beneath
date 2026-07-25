@@ -16,7 +16,7 @@ import { createDiceRoller } from '@ui/DiceRoller';
 import { createNodePreview } from '@ui/NodePreview';
 import { createButton } from '@ui/Button';
 import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
-import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -26,6 +26,7 @@ const ORIGIN_X = 90;
 const ORIGIN_Y = 210;
 const COL_SPACING = 108;
 const ROW_SPACING = 54;
+const VISIBILITY_RANGE = 4;
 
 function nodePosition(index: number): { x: number; y: number } {
   const row = Math.floor((index - 1) / COLS);
@@ -60,7 +61,7 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
 
-    this.drawBoard(game.nodes);
+    this.drawBoard(game.nodes, game.currentNodeIndex + VISIBILITY_RANGE);
     this.playerToken = this.add.image(0, 0, 'tok_player').setDisplaySize(30, 30).setDepth(20);
     this.placeTokenAt(game.currentNodeIndex);
 
@@ -128,15 +129,24 @@ export class BoardScene extends Phaser.Scene {
     this.depthLadder = ladder;
   }
 
-  private drawBoard(nodes: BoardNode[]) {
+  private drawBoard(nodes: BoardNode[], visibleLimit: number) {
     for (const node of nodes) {
       const { x, y } = nodePosition(node.index);
       const isLandmark = LANDMARK_INDICES.includes(node.index);
+      const isVisible = node.index <= visibleLimit;
       const icon = this.add.image(x, y, `node_${node.type}`).setDisplaySize(isLandmark ? 26 : 16, isLandmark ? 26 : 16).setDepth(0);
-      icon.setAlpha(node.resolved && !isLandmark ? 0.35 : 0.9);
+      const baseAlpha = isVisible ? (node.resolved && !isLandmark ? 0.35 : 0.9) : 0;
+      icon.setAlpha(baseAlpha);
+      if (!isVisible) icon.setTint(0x000000);
       if (CHECKPOINTS.includes(node.index)) {
-        this.add.circle(x, y, 16, 0x000000, 0).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(1);
+        this.add.circle(x, y, 16, 0x000000, 0).setStrokeStyle(1, isVisible ? 0xc9a24b : 0x222222, isVisible ? 0.5 : 0.15).setDepth(1);
       }
+    }
+    const store = useGameStore.getState();
+    if (store.game?.deathNodeIndex != null) {
+      const pos = nodePosition(store.game.deathNodeIndex);
+      this.add.image(pos.x, pos.y - 24, 'tok_player').setDisplaySize(30, 30).setDepth(10).setAlpha(0.35)
+        .setTint(0x666666);
     }
   }
 
@@ -214,7 +224,7 @@ export class BoardScene extends Phaser.Scene {
     const node = updatedNodes[target - 1];
 
     useGameStore.setState({
-      game: { ...game, currentNodeIndex: target, currentPage: page, path: [...game.path, target], landings: game.landings + 1, nodes: updatedNodes },
+      game: { ...game, currentNodeIndex: target, currentPage: page, path: [...game.path, target], landings: game.landings + 1, nodes: updatedNodes, deathNodeIndex: null },
     });
     this.statPanel?.update(player);
     this.preview?.show(node);
@@ -291,9 +301,11 @@ export class BoardScene extends Phaser.Scene {
     if (player.skillsKnown.includes('deep_breath')) healPct += 10;
     const heal = Math.round(player.derived.maxHP * (healPct / 100));
     player.currentHP = Math.min(player.derived.maxHP, player.currentHP + heal);
+    const mpRestore = Math.round(player.derived.maxMP * 0.3);
+    player.currentMP = Math.min(player.derived.maxMP, player.currentMP + mpRestore);
     player.resonance = Math.max(0, player.resonance - 1);
     audio.heal();
-    this.log(`You rest a while. +${heal} HP (-1 Resonance).`);
+    this.log(`You rest a while. +${heal} HP, +${mpRestore} MP (-1 Resonance).`);
   }
 
   private resolveDiscovery(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {
@@ -442,6 +454,14 @@ export class BoardScene extends Phaser.Scene {
     const { player, game } = store;
     if (!player || !game) return;
     store.persist();
+    if (CHECKPOINTS.includes(game.currentNodeIndex)) {
+      const tx = this.add.text(GAME_WIDTH / 2, 300, '✦ Checkpoint Reached — Progress Saved ✦', {
+        fontFamily: FONT_MONO, fontSize: '14px', color: '#c9a24b',
+      }).setOrigin(0.5).setDepth(100).setAlpha(1);
+      this.tweens.add({
+        targets: tx, alpha: 0, y: 280, duration: 3000, ease: 'Power2', onComplete: () => tx.destroy(),
+      });
+    }
     this.statPanel?.update(player);
 
     if (player.currentHP <= 0) {

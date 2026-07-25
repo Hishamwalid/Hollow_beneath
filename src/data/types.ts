@@ -71,6 +71,7 @@ export interface SkillDef {
   id: string;
   name: string;
   apCost: number;
+  mpCost?: number; // MP cost to use (optional, default 0)
   damageType?: DamageType;
   skillPower?: number; // multiplier in damage formula
   minResonance?: number; // resonance ability gate
@@ -399,6 +400,7 @@ export interface GameState {
   choicesMade: number;
   checkpointPage: number; // last checkpoint reached (0/40/80/120/160)
   checkpointSnapshot: PlayerState | null;
+  deathNodeIndex: number | null;
   nodes: BoardNode[];
   isRunActive: boolean;
   isDead: boolean;

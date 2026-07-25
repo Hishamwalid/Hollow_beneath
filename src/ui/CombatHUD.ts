@@ -141,3 +141,43 @@ export function createActionBar(
   });
   return { container };
 }
+
+export function createSpeedBar(
+  scene: Phaser.Scene,
+  x: number,
+  y: number,
+  order: string[],
+  currentActorKey: string | undefined,
+  enemies: Map<string, EnemyView>,
+  playerSpd: number,
+): { container: Phaser.GameObjects.Container; update: (order: string[], currentActorKey: string | undefined) => void; destroy: () => void } {
+  const container = scene.add.container(x, y).setDepth(10);
+  const items: Phaser.GameObjects.GameObject[] = [];
+
+  function build(newOrder: string[], actor: string | undefined) {
+    items.forEach((o) => o.destroy());
+    items.length = 0;
+    newOrder.forEach((key, i) => {
+      const isPlayer = key === 'player';
+      const isCurrent = key === actor;
+      const displayName = isPlayer ? 'You' : enemies.get(key)?.name ?? '?';
+      const spd = isPlayer ? playerSpd : enemies.get(key)?.maxHp ?? 0; // rough fallback
+      const ix = i * 90;
+      const bg = scene.add.circle(ix, 0, 14, isCurrent ? 0xc9a24b : 0x2a2e33)
+        .setStrokeStyle(2, isCurrent ? 0xe9c876 : 0x555555, isCurrent ? 1 : 0.3);
+      const label = scene.add.text(ix, 0, displayName.slice(0, 4), {
+        fontFamily: '"Courier New", monospace', fontSize: '10px', color: isCurrent ? '#0b0d10' : '#9a9488',
+      }).setOrigin(0.5);
+      items.push(bg, label);
+      container.add([bg, label]);
+    });
+  }
+
+  build(order, currentActorKey);
+
+  return {
+    container,
+    update: (newOrder: string[], actor: string | undefined) => build(newOrder, actor),
+    destroy: () => container.destroy(),
+  };
+}

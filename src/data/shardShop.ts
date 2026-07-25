@@ -8,7 +8,7 @@ export const SHARD_SHOP: ShardShopEntry[] = [
   { id: 'archive_clearance', name: 'Archive Clearance', cost: 200, description: 'Start with +10 Archive Influence.' },
   { id: 'covenant_whisper', name: 'Covenant Whisper', cost: 200, description: 'Start with +10 Covenant Influence.' },
   { id: 'caravan_map', name: 'Caravan Map', cost: 200, description: 'Start with +10 Caravan Influence.' },
-  { id: 'resonance_anchor', name: 'Resonance Anchor', cost: 300, description: 'Start with Resonance = 10 (Awakened tier).' },
+  { id: 'resonance_anchor', name: 'Resonance Anchor', cost: 300, description: 'Start with Resonance = 25 (immediately Awakened).' },
   { id: 'survivors_mark', name: "Survivor's Mark", cost: 400, description: '+5% dodge, permanently.' },
   { id: 'true_sight', name: 'True Sight', cost: 500, description: 'Analyze costs 0 AP.' },
   { id: 'new_game_plus', name: 'New Game+', cost: 1000, description: 'Enemies scale up. Keep contradiction knowledge across runs.' },

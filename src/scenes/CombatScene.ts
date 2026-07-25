@@ -9,7 +9,7 @@ import { applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
 import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
 import { createStatPanel } from '@ui/StatPanel';
-import { createEnemyDisplay, createApPips, createActionBar, type EnemyDisplay } from '@ui/CombatHUD';
+import { createEnemyDisplay, createApPips, createActionBar, createSpeedBar, type EnemyDisplay } from '@ui/CombatHUD';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
@@ -51,6 +51,7 @@ export class CombatScene extends Phaser.Scene {
   private overlayMenu?: ChoiceMenu;
   private overlayBg?: Phaser.GameObjects.Rectangle;
   private endTurnBtn?: ReturnType<typeof createButton>;
+  private speedBar?: ReturnType<typeof createSpeedBar>;
   private resultShown = false;
 
   constructor() {
@@ -100,6 +101,16 @@ export class CombatScene extends Phaser.Scene {
 
     this.statPanel = createStatPanel(this, 16, GAME_HEIGHT - 200, 240);
     this.apPips = createApPips(this, GAME_WIDTH - 80, GAME_HEIGHT - 200);
+
+    this.speedBar = createSpeedBar(
+      this,
+      GAME_WIDTH / 2 - 120,
+      GAME_HEIGHT - 300,
+      initialSnap.initiativeOrder,
+      initialSnap.phase === 'player' ? 'player' : undefined,
+      new Map(initialSnap.enemies.map((e) => [e.key, e])),
+      initialSnap.playerSpd,
+    );
 
     this.logText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 270, '', {
       fontFamily: FONT_MONO,
@@ -161,6 +172,7 @@ export class CombatScene extends Phaser.Scene {
       this.updateTargetHighlight(snap);
     }
     this.buildActionBar(snap);
+    this.speedBar?.update(snap.initiativeOrder, snap.phase === 'player' ? 'player' : undefined);
     this.log(snap.log);
     this.endTurnBtn?.setEnabled(snap.phase === 'player');
 
@@ -190,12 +202,14 @@ export class CombatScene extends Phaser.Scene {
       { id: 'attack', label: 'Attack', apCost: 1, description: 'Basic melee attack (Slash damage).', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
       ...activeSkills.map((id) => {
         const sk = NAMED_SKILLS[id];
+        const mpDesc = sk.mpCost ? ` | MP: ${sk.mpCost}` : '';
+        const mpOk = sk.mpCost ? (player.currentMP >= sk.mpCost) : true;
         return {
           id,
           label: sk.name,
           apCost: sk.apCost,
-          description: `${sk.description}${sk.damageType ? ` (${sk.damageType} damage)` : ''}`,
-          disabled: !canAct || !canAfford(sk.apCost),
+          description: `${sk.description}${sk.damageType ? ` (${sk.damageType} damage)` : ''}${mpDesc}`,
+          disabled: !canAct || !canAfford(sk.apCost) || !mpOk,
           onClick: () => this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined)),
         };
       }),
@@ -203,8 +217,8 @@ export class CombatScene extends Phaser.Scene {
         id: 'resonance',
         label: 'Resonance',
         apCost: resonanceCost,
-        description: `Unleash a surge of Resonance (Shadow damage). Requires 25 Resonance. Cost: ${resonanceCost} AP, -1 Resonance.`,
-        disabled: !canAct || !canAfford(resonanceCost) || player.resonance < 25,
+        description: `Unleash a surge of Resonance (Shadow damage). Requires 25 Resonance. Cost: ${resonanceCost} AP, 10 MP, -1 Resonance.`,
+        disabled: !canAct || !canAfford(resonanceCost) || player.resonance < 25 || player.currentMP < 10,
         onClick: () => this.doAction('resonance', () => this.engine.resonanceAbility(this.selectedTarget ?? undefined)),
       },
       { id: 'guard', label: 'Guard', apCost: 1, description: 'Raise your guard. Take 50% less damage until your next turn.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },

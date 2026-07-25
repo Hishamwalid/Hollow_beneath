@@ -61,10 +61,12 @@ export interface CombatSnapshot {
   playerMaxHP: number;
   playerMP: number;
   playerMaxMP: number;
+  playerSpd: number;
   playerStatuses: StatusInstance[];
   momentum: number;
   guarding: boolean;
   enemies: EnemyView[];
+  initiativeOrder: string[];
   log: string[];
   bossPhaseLabel?: string;
 }
@@ -596,6 +598,15 @@ export class CombatEngine {
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
 
+    // MP cost check
+    const mpCost = skill.mpCost ?? 0;
+    if (mpCost > 0 && this.player.currentMP < mpCost) {
+      this.log.push(`Not enough MP (need ${mpCost}).`);
+      this.checkOutcome();
+      return this.snapshot();
+    }
+    if (mpCost > 0) this.player.currentMP = Math.max(0, this.player.currentMP - mpCost);
+
     if (skill.tag === 'active_martyrs_flame') {
       this.player.currentHP = Math.max(1, this.player.currentHP - 10);
       const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk') * (skill.skillPower ?? 1);
@@ -658,6 +669,12 @@ export class CombatEngine {
   resonanceAbility(targetKey?: string): CombatSnapshot {
     if (this.phase !== 'player' || this.player.resonance < 25) return this.snapshot();
     if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    if (this.player.currentMP < 10) {
+      this.log.push('Not enough MP to channel Resonance (need 10 MP).');
+      this.checkOutcome();
+      return this.snapshot();
+    }
+    this.player.currentMP -= 10;
     const baseCost = this.player.skillsKnown.includes('resonant_study') ? 1 : ACTION_AP_COST.resonance_ability;
     const cost = this.freeActionCharges > 0 ? 0 : baseCost;
     if (this.playerAP < cost) return this.snapshot();
@@ -822,6 +839,17 @@ export class CombatEngine {
 
   snapshot(): CombatSnapshot {
     const bossAlive = this.enemies.find((e) => e._isBoss && e.hp > 0);
+    const aliveEnemies = this.enemies.filter((e) => e.hp > 0);
+    const playerSpd = this.effectivePlayerSpeed();
+    const playerKey = 'player';
+    const initiativeOrder = [
+      playerKey,
+      ...aliveEnemies.sort((a, b) => b.spd - a.spd).map((e) => e._key),
+    ].sort((a, b) => {
+      const spdA = a === playerKey ? playerSpd : aliveEnemies.find((e) => e._key === a)!.spd;
+      const spdB = b === playerKey ? playerSpd : aliveEnemies.find((e) => e._key === b)!.spd;
+      return spdB - spdA;
+    });
     return {
       round: this.round,
       phase: this.phase,
@@ -831,6 +859,7 @@ export class CombatEngine {
       playerMaxHP: this.player.derived.maxHP,
       playerMP: this.player.currentMP,
       playerMaxMP: this.player.derived.maxMP,
+      playerSpd,
       playerStatuses: this.playerStatuses,
       momentum: this.player.momentum,
       guarding: this.guarding,
@@ -847,6 +876,7 @@ export class CombatEngine {
           revealCount: this.player.skillsKnown.includes('librarians_eye') ? 2 : 1,
           affinities: e.affinities,
         })),
+      initiativeOrder,
       log: this.log,
       bossPhaseLabel: bossAlive && this.bossDef ? this.bossDef.getPhase(bossAlive.hp / bossAlive.maxHp).label : undefined,
     };

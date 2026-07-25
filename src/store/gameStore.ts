@@ -81,6 +81,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       choicesMade: 0,
       checkpointPage: 0,
       checkpointSnapshot: JSON.parse(JSON.stringify(player)),
+      deathNodeIndex: null,
       nodes,
       isRunActive: true,
       isDead: false,
@@ -127,6 +128,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().persist();
       return;
     }
+    set({ game: { ...game, deathNodeIndex: game.currentNodeIndex } });
     const { game: restoredGame, player: restoredPlayer } = restoreCheckpoint({ ...game, isDead: true });
     if (restoredPlayer) {
       restoredPlayer.echoShards = Math.max(0, restoredPlayer.echoShards - refund);
