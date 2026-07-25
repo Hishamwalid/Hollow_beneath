@@ -343,13 +343,15 @@ export class BoardScene extends Phaser.Scene {
       roll -= t.weight;
     }
 
+    const xpStore = useGameStore.getState();
     switch (chosen) {
       case 'lost_supplies': {
         const gold = 3 + rollDie(6, Math.random);
         const itemId = SUPPLY_POOL[Math.floor(Math.random() * SUPPLY_POOL.length)];
         player.gold += gold;
         player.inventory.push({ id: itemId, qty: 1 });
-        this.log(`Supplies, left behind in a hurry. +${gold} gold, an item.`);
+        xpStore.addXp(8);
+        this.log(`Supplies, left behind in a hurry. +${gold} gold, an item, +8 XP.`);
         break;
       }
       case 'forgotten_relic': {
@@ -358,7 +360,8 @@ export class BoardScene extends Phaser.Scene {
         const itemId = pool[Math.floor(Math.random() * pool.length)];
         player.gold += gold;
         player.inventory.push({ id: itemId, qty: 1 });
-        this.log(`Something worth carrying, worked in by someone who isn't here anymore. +${gold} gold, an item.`);
+        xpStore.addXp(10);
+        this.log(`Something worth carrying, worked in by someone who isn't here anymore. +${gold} gold, an item, +10 XP.`);
         break;
       }
       case 'lore_cache': {
@@ -369,33 +372,38 @@ export class BoardScene extends Phaser.Scene {
           player.loreFragments.push(id);
           player.echoShards += applyShardBonus(player, 1);
         }
-        this.log(`Something written, worth reading twice. +${gold} gold, a lore fragment.`);
+        xpStore.addXp(8);
+        this.log(`Something written, worth reading twice. +${gold} gold, a lore fragment, +8 XP.`);
         break;
       }
       case 'training_notes': {
         const skillId = unknownSkills[Math.floor(Math.random() * unknownSkills.length)];
         player.skillsKnown.push(skillId);
-        this.log(`Training notes, thorough and half-legible. You learn something from them.`);
+        xpStore.addXp(12);
+        this.log(`Training notes, thorough and half-legible. You learn something from them. +12 XP.`);
         break;
       }
       case 'hidden_stash': {
         const gold = 10 + rollDie(15, Math.random);
         player.gold += gold;
-        this.log(`A stash, properly hidden this time. +${gold} gold.`);
+        xpStore.addXp(10);
+        this.log(`A stash, properly hidden this time. +${gold} gold, +10 XP.`);
         break;
       }
       case 'quiet_moment': {
         const gold = 3 + rollDie(6, Math.random);
         player.gold += gold;
         player.resonance = Math.max(0, player.resonance - 1);
-        this.log(`A moment of quiet that costs nothing to take. +${gold} gold, -1 Resonance.`);
+        xpStore.addXp(3);
+        this.log(`A moment of quiet that costs nothing to take. +${gold} gold, -1 Resonance, +3 XP.`);
         break;
       }
       case 'echo_residue': {
         const gold = 3 + rollDie(6, Math.random);
         player.gold += gold;
         player.echoShards += applyShardBonus(player, 1);
-        this.log(`A trace of something spent. +${gold} gold, +1 Echo Shard.`);
+        xpStore.addXp(6);
+        this.log(`A trace of something spent. +${gold} gold, +1 Echo Shard, +6 XP.`);
         break;
       }
       case 'old_marker': {
@@ -403,7 +411,8 @@ export class BoardScene extends Phaser.Scene {
         player.gold += gold;
         const w = maybePickWhisper(player.resonance, 'movement', Math.random, 1);
         if (w) showWhisper(this, GAME_WIDTH / 2, 178, w.text, 460);
-        this.log(`An old marker, half-erased. +${gold} gold.`);
+        xpStore.addXp(4);
+        this.log(`An old marker, half-erased. +${gold} gold, +4 XP.`);
         break;
       }
       case 'small_cache_faction': {
@@ -413,19 +422,22 @@ export class BoardScene extends Phaser.Scene {
           player.faction[a] >= player.faction[b] ? a : b
         );
         player.faction[leading] += 1;
-        this.log(`Something that confirms a path you're already on. +${gold} gold, +1 ${leading}.`);
+        xpStore.addXp(5);
+        this.log(`Something that confirms a path you're already on. +${gold} gold, +1 ${leading}, +5 XP.`);
         break;
       }
       case 'nothing_here': {
         const gold = 1 + rollDie(4, Math.random);
         player.gold += gold;
-        this.log(`Nothing here worth the detour, in the end. +${gold} gold.`);
+        xpStore.addXp(2);
+        this.log(`Nothing here worth the detour, in the end. +${gold} gold, +2 XP.`);
         break;
       }
       default: {
         const gold = 5 + rollDie(10, Math.random);
         player.gold += gold;
-        this.log(`You find something left behind by whoever came through last. +${gold} gold.`);
+        xpStore.addXp(5);
+        this.log(`You find something left behind by whoever came through last. +${gold} gold, +5 XP.`);
       }
     }
     audio.shardGain();

@@ -3,6 +3,7 @@ import type { PlayerState } from '@data/types';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { resonanceTier, TIER_LABELS } from '@systems/ResonanceSystem';
 import { FACTIONS } from '@data/factions';
+import { xpForLevel } from '@systems/LevelSystem';
 
 function bar(
   scene: Phaser.Scene,
@@ -34,31 +35,35 @@ export interface StatPanelHandle {
 
 export function createStatPanel(scene: Phaser.Scene, x: number, y: number, width = 300): StatPanelHandle {
   const container = scene.add.container(x, y).setDepth(10);
-  const panelHeight = 164;
+  const panelHeight = 180;
   const bg = scene.add.image(width / 2, panelHeight / 2, 'panel_stat').setDisplaySize(width, panelHeight).setAlpha(0.85);
   container.add(bg);
   const barW = width - 90;
 
-  const hpLabel = scene.add.text(0, -6, 'HP', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone });
-  const hpBar = bar(scene, container, 40, 0, barW, 14, 0xb0453f);
-  const hpText = scene.add.text(width - 10, -6, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.bone }).setOrigin(1, 0);
+  const levelText = scene.add.text(0, -26, 'LEVEL 1', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold });
+  const xpBar = bar(scene, container, 80, -20, width - 90, 8, 0xc9a24b, 0x2a2e33);
+  const xpText = scene.add.text(width - 10, -26, '', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted }).setOrigin(1, 0);
 
-  const mpLabel = scene.add.text(0, 20, 'MP', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone });
-  const mpBar = bar(scene, container, 40, 26, barW, 10, 0x4a6fa5);
-  const mpText = scene.add.text(width - 10, 20, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.bone }).setOrigin(1, 0);
+  const hpLabel = scene.add.text(0, 4, 'HP', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone });
+  const hpBar = bar(scene, container, 40, 10, barW, 14, 0xb0453f);
+  const hpText = scene.add.text(width - 10, 4, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.bone }).setOrigin(1, 0);
 
-  const resLabel = scene.add.text(0, 44, 'RES', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone });
-  const resBar = bar(scene, container, 40, 50, barW, 10, 0x9b59b6);
-  const resTierText = scene.add.text(width - 10, 44, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold }).setOrigin(1, 0);
+  const mpLabel = scene.add.text(0, 30, 'MP', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone });
+  const mpBar = bar(scene, container, 40, 36, barW, 10, 0x4a6fa5);
+  const mpText = scene.add.text(width - 10, 30, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.bone }).setOrigin(1, 0);
+
+  const resLabel = scene.add.text(0, 54, 'RES', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone });
+  const resBar = bar(scene, container, 40, 60, barW, 10, 0x9b59b6);
+  const resTierText = scene.add.text(width - 10, 54, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold }).setOrigin(1, 0);
 
   const momentumDots: Phaser.GameObjects.Arc[] = [];
   for (let i = 0; i < 3; i++) {
-    momentumDots.push(scene.add.circle(width - 66 + i * 20, 68, 6, 0x2a2e33).setStrokeStyle(1, 0xc9a24b));
+    momentumDots.push(scene.add.circle(width - 66 + i * 20, 78, 6, 0x2a2e33).setStrokeStyle(1, 0xc9a24b));
   }
-  const momentumLabel = scene.add.text(0, 62, 'MOMENTUM', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted });
+  const momentumLabel = scene.add.text(0, 72, 'MOMENTUM', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted });
 
   const factionBars: Record<string, ReturnType<typeof bar>> = {};
-  const factionRow = 88;
+  const factionRow = 98;
   Object.values(FACTIONS).forEach((f, i) => {
     const fy = factionRow + i * 16;
     const swatch = scene.add.image(4, fy, `faction_${f.id}`).setDisplaySize(12, 12).setOrigin(0, 0.5);
@@ -68,22 +73,18 @@ export function createStatPanel(scene: Phaser.Scene, x: number, y: number, width
     container.add([swatch, label]);
   });
 
-  container.add([hpLabel, hpText, mpLabel, mpText, resLabel, resTierText, momentumLabel, ...momentumDots]);
+  container.add([levelText, xpText, hpLabel, hpText, mpLabel, mpText, resLabel, resTierText, momentumLabel, ...momentumDots]);
 
   return {
     container,
     update: (player: PlayerState) => {
-      hpBar.setPct(player.currentHP / player.derived.maxHP);
-      hpText.setText(`${player.currentHP}/${player.derived.maxHP}`);
-      mpBar.setPct(player.currentMP / player.derived.maxMP);
-      mpText.setText(`${player.currentMP}/${player.derived.maxMP}`);
-      resBar.setPct(player.resonance / 100);
-      resTierText.setText(`${player.resonance} ${TIER_LABELS[resonanceTier(player.resonance)]}`);
-      momentumDots.forEach((d, i) => d.setFillStyle(i < player.momentum ? 0xc9a24b : 0x2a2e33));
-      (Object.keys(factionBars) as Array<keyof typeof factionBars>).forEach((id) => {
-        const val = (player.faction as any)[id] as number;
-        factionBars[id].setPct((val + 100) / 200);
-      });
+      const xpNeeded = xpForLevel(player.level + 1);
+      const prevXp = xpForLevel(player.level);
+      const xpInLevel = player.xp - prevXp;
+      const xpForNext = xpNeeded - prevXp;
+      levelText.setText(`LV ${player.level}`);
+      xpBar.setPct(xpForNext > 0 ? xpInLevel / xpForNext : 1);
+      xpText.setText(`${player.xp} / ${xpNeeded} XP`);
     },
     destroy: () => container.destroy(),
   };

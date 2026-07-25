@@ -1,4 +1,5 @@
-import type { DerivedStats, StatBlock } from './types';
+import type { DerivedStats, Equipment, StatBlock } from './types';
+import { ITEMS } from './items';
 
 export const POINT_BUY_TOTAL = 30;
 export const STAT_MIN = 1;
@@ -52,3 +53,19 @@ export const PRESET_BUILDS: Record<string, StatBlock> = {
   Guardian: { str: 6, dex: 4, con: 10, int: 3, will: 7 },
   Shadow: { str: 4, dex: 7, con: 5, int: 6, will: 8 },
 };
+
+export function getEquipmentBonuses(equipment: Equipment): EquipmentBonuses {
+  const slots = ['weapon', 'armour', 'focus', 'accessory'] as const;
+  let atk = 0, def = 0, matk = 0, mdef = 0;
+  for (const slot of slots) {
+    const id = equipment[slot];
+    if (!id) continue;
+    const item = ITEMS[id];
+    if (!item?.effect?.statBonus) continue;
+    if (item.effect.statBonus.atk) atk += item.effect.statBonus.atk;
+    if (item.effect.statBonus.def) def += item.effect.statBonus.def;
+    if (item.effect.statBonus.matk) matk += item.effect.statBonus.matk;
+    if (item.effect.statBonus.mdef) mdef += item.effect.statBonus.mdef;
+  }
+  return { weaponAtk: atk, armourDef: def, focusMatk: matk, accessoryMdef: mdef };
+}

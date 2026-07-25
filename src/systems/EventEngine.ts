@@ -3,6 +3,7 @@ import { eligibleEvents, EVENTS } from '@data/events';
 import { statCheck } from './checks';
 import { pick } from './rng';
 import { shardsForLoreFragment, applyShardBonus } from './EchoShardSystem';
+import { computeLevelUp } from './LevelSystem';
 
 export function buildEventCtx(player: PlayerState, rng: () => number): EventApplyCtx {
   return {
@@ -19,6 +20,14 @@ export function buildEventCtx(player: PlayerState, rng: () => number): EventAppl
       }
     },
     addEchoShards: (n) => { player.echoShards += applyShardBonus(player, n); },
+    addXp: (n) => {
+      player.xp += n;
+      const { newLevel, levelsGained } = computeLevelUp(player.xp, player.level);
+      if (levelsGained > 0) {
+        player.level = newLevel;
+        player.skillPoints += levelsGained;
+      }
+    },
   };
 }
 

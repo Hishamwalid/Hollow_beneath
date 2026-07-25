@@ -17,6 +17,8 @@ import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { spawnHitParticles, spawnHealParticles, spawnMomentumParticles } from '@systems/particles';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
+import { computeLevelUp } from '@systems/LevelSystem';
+import { showLevelUpModal, showStatChoiceModal } from '@ui/LevelUpModal';
 
 interface CombatSceneData {
   mode: 'wild' | 'event' | 'boss';
@@ -493,7 +495,7 @@ export class CombatScene extends Phaser.Scene {
     audio.victory();
     player.enemiesKilled += this.engine.getEnemiesKilled();
     const xp = this.engine.getXpEarned();
-    player.xp += xp;
+    const levelsGained = store.addXp(xp);
 
     if (this.sceneData.mode === 'boss' && this.sceneData.bossId) {
       player.bossesDefeated.push(this.sceneData.bossId);
@@ -515,15 +517,47 @@ export class CombatScene extends Phaser.Scene {
           if (!player.loreFragments.includes(id)) player.loreFragments.push(id);
         },
         addEchoShards: (n) => { player.echoShards += applyShardBonus(player, n); },
+        addXp: (n) => { store.addXp(n); },
       };
       const text = this.sceneData.onVictory(player, ctx);
       store.persist();
-      this.showVictorySummary(text, xp);
+      if (levelsGained > 0) {
+        this.showLevelUp(player.level, () => this.showVictorySummary(text, xp));
+      } else {
+        this.showVictorySummary(text, xp);
+      }
       return;
     }
 
     store.persist();
-    this.showVictorySummary(null, xp);
+    if (levelsGained > 0) {
+      this.showLevelUp(player.level, () => this.showVictorySummary(null, xp));
+    } else {
+      this.showVictorySummary(null, xp);
+    }
+  }
+
+  private showLevelUp(newLevel: number, onDone: () => void) {
+    this.closeOverlay();
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(35);
+    const modal = showLevelUpModal(this, newLevel,
+      () => {
+        modal.destroy();
+        showStatChoiceModal(this,
+          (stat) => {
+            useGameStore.getState().awardStatPoint(stat);
+            onDone();
+          },
+          () => { modal.destroy(); onDone(); },
+        );
+      },
+      () => {
+        modal.destroy();
+        useGameStore.getState().awardSkillPoint();
+        onDone();
+      },
+      () => { modal.destroy(); onDone(); },
+    );
   }
 
   shutdown() {

@@ -276,6 +276,7 @@ export interface EventApplyCtx {
   hasFlag: (flag: string) => boolean;
   addLoreFragment: (id: string) => void;
   addEchoShards: (n: number) => void;
+  addXp: (n: number) => void;
 }
 
 export interface EventDef {
@@ -364,6 +365,7 @@ export interface PlayerState {
 
   level: number;
   xp: number;
+  skillPoints: number;
 
   skillsKnown: string[]; // named reward/unlocked skills
 

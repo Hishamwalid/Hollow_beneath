@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { EquipmentBonuses } from '@data/stats';
-import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES } from '@data/stats';
+import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES, getEquipmentBonuses } from '@data/stats';
 import { STARTING_FACTIONS } from '@data/factions';
 import { STARTING_INVENTORY } from '@data/items';
 import type { GameState, PlayerState, StatBlock } from '@data/types';
@@ -8,6 +8,7 @@ import { generateBoard } from '@systems/BoardGenerator';
 import { mulberry32, randomSeed } from '@systems/rng';
 import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } from '@systems/SaveManager';
 import { applyUnlocksToNewRun, deathRefund, shardsForEnding } from '@systems/EchoShardSystem';
+import { computeLevelUp } from '@systems/LevelSystem';
 
 export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[]): PlayerState {
   const derived = computeDerivedStats(stats, STARTING_EQUIPMENT_BONUSES as EquipmentBonuses);
@@ -18,6 +19,7 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     currentMP: derived.maxMP,
     level: 1,
     xp: 0,
+    skillPoints: 0,
     skillsKnown: [],
     resonance: 0,
     faction: { ...STARTING_FACTIONS },
@@ -52,6 +54,10 @@ interface GameStore {
   handleDeath: () => void;
   finalizeRun: (endingId: string) => void;
   playerHistorySet: () => Set<string>;
+  addXp: (amount: number) => number;
+  awardStatPoint: (stat: keyof StatBlock) => void;
+  awardSkillPoint: () => void;
+  consumeSkillPoint: () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -157,4 +163,47 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   playerHistorySet: () => new Set(get().player?.history ?? []),
+
+  addXp: (amount: number) => {
+    const { player } = get();
+    if (!player) return 0;
+    player.xp += amount;
+    const { newLevel, levelsGained } = computeLevelUp(player.xp, player.level);
+    if (levelsGained > 0) {
+      player.level = newLevel;
+      player.skillPoints += levelsGained;
+      set({ player: { ...player } });
+    } else {
+      set({ player: { ...player } });
+    }
+    return levelsGained;
+  },
+
+  awardStatPoint: (stat: keyof StatBlock) => {
+    const { player } = get();
+    if (!player) return;
+    player.stats[stat] += 1;
+    const bonuses = getEquipmentBonuses(player.equipment);
+    const oldHP = player.currentHP;
+    const oldMP = player.currentMP;
+    player.derived = computeDerivedStats(player.stats, bonuses);
+    player.currentHP = Math.min(oldHP, player.derived.maxHP);
+    player.currentMP = Math.min(oldMP, player.derived.maxMP);
+    set({ player: { ...player } });
+    get().persist();
+  },
+
+  awardSkillPoint: () => {
+    const { player } = get();
+    if (!player) return;
+    player.skillPoints += 1;
+    set({ player: { ...player } });
+  },
+
+  consumeSkillPoint: () => {
+    const { player } = get();
+    if (!player) return;
+    if (player.skillPoints > 0) player.skillPoints -= 1;
+    set({ player: { ...player } });
+  },
 }));
