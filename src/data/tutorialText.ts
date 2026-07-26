@@ -34,7 +34,7 @@ export const TUTORIAL_SCREENS: TutorialScreen[] = [
     id: 'your_goal',
     title: 'Your Goal',
     icons: ['node_landmark'],
-    body: 'Five major bosses guard the truth:\n\n  1. The Argent Sentinel   (Page 4)\n  2. The Sable Patriarch   (Page 8)\n  3. The Merged Chorus     (Page 12)\n  4. The Fossil King       (Page 16)\n  5. The Final Reflection  (Page 20)\n\nEach holds a piece of the Venn\'s story. Defeat all five. Reach the bottom.\n\nThe Loom will ask you a question. Your entire run has been your answer.',
+    body: 'Five major guardians block the path to the Loom. Each one holds a piece of the Venn\'s story. You will not know their names until you stand before them.\n\nDefeat them all. Reach the chamber at the bottom.\n\nThe Loom will ask you a question. Your entire run has been your answer.',
   },
 ];
 

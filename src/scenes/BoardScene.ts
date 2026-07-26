@@ -27,8 +27,8 @@ const CHAPTER_PAGES = [1, 5, 9, 13, 17];
 const CHAPTER_NAMES: Record<number, string> = {
   1: 'The Archive Opens',
   5: 'The Sable March',
-  9: 'The Chorus Calls',
-  13: 'The Fossil Throne',
+  9: 'The Singing Deep',
+  13: 'The Reach of Dust',
   17: 'The Final Descent',
 };
 
@@ -68,6 +68,8 @@ export class BoardScene extends Phaser.Scene {
   private diceRoller?: ReturnType<typeof createDiceRoller>;
   private depthLadder?: Phaser.GameObjects.GameObject[];
   private pageLabel?: Phaser.GameObjects.Text;
+  private boardNodeLayer?: Phaser.GameObjects.Container;
+  private ghostToken?: Phaser.GameObjects.Image;
   private busy = false;
   private firstNodeTooltips: Record<string, boolean> = {};
 
@@ -85,6 +87,7 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
 
+    this.boardNodeLayer = this.add.container(0, 0);
     this.drawBoard(game.nodes, game.currentNodeIndex + VISIBILITY_RANGE);
     this.playerToken = this.add.image(0, 0, 'tok_player').setDisplaySize(30, 30).setDepth(20);
     this.placeTokenAt(game.currentNodeIndex);
@@ -139,9 +142,9 @@ export class BoardScene extends Phaser.Scene {
     if (page <= 0) return 'The stair down is behind you now. Ahead: two hundred pages of a book that was never meant to be read twice.';
     const NAMES = [
       'The Vestibule', 'Ashfall', 'The Warrens', 'The Archive Threshold', 'The Bone Gallery',
-      'The Chorus Chamber', 'Deep Pages', 'The Fossil Reach', 'The Court of Dust', 'The Loom Gate',
+      'The Resonant Hall', 'Deep Pages', 'The Deep Vault', 'The Court of Dust', 'The Loom Gate',
       'The Echoing Passages', 'The Still Library', 'The Crystal Veins', 'The Sable Bastion', 'The Whispering Step',
-      'The Archive Depths', 'The Covenant Spire', 'The Fossil Tunnels', 'The Mirror Hall', 'The Final Chamber',
+      'The Archive Depths', 'The Covenant Spire', 'The Ashen Tunnels', 'The Silver Gallery', 'The Final Chamber',
     ];
     return `Page ${page} / 20 — ${NAMES[Math.min(19, page - 1)]}`;
   }
@@ -167,23 +170,28 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private drawBoard(nodes: BoardNode[], visibleLimit: number) {
+    if (!this.boardNodeLayer) return;
+    this.boardNodeLayer.removeAll(true);
     for (const node of nodes) {
       const { x, y } = nodePosition(node.index);
       const isLandmark = LANDMARK_INDICES.includes(node.index);
       const isVisible = node.index <= visibleLimit;
-      const icon = this.add.image(x, y, `node_${node.type}`).setDisplaySize(isLandmark ? 26 : 16, isLandmark ? 26 : 16).setDepth(0);
+      const icon = this.add.image(x, y, `node_${node.type}`).setDisplaySize(isLandmark ? 26 : 16, isLandmark ? 26 : 16);
       icon.setName(`node_${node.index}`).setData('resolved', node.resolved);
       const baseAlpha = isVisible ? (node.resolved && !isLandmark ? 0.35 : 0.9) : 0;
       icon.setAlpha(baseAlpha);
       if (!isVisible) icon.setTint(0x000000);
+      this.boardNodeLayer.add(icon);
       if (CHECKPOINTS.includes(node.index)) {
-        this.add.circle(x, y, 16, 0x000000, 0).setStrokeStyle(1, isVisible ? 0xc9a24b : 0x222222, isVisible ? 0.5 : 0.15).setDepth(1);
+        const ring = this.add.circle(x, y, 16, 0x000000, 0).setStrokeStyle(1, isVisible ? 0xc9a24b : 0x222222, isVisible ? 0.5 : 0.15);
+        this.boardNodeLayer.add(ring);
       }
     }
     const store = useGameStore.getState();
+    if (this.ghostToken) { this.ghostToken.destroy(); this.ghostToken = undefined; }
     if (store.game?.deathNodeIndex != null) {
       const pos = nodePosition(store.game.deathNodeIndex);
-      this.add.image(pos.x, pos.y - 24, 'tok_player').setDisplaySize(30, 30).setDepth(10).setAlpha(0.35)
+      this.ghostToken = this.add.image(pos.x, pos.y - 24, 'tok_player').setDisplaySize(30, 30).setAlpha(0.35)
         .setTint(0x666666);
     }
   }
@@ -333,6 +341,7 @@ export class BoardScene extends Phaser.Scene {
     useGameStore.setState({
       game: { ...game, currentNodeIndex: target, currentPage: page, path: [...game.path, target], landings: game.landings + 1, nodes: updatedNodes, deathNodeIndex: null },
     });
+    this.drawBoard(updatedNodes, target + VISIBILITY_RANGE);
     this.statPanel?.update(player);
     this.preview?.show(node);
     this.pageLabel?.setText(`Page ${page} / ${PAGES}`);
