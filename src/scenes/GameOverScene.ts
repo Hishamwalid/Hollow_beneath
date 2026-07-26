@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
-import { createButton } from '@ui/Button';
+import { showRunStatsScreen } from '@ui/RunStatsScreen';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { spawnHitParticles } from '@systems/particles';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
@@ -22,7 +22,8 @@ export class GameOverScene extends Phaser.Scene {
         spawnHitParticles(this, Math.random() * GAME_WIDTH, Math.random() * GAME_HEIGHT * 0.5);
       },
     });
-    const meta = useGameStore.getState().meta;
+    const store = useGameStore.getState();
+    const meta = store.meta;
 
     this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 90, 'The Hollow Keeps You', { fontFamily: FONT_SERIF, fontSize: '36px', color: PALETTE_HEX.danger })
@@ -44,6 +45,15 @@ export class GameOverScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 110, 'Return to Menu', () => fadeToScene(this, 'Menu'), { width: 260 });
+    this.time.delayedCall(1200, () => {
+      if (!meta.lastRunStats) return;
+      showRunStatsScreen(
+        this,
+        meta.lastRunStats,
+        true,
+        () => fadeToScene(this, 'Menu'),
+        () => fadeToScene(this, 'LoreCodex'),
+      );
+    });
   }
 }

@@ -264,6 +264,7 @@ export interface EventChoice {
   id: string;
   label: string;
   requirement?: (player: PlayerState) => boolean; // gates visibility/enabled state
+  factionGate?: keyof FactionState; // locks choice if this faction is Hostile (≤ -25)
   check?: { stat: keyof StatBlock; dc: number }; // opposed check, success/fail branch
   onSuccess: (player: PlayerState, ctx: EventApplyCtx) => string;
   onFailure?: (player: PlayerState, ctx: EventApplyCtx) => string; // if omitted, check auto-succeeds
@@ -366,10 +367,12 @@ export interface PlayerState {
   level: number;
   xp: number;
   skillPoints: number;
+  skillTreePurchases: Record<string, number>;
 
   skillsKnown: string[]; // named reward/unlocked skills
 
   resonance: number; // 0-100
+  resonancePeak: number;
   faction: FactionState;
 
   equipment: Equipment;
@@ -388,7 +391,7 @@ export interface PlayerState {
   gold: number; // in-run currency, spent at Caravan Merchant-type events
 
   totalRuns: number;
-  bestRun: { page: number; time: number };
+  bestRun: BestRunStats;
 }
 
 export interface GameState {
@@ -403,21 +406,57 @@ export interface GameState {
   checkpointPage: number; // last checkpoint reached (0/40/80/120/160)
   checkpointSnapshot: PlayerState | null;
   deathNodeIndex: number | null;
+  pendingNodeIndex: number | null; // after ambush combat, resume movement here
   nodes: BoardNode[];
   isRunActive: boolean;
   isDead: boolean;
   endingAchieved: string | null;
 }
 
+export interface BestRunStats {
+  page: number;
+  time: number;
+  nodesVisited: number;
+  enemiesKilled: number;
+  bossesDefeated: number;
+  levelReached: number;
+  resonancePeak: number;
+  choicesMade: number;
+  loreFound: number;
+}
+
+export interface RunStats {
+  nodesVisited: number;
+  enemiesKilled: number;
+  bossesDefeated: number;
+  totalBosses: number;
+  levelReached: number;
+  resonancePeak: number;
+  resonanceTier: string;
+  choicesMade: number;
+  loreFound: number;
+  totalLore: number;
+  runTimeSeconds: number;
+  newLoreIds: string[];
+  newLoreTitles: string[];
+  echoShardsEarned: number;
+  totalEchoShards: number;
+  bestRun: BestRunStats;
+  pageReached: number;
+  endingUnlocked: string | null;
+  isNewBest: boolean;
+}
+
 export interface MetaState {
   echoShards: number;
   purchasedUnlocks: string[];
-  bestRun: { page: number; time: number };
+  bestRun: BestRunStats;
   totalRuns: number;
   endingsAchieved: string[];
   loreFragmentsSeen: string[];
   bossesEverDefeated: string[];
   deathCount: number;
+  lastRunStats: RunStats | null;
 }
 
 export interface SaveBlob {

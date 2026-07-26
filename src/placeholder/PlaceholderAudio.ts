@@ -3,7 +3,9 @@ type ToneShape = 'sine' | 'square' | 'triangle' | 'sawtooth';
 class PlaceholderAudioEngine {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  muted = false;
+  private masterVolume = 1;
+
+  get muted(): boolean { return this.masterVolume < 0.01; }
 
   private ensureCtx(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -12,7 +14,7 @@ class PlaceholderAudioEngine {
       if (!Ctor) return null;
       this.ctx = new Ctor();
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = 0.25;
+      this.masterGain.gain.value = 0.25 * this.masterVolume;
       this.masterGain.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
@@ -57,7 +59,12 @@ class PlaceholderAudioEngine {
   shardGain(): void { this.tone(900, 50, 'sine'); this.tone(1200, 70, 'sine', 40); }
   pageTurn(): void { this.tone(200, 40, 'triangle'); this.tone(160, 60, 'triangle', 30); }
 
-  setMuted(m: boolean): void { this.muted = m; }
+  setMasterVolume(v: number): void {
+    this.masterVolume = Math.min(1, Math.max(0, v / 100));
+    if (this.masterGain) {
+      this.masterGain.gain.value = 0.25 * this.masterVolume;
+    }
+  }
 }
 
 export const audio = new PlaceholderAudioEngine();

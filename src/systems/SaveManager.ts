@@ -1,7 +1,7 @@
 import type { GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
 
 const STORAGE_KEY = 'hollow_beneath_save_v1';
-const VERSION = 1;
+const VERSION = 2;
 
 function simpleChecksum(payload: string): string {
   let hash = 0;
@@ -15,12 +15,13 @@ export function defaultMeta(): MetaState {
   return {
     echoShards: 0,
     purchasedUnlocks: [],
-    bestRun: { page: 0, time: 0 },
+    bestRun: { page: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
     totalRuns: 0,
     endingsAchieved: [],
     loreFragmentsSeen: [],
     bossesEverDefeated: [],
     deathCount: 0,
+    lastRunStats: null,
   };
 }
 

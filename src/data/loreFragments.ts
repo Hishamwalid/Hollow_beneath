@@ -287,6 +287,45 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     category: 'faction',
     text: 'Ten years of Caravan trade routes, tolls, and casualties, kept in the same hand — and one line, dated ten years back almost to the day, that isn\'t about trade at all: "Left the Archive today. Slept the whole night through. Did not dream of understanding anything. Best sleep of my life."',
   },
+
+  // ---- Event variant lore (B1) ------------------------------------------------
+
+  the_correspondence: {
+    id: 'the_correspondence',
+    title: 'The Correspondence',
+    category: 'venn',
+    text: 'A stack of letters, bound in leather, each one shorter than the last. The first is seven pages of careful observation. The last is three words: "It is listening." There is no signature on any of them — as if the author knew from the start that naming themselves would defeat the purpose.',
+  },
+  the_echo_that_stayed: {
+    id: 'the_echo_that_stayed',
+    title: 'The Echo That Stayed',
+    category: 'loom',
+    text: 'Some echoes are accidents of acoustics. This one is not. It has a preference for where it stands in relation to you. And it has begun, very quietly, to answer your questions before you finish asking them — not always correctly, but always first.',
+  },
+  the_floor_song: {
+    id: 'the_floor_song',
+    title: 'The Floor Song',
+    category: 'venn',
+    text: 'The mosaic tells the story of a Venn child who asked where sound goes when it stops. The adults could not answer. The child built a floor that remembers every step, every note, every breath taken while standing on it. The floor still remembers the child\'s footsteps most clearly of all.',
+  },
+  the_grief_chorus: {
+    id: 'the_grief_chorus',
+    title: 'The Grief Chorus',
+    category: 'faction',
+    text: '"The Loom took our teacher on the third day of the seventh month. She walked into a resonance field singing, and the field sang back, and neither stopped until there was no difference between them. We do not mourn her death. We mourn that she stopped answering." — From the Ash Covenant Book of Losses, fourth edition.',
+  },
+  the_whispered_name: {
+    id: 'the_whispered_name',
+    title: 'The Whispered Name',
+    category: 'loom',
+    text: 'A name you catch in the whispers. It is not your name. It is not any name you recognize. But something in you responds to it anyway — a reflex older than language, older than memory. The name fits somewhere inside you that you did not know was shaped exactly like it.',
+  },
+  the_ghosts_farewell: {
+    id: 'the_ghosts_farewell',
+    title: "The Ghost's Farewell",
+    category: 'venn',
+    text: 'She sat at that table for 37 years after her family left, eating the same bread every day, keeping it warm with her presence alone. The Venn believe the dead only truly leave when the last living person who remembers them forgets their name. She ran out of people first.',
+  },
 };
 
 export function getLoreFragment(id: string): LoreFragmentDef | undefined {

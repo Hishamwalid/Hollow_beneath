@@ -43,6 +43,41 @@ New data files: `src/data/loreFragments.ts`, `src/data/whispers.ts`, `src/data/m
 - Choice menus: stagger-in fade per button.
 - Combat: floating damage numbers now also appear over enemies (previously player-only); combat log capped at 4 visible lines instead of 6 to guarantee clearance above the stat panel.
 
+## Overhaul Phase Implementation (PLAN_OVERHAUL.md)
+
+Items completed from the full overhaul plan:
+
+| Item | Description | Status |
+|------|-------------|--------|
+| **0b** | Fix Resonance Anchor cost (25 instead of 20) | ✅ Done |
+| **0c** | Vite code-splitting (`manualChunks`) | ✅ Done |
+| **A1** | Board expansion to 200 nodes + 1d6 movement | ✅ Done |
+| **A2** | Level-Up System (XP thresholds, stat/skill point choices, XP bar) | ✅ Done |
+| **A3** | Skill Tree System (5 trees × 3 tiers, purchase UI, BoardScene entry with badge) | ✅ Done |
+| **A4** | MP System Activation (mpCost, CombatEngine gating, rest restore) | ✅ Done |
+| **A6** | Fog of War (4-node visibility ahead of player) | ✅ Done |
+| **A7** | Turn Order Indicator (speed bar in CombatHUD) | ✅ Done |
+| **C6** | Checkpoint Polish (notification text, ghost token on death) | ✅ Done |
+| **B4** | Faction Hostile Consequences (ambush on move, rest disruption, locked event choices, flavor text) | ✅ Done |
+| **C4** | End-of-Run Stats Screen (resonancePeak tracking, RunStats/BestRunStats, overlay in GameOver + Ending scenes) | ✅ Done |
+| **A5** | Equipment Change UI (interactive slots + picker overlay in InventoryScene, stat deltas, equip confirmation) | ✅ Done |
+| **B1** | 12 Event Variants (10 new events, 2 new traps, 5 new lore fragments, trapPool extended) | ✅ Done |
+| **C7** | Page Transition Cards (full-screen chapter overlay on pages 1/5/9/13/17, 2.5s blocking, fades) | ✅ Done |
+| **B2** | Auto-Generated Events (14 procedural template events replacing quiet_passage filler, 4 categories, faction substitution, investigate/pass choices, repeat avoidance) | ✅ Done |
+| **B3** | Event Chains (3 multi-node story chains: The Bread, The Scripture, The Hymn) | ✅ Done |
+| **C1** | Onboarding / Tutorial (5-screen tutorial auto-shown on first run, How to Play button, first-run contextual tooltips, per PLAN_OVERHAUL §3.1) | ✅ Done |
+| **C5** | Settings Expansion (master volume slider, text speed slider, screen shake toggle, credits, clear data, localStorage persistence, per PLAN_OVERHAUL §6.1) | ✅ Done |
+| **C2** | Landmark Cinematic (boss approach cards with letter-by-letter name reveal, screen shake + red flash on boss combat entry, pulsing gold border, celebration particles + sequential reward animations on defeat, per PLAN_OVERHAUL §3.2) | ✅ Done |
+
+New files: `src/systems/LevelSystem.ts`, `src/ui/LevelUpModal.ts`, `src/data/skillTree.ts`, `src/scenes/SkillTreeScene.ts`, `src/ui/RunStatsScreen.ts`, `src/data/eventTemplates.ts`, `src/scenes/TutorialScene.ts`, `src/data/tutorialText.ts`, `src/systems/SettingsManager.ts`, `src/data/credits.ts`.
+
+### Remaining
+
+| Item | Description |
+|------|-------------|
+| **C3** | Resonance Visual Effects (tier-based screen effects, ResonanceFX system, per PLAN_OVERHAUL §3.3) |
+| **D1–D9** | Integration & test phase (build verification, full playthrough, edge cases, bug fix pass) |
+
 ## Validation
 
 `smoketest.ts` extended with: minor-landmark + full lore-registry cross-reference check, per-page event coverage check (every page × low/high Resonance), content-count assertions (20/12/25/30/40/50/5), skill-distribution-path sanity, whisper-tier coverage. All pass.

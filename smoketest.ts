@@ -181,7 +181,7 @@ ok('all documented events/choices exercised');
   }
   const missingLore = [...seenFragmentIds].filter((id) => !LORE_FRAGMENTS[id]);
   assert(missingLore.length === 0, `every discoverable lore fragment id resolves in LORE_FRAGMENTS (missing: ${missingLore.join(', ')})`);
-  assert(Object.keys(LORE_FRAGMENTS).length === 45, `lore fragment registry has 45 entries (has ${Object.keys(LORE_FRAGMENTS).length})`);
+  assert(Object.keys(LORE_FRAGMENTS).length === 51, `lore fragment registry has 51 entries (has ${Object.keys(LORE_FRAGMENTS).length})`);
   ok(`minor landmarks exercised; ${seenFragmentIds.size} unique lore ids discoverable via events/landmarks, all resolve`);
 }
 
@@ -202,13 +202,13 @@ ok('all documented events/choices exercised');
 // ---- 8. Content roster counts match targets --------------------------------
 {
   const nonFillerEvents = Object.keys(EVENTS).filter((id) => id !== 'quiet_passage').length;
-  assert(nonFillerEvents === 20, `20 documented events excluding filler (has ${nonFillerEvents})`);
+  assert(nonFillerEvents === 31, `31 documented events excluding filler (has ${nonFillerEvents})`);
   assert(Object.keys(ENEMIES).length === 12, `12 standard enemy types (has ${Object.keys(ENEMIES).length})`);
   assert(Object.keys(ITEMS).length === 30, `30 items (has ${Object.keys(ITEMS).length})`);
   assert(Object.keys(NAMED_SKILLS).length === 25, `25 named skills (has ${Object.keys(NAMED_SKILLS).length})`);
   assert(TOTAL_WHISPERS === 50, `50 whispers (has ${TOTAL_WHISPERS})`);
   assert(Object.keys(MINOR_LANDMARKS).length === 10, `10 minor landmarks (has ${Object.keys(MINOR_LANDMARKS).length})`);
-  ok('content roster counts: 20 events, 12 enemies, 25 skills, 30 items, 40 lore, 50 whispers, 10 minor landmarks');
+  ok('content roster counts: 20 events, 12 enemies, 25 skills, 30 items, 40 lore, 50 whispers, 10 minor landmarks (51 total lore fragments)');
 }
 
 // ---- 9. Skill distribution paths resolve to real skills --------------------

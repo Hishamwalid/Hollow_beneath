@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { FONT_SERIF, PALETTE_HEX } from './uiTheme';
+import { settingsManager } from '@systems/SettingsManager';
 
 export interface DialogBox {
   container: Phaser.GameObjects.Container;
@@ -52,7 +53,8 @@ export function createDialogBox(scene: Phaser.Scene, x: number, y: number, width
       prompt.setVisible(false);
       text.setText('');
       timer?.remove();
-      timer = scene.time.addEvent({ delay: 14, callback: tick, loop: true });
+      const spd = settingsManager.get().textSpeed;
+      timer = scene.time.addEvent({ delay: Math.round(14 * (100 / spd)), callback: tick, loop: true });
     },
     skip: () => {
       if (timer) {

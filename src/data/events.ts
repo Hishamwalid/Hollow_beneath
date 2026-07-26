@@ -51,6 +51,43 @@ export const EVENTS: Record<string, EventDef> = {
     ],
   },
 
+  ghosts_question: {
+    id: 'ghosts_question',
+    title: "The Ghost's Question",
+    pageRange: [5, 8],
+    requiresAnyFlag: ['ate_venn_bread'],
+    flavorText:
+      'A Venn ghost stands before you — a woman in the formal dress of a Venn departure ceremony. She looks at you with ancient, patient sorrow.\n"That bread you ate," she says. "That was my farewell."',
+    choices: [
+      {
+        id: 'apologize',
+        label: '"I was hungry. I\'m sorry."',
+        onSuccess: (player, ctx) => {
+          player.resonance = Math.min(100, player.resonance + 5);
+          ctx.addLoreFragment('the_ghosts_farewell');
+          return '"I was hungry. I\'m sorry." She nods. The sorrow does not leave, but something in it softens. (+5 Resonance, Lore: The Ghost\'s Farewell)';
+        },
+      },
+      {
+        id: 'deflect',
+        label: '"Your bread was stale. I improved it."',
+        onSuccess: (player) => {
+          player.faction.sable += 5;
+          player.resonance = Math.max(0, player.resonance - 2);
+          return '"Your bread was stale. I improved it." She does not find this funny. (+5 Sable, -2 Resonance)';
+        },
+      },
+      {
+        id: 'dismiss',
+        label: '"I don\'t answer to ghosts."',
+        onSuccess: (player) => {
+          player.faction.caravan += 3;
+          return 'She fades, still watching. You are not sure she has finished with you. (+3 Caravan)';
+        },
+      },
+    ],
+  },
+
   sable_patrol: {
     id: 'sable_patrol',
     title: 'The Sable Patrol',
@@ -268,6 +305,7 @@ export const EVENTS: Record<string, EventDef> = {
           player.faction.archive += 10;
           player.resonance = Math.min(100, player.resonance + 5);
           ctx.addLoreFragment('the_hymn_of_unbecoming');
+          ctx.setFlag('joined_hymn');
           return 'You transcribe the hymn instead of joining it, which feels like its own kind of betrayal. (+10 Archive, +5 Resonance)';
         },
       },
@@ -327,6 +365,17 @@ export const EVENTS: Record<string, EventDef> = {
           player.resonance = Math.max(0, player.resonance - 5);
           ctx.setFlag('loom_silenced');
           return 'The recognition withdraws, offended or respectful, you can\'t tell which. It will not speak to you again this run. (+5 Sable, -5 Resonance)';
+        },
+      },
+      {
+        id: 'chorus_echo',
+        label: '"The Chorus taught me to listen. Now I hear you."',
+        requirement: (p) => !!p.flags.joined_hymn,
+        onSuccess: (player, ctx) => {
+          player.faction.covenant += 5;
+          player.resonance = Math.min(100, player.resonance + 5);
+          ctx.addXp(8);
+          return '"Then you know I am not the only voice here." The Loom considers this. (+5 Covenant, +5 Resonance, +8 XP)';
         },
       },
     ],
@@ -961,6 +1010,499 @@ export const EVENTS: Record<string, EventDef> = {
       },
     ],
   },
+
+  // ---- Event Variants (B1) ----------------------------------------------------
+
+  half_finished_letter: {
+    id: 'half_finished_letter',
+    title: 'The Half-Finished Letter',
+    pageRange: [5, 7],
+    flavorText:
+      'A Venn study. A desk. A letter, half-written, the quill still resting across the page. Five thousand years later, the ink has not dried.\n\nThe last sentence: "When this reaches you, we will already be gone. Do not follow. We have found—"',
+    choices: [
+      {
+        id: 'read_letter',
+        label: 'Read the letter.',
+        onSuccess: (player, ctx) => {
+          player.faction.archive += 6;
+          player.resonance = Math.min(100, player.resonance + 3);
+          ctx.addLoreFragment('the_correspondence');
+          ctx.setFlag('found_half_letter');
+          return 'The letter is addressed to no one. It was never meant to be sent — only to be said. (+6 Archive, +3 Resonance, a lore fragment)';
+        },
+      },
+      {
+        id: 'take_quill',
+        label: 'Take the quill. (STR ≥ 7)',
+        requirement: (p) => p.stats.str >= 7,
+        onSuccess: (player) => {
+          player.faction.sable += 4;
+          player.inventory.push({ id: 'venn_glyph_tablet', qty: 1 });
+          return 'You snap the quill from its stand and pocket the piece. It pulses faintly, still charged. (+4 Sable, Venn Glyph Tablet)';
+        },
+      },
+      {
+        id: 'leave_letter',
+        label: 'Leave it undisturbed.',
+        onSuccess: (player) => {
+          player.faction.caravan += 3;
+          return 'Some conversations were never meant to have a reply. (+3 Caravan)';
+        },
+      },
+    ],
+  },
+
+  half_packed_bag: {
+    id: 'half_packed_bag',
+    title: 'The Half-Packed Bag',
+    pageRange: [8, 10],
+    flavorText:
+      'A Venn sleeping quarter. Clothes folded on a cot. A travel bag, half-packed, its owner interrupted mid-decision. The bed is made with military precision — the first fold is the only one that matters, because after that you are committed.',
+    choices: [
+      {
+        id: 'search_bag',
+        label: 'Search the bag.',
+        onSuccess: (player, ctx) => {
+          const gold = 10 + Math.floor(ctx.rng() * 20);
+          player.gold += gold;
+          ctx.setFlag('found_half_bag');
+          return `Whoever left in a hurry left the valuable things behind. You find ${gold} gold among the folded clothes. (+${gold} gold)`;
+        },
+      },
+      {
+        id: 'take_coat',
+        label: 'Take the travelling coat. (DEX ≥ 6)',
+        requirement: (p) => p.stats.dex >= 6,
+        onSuccess: (player) => {
+          player.faction.caravan += 5;
+          player.derived.dodge = Math.min(90, player.derived.dodge + 5);
+          return 'The coat fits well enough. You feel fractionally harder to hit. (+5 Caravan, +5 Dodge)';
+        },
+      },
+      {
+        id: 'leave_bag',
+        label: 'Leave everything as it was.',
+        onSuccess: (player) => {
+          player.faction.archive += 4;
+          return 'You close the bag gently. Somebody might come back for it. (+4 Archive)';
+        },
+      },
+    ],
+  },
+
+  sable_hunters: {
+    id: 'sable_hunters',
+    title: 'Sable Hunters',
+    pageRange: [4, 6],
+    flavorText:
+      'They have been following you for three nodes. This is where they catch up — four Sable hunters with the patience of people who have done this before. They fan out, blocking both exits, and wait for you to make the first mistake.',
+    choices: [
+      {
+        id: 'surrender_hunters',
+        label: 'Hand over your findings.',
+        onSuccess: (player, ctx) => {
+          player.faction.sable += 18;
+          player.resonance = Math.max(0, player.resonance - 5);
+          ctx.setFlag('hunters_took_tablet');
+          return 'They take everything and leave you standing in an empty corridor, poorer in knowledge but alive. (+18 Sable, -5 Resonance)';
+        },
+      },
+      {
+        id: 'outrun_hunters',
+        label: 'Outrun them. (WILL check, DC 11)',
+        check: { stat: 'will', dc: 11 },
+        onSuccess: (player) => {
+          player.faction.sable += 8;
+          return 'You hold their gaze long enough for them to hesitate — long enough to slip past. They respect the nerve. (+8 Sable)';
+        },
+        onFailure: () => 'They do not respect the nerve at all.',
+        combat: { enemyIds: ['sable_zealot', 'sable_zealot', 'sable_zealot', 'ash_seer'] },
+      },
+      {
+        id: 'ambush_hunters',
+        label: 'Trap the lead hunter. (DEX ≥ 7)',
+        requirement: (p) => p.stats.dex >= 7,
+        onSuccess: (player) => {
+          player.faction.sable += 10;
+          player.faction.covenant += 3;
+          player.inventory.push({ id: 'sable_ash_blade', qty: 1 });
+          return 'You trip the lead hunter into a pit you noticed before they did. The others scatter. (+10 Sable, +3 Covenant, Sable Ash Blade)';
+        },
+      },
+      {
+        id: 'fight_hunters',
+        label: 'Fight through.',
+        onSuccess: (player) => {
+          player.faction.covenant += 8;
+          player.faction.sable -= 8;
+          return 'You draw and move forward. They were expecting a victim, not a fight. (+8 Covenant, -8 Sable)';
+        },
+        combat: { enemyIds: ['sable_zealot', 'sable_zealot', 'sable_zealot', 'sable_zealot'] },
+      },
+    ],
+  },
+
+  sable_interrogation: {
+    id: 'sable_interrogation',
+    title: 'Sable Interrogation',
+    pageRange: [7, 9],
+    flavorText:
+      'The lead interrogator does not ask. She takes your tablet from your belt before you can react, turns it over slowly, and reads your history off its surface like a courtroom indictment.',
+    choices: [
+      {
+        id: 'answer_truth',
+        label: 'Answer everything truthfully. (WILL check, DC 12)',
+        check: { stat: 'will', dc: 12 },
+        onSuccess: (player, ctx) => {
+          player.faction.sable += 20;
+          player.resonance = Math.max(0, player.resonance - 4);
+          ctx.setFlag('interrogated_full');
+          return 'She nods at intervals. She respects honesty, even when it damns you. (+20 Sable, -4 Resonance)';
+        },
+        onFailure: () => 'She can tell when you are lying. She does not respect that nearly as much.',
+        combat: { enemyIds: ['sable_zealot', 'sable_zealot', 'sable_zealot'] },
+      },
+      {
+        id: 'deflect',
+        label: 'Answer vaguely, deflect.',
+        onSuccess: (player) => {
+          player.faction.sable += 6;
+          return 'She lets you keep your secrets, though she clearly notes every evasion. (+6 Sable)';
+        },
+      },
+      {
+        id: 'quote_rights',
+        label: 'Quote Archive charter. (INT ≥ 7)',
+        requirement: (p) => p.stats.int >= 7,
+        onSuccess: (player) => {
+          player.faction.archive += 8;
+          player.faction.sable += 5;
+          return 'You recite the passage on independent research rights. She laughs — a dry, genuine laugh — and hands the tablet back. (+8 Archive, +5 Sable)';
+        },
+      },
+      {
+        id: 'resist_interrogation',
+        label: 'Fight.',
+        onSuccess: (player) => {
+          player.faction.sable -= 10;
+          return 'She expected this. You can tell by the way the door seals behind you. (-10 Sable)';
+        },
+        combat: { enemyIds: ['sable_zealot', 'sable_zealot', 'sable_zealot', 'sable_zealot'] },
+      },
+    ],
+  },
+
+  echoing_hallway: {
+    id: 'echoing_hallway',
+    title: 'The Echoing Hallway',
+    pageRange: [4, 6],
+    flavorText:
+      'Every step echoes twice. Once forward, once backward. One of them is not your step — it comes a fraction too late, and from slightly closer than it should.',
+    choices: [
+      {
+        id: 'walk_through',
+        label: 'Walk through carefully. (DEX check, DC 11)',
+        check: { stat: 'dex', dc: 11 },
+        onSuccess: (player, ctx) => {
+          player.resonance = Math.min(100, player.resonance + 6);
+          ctx.addLoreFragment('the_echo_that_stayed');
+          ctx.setFlag('walked_echo_hall');
+          return 'You match the rhythm. The echo syncs to your step. Something in the hallway relaxes. (+6 Resonance, a lore fragment)';
+        },
+        onFailure: () => 'Your step breaks. The echo closes in. You run.',
+        combat: { enemyIds: ['memory_wraith'] },
+      },
+      {
+        id: 'mark_wall',
+        label: 'Mark the walls as you go. (INT ≥ 6)',
+        requirement: (p) => p.stats.int >= 6,
+        onSuccess: (player) => {
+          player.faction.archive += 6;
+          player.resonance = Math.min(100, player.resonance + 3);
+          return 'You leave Archive chalk at each junction. The hallway bristles at the marking but does not stop you. (+6 Archive, +3 Resonance)';
+        },
+      },
+      {
+        id: 'retreat_echo',
+        label: 'Turn back. This path is not for you.',
+        onSuccess: (player) => {
+          player.faction.caravan += 3;
+          return 'Discretion. You find another route. (+3 Caravan)';
+        },
+      },
+    ],
+  },
+
+  singing_floor: {
+    id: 'singing_floor',
+    title: 'The Singing Floor',
+    pageRange: [7, 9],
+    flavorText:
+      'The mosaic underfoot is arranged in a Venn sentence. As you read it, the tiles begin to vibrate — a low, pure note that resonates in your ribs. The floor is singing something. You are standing on the chorus.',
+    choices: [
+      {
+        id: 'decipher',
+        label: 'Decipher the sentence. (INT check, DC 12)',
+        check: { stat: 'int', dc: 12 },
+        onSuccess: (player, ctx) => {
+          player.faction.archive += 8;
+          player.resonance = Math.min(100, player.resonance + 7);
+          ctx.addLoreFragment('the_floor_song');
+          ctx.setFlag('read_floor_song');
+          return 'The sentence is a poem about standing at the edge of something and choosing to step anyway. The floor hums in approval. (+8 Archive, +7 Resonance, a lore fragment)';
+        },
+        onFailure: () => 'The vibration peaks. Your teeth chatter. The floor does not appreciate being misread.',
+        combat: { enemyIds: ['memory_wraith'] },
+      },
+      {
+        id: 'stomp_floor',
+        label: 'Stomp the dissonance. (STR ≥ 6)',
+        requirement: (p) => p.stats.str >= 6,
+        onSuccess: (player) => {
+          player.faction.sable += 6;
+          player.resonance = Math.max(0, player.resonance - 2);
+          return 'You break the resonance with pure force. The floor goes silent, offended. (+6 Sable, -2 Resonance)';
+        },
+      },
+      {
+        id: 'walk_off',
+        label: 'Walk off the mosaic quickly.',
+        onSuccess: (player) => {
+          player.faction.caravan += 4;
+          return 'Whatever it was singing, it was not for you. You step onto bare stone and the note fades. (+4 Caravan)';
+        },
+      },
+    ],
+  },
+
+  caravan_courier: {
+    id: 'caravan_courier',
+    title: 'The Caravan Courier',
+    pageRange: [5, 8],
+    flavorText:
+      'A Dust-Road runner rests against a fallen pillar, her satchel sealed with Caravan wax. She appraises you with a merchant\'s eye and a wild grin. "You\'re carrying more than you know. Sit. Trade. I don\'t bite — unless you\'re Archive, in which case I bite a little."',
+    choices: [
+      {
+        id: 'buy_courier_supplies',
+        label: 'Buy supplies. (35 gold)',
+        requirement: (p) => p.gold >= 35,
+        onSuccess: (player) => {
+          player.gold -= 35;
+          player.inventory.push({ id: 'ration', qty: 2 }, { id: 'travelers_ledger', qty: 1 });
+          return 'She hands over two Rations and a well-worn Traveler\'s Ledger. "Write something true in it," she says. (-35 gold)';
+        },
+      },
+      {
+        id: 'buy_courier_charm',
+        label: 'Buy a charm for the road. (45 gold)',
+        requirement: (p) => p.gold >= 45,
+        onSuccess: (player) => {
+          player.gold -= 45;
+          player.inventory.push({ id: 'raiders_charm', qty: 1 });
+          return 'The charm is a small brass bell on a leather cord. "It doesn\'t ring," she says. "That\'s the point." (-45 gold, Raider\'s Charm)';
+        },
+      },
+      {
+        id: 'buy_courier_map',
+        label: 'Ask about the route ahead. (Pay 6 Resonance)',
+        requirement: (p) => p.resonance >= 6,
+        onSuccess: (player, ctx) => {
+          player.resonance -= 6;
+          player.faction.caravan += 8;
+          ctx.setFlag('bought_route_info');
+          return 'She draws the path in the dirt with a stick — three shortcuts, two danger zones, one place you should absolutely not sleep. (-6 Resonance, +8 Caravan)';
+        },
+      },
+      {
+        id: 'ask_courier_rumor',
+        label: 'Ask about the road ahead.',
+        onSuccess: (player, ctx) => {
+          player.faction.caravan += 6;
+          player.faction.archive += 2;
+          ctx.setFlag('courier_rumor_heard');
+          return '"Heard the Loom\'s been restless the last few weeks," she says. "More than usual. Like something\'s expected." She doesn\'t specify what. (+6 Caravan, +2 Archive)';
+        },
+      },
+      {
+        id: 'rob_courier',
+        label: 'Take her satchel.',
+        onSuccess: (player) => {
+          player.faction.caravan -= 20;
+          return 'She was faster.';
+        },
+        combat: {
+          enemyIds: ['dust_road_raider'],
+          onVictory: (player) => {
+            player.gold += 60;
+            player.inventory.push({ id: 'travelers_ledger', qty: 1 });
+            return 'She goes down fighting, cursing your name to the stone. You take the ledger and 60 gold. (-20 Caravan)';
+          },
+        },
+      },
+    ],
+  },
+
+  choirs_lament: {
+    id: 'choirs_lament',
+    title: "The Choir's Lament",
+    pageRange: [2, 4],
+    minResonance: 20,
+    flavorText:
+      'The song is not celebration. It is grief. A circle of Ash Covenant novices sings a slow, aching hymn, tears cutting tracks through the ash on their cheeks. They are singing for someone they lost into the Loom.',
+    choices: [
+      {
+        id: 'join_lament',
+        label: 'Join the lament. (WILL check, DC 13)',
+        check: { stat: 'will', dc: 13 },
+        onSuccess: (player, ctx) => {
+          player.faction.archive += 10;
+          player.resonance = Math.min(100, player.resonance + 6);
+          ctx.addLoreFragment('the_grief_chorus');
+          ctx.setFlag('joined_lament');
+          return 'You find the grief-note and hold it. For a moment, you mourn something you have never lost. (+10 Archive, +6 Resonance, a lore fragment)';
+        },
+        onFailure: () => 'Your voice cracks. The circle stops. They ask you politely — coldly — to leave.',
+        combat: { enemyIds: ['ash_seer', 'ash_seer'] },
+      },
+      {
+        id: 'record_lament',
+        label: 'Record the lament (Archive method). (INT ≥ 7)',
+        requirement: (p) => p.stats.int >= 7,
+        onSuccess: (player, ctx) => {
+          player.faction.archive += 12;
+          player.faction.covenant += 5;
+          player.resonance = Math.min(100, player.resonance + 4);
+          return 'You write the notation so precisely that one of the novices stops crying to watch. "Will you teach that to us?" she asks. (+12 Archive, +5 Covenant, +4 Resonance)';
+        },
+      },
+      {
+        id: 'disrupt_lament',
+        label: 'Silence them (Sable method).',
+        onSuccess: (player) => {
+          player.faction.sable += 8;
+          player.faction.covenant -= 5;
+          player.resonance = Math.min(100, player.resonance + 2);
+          return 'Your counter-rite cuts the lament short. The silence that follows is heavier than the song. (+8 Sable, -5 Covenant, +2 Resonance)';
+        },
+      },
+      {
+        id: 'leave_lament',
+        label: 'Leave them to their grief.',
+        onSuccess: (player) => {
+          player.faction.caravan += 4;
+          return 'Some grief is not yours to carry. You step quietly around the circle. (+4 Caravan)';
+        },
+      },
+    ],
+  },
+
+  choirs_whisper: {
+    id: 'choirs_whisper',
+    title: "The Choir's Whisper",
+    pageRange: [8, 10],
+    minResonance: 30,
+    flavorText:
+      'Three figures in a circle. No crystals. No songs. Just whispers — a private conversion happening in real-time, their lips moving in perfect sync. One of them opens an eye and looks directly at you. The whisper does not stop.',
+    choices: [
+      {
+        id: 'step_in',
+        label: 'Step into the circle. (WILL check, DC 14)',
+        check: { stat: 'will', dc: 14 },
+        onSuccess: (player, ctx) => {
+          player.faction.covenant += 12;
+          player.resonance = Math.min(100, player.resonance + 8);
+          player.derived.dodge = Math.min(90, player.derived.dodge + 8);
+          ctx.setFlag('joined_whisper');
+          return 'The whisper admits you. You hear three voices and then a fourth — yours, but saying things you have never thought. (+12 Covenant, +8 Resonance, +8 Dodge)';
+        },
+        onFailure: () => 'The whisper rejects you. It does not feel like failure. It feels like being unwelcome.',
+        combat: { enemyIds: ['ash_seer', 'ash_seer', 'ash_seer'] },
+      },
+      {
+        id: 'shadow_listen',
+        label: 'Listen from the shadows. (DEX ≥ 7)',
+        requirement: (p) => p.stats.dex >= 7,
+        onSuccess: (player, ctx) => {
+          player.faction.covenant += 6;
+          player.faction.archive += 6;
+          player.resonance = Math.min(100, player.resonance + 4);
+          ctx.addLoreFragment('the_whispered_name');
+          return 'You hide in plain sight, still as stone, and catch fragments of the conversation. They are discussing someone. Someone they think is coming. (+6 Covenant, +6 Archive, +4 Resonance, a lore fragment)';
+        },
+      },
+      {
+        id: 'break_circle',
+        label: 'Break the circle (Sable method).',
+        onSuccess: (player) => {
+          player.faction.sable += 10;
+          player.faction.covenant -= 8;
+          player.inventory.push({ id: 'choir_tuning_fork', qty: 1 });
+          return 'You throw a stone through the center. The whisper shatters into individual voices, all of them furious. (+10 Sable, -8 Covenant, Choir Tuning Fork)';
+        },
+      },
+      {
+        id: 'leave_whisper',
+        label: 'Back away quietly.',
+        onSuccess: (player) => {
+          player.faction.caravan += 5;
+          return 'They do not acknowledge your departure. The whisper continues without you, unchanged. (+5 Caravan)';
+        },
+      },
+    ],
+  },
+
+  loom_whispers: {
+    id: 'loom_whispers',
+    title: 'Loom Whispers',
+    pageRange: [5, 7],
+    minResonance: 40,
+    flavorText:
+      'You are asleep. You know you are asleep. But the voice is clearer than any waking sound — a low hum that vibrates through the dream-stone beneath you, forming words in a language your bones understand before your mind catches up.\n\nYOU ARE THE QUESTION I KEEP ASKING. WHY DO YOU NOT HAVE AN ANSWER?',
+    choices: [
+      {
+        id: 'dream_answer',
+        label: '"Because the question keeps changing."',
+        onSuccess: (player, ctx) => {
+          player.resonance = Math.min(100, player.resonance + 8);
+          player.skillsKnown.push('unfinished_sentence');
+          ctx.setFlag('dreamt_of_loom');
+          return 'The hum considers this. It does not agree or disagree — it simply records the answer in a way that leaves a mark. (+8 Resonance, Skill: Unfinished Sentence)';
+        },
+      },
+      {
+        id: 'dream_question',
+        label: '"Why do you need to finish me?"',
+        onSuccess: (player, ctx) => {
+          player.resonance = Math.min(100, player.resonance + 6);
+          player.faction.archive += 6;
+          ctx.setFlag('next_rest_double');
+          return 'The question hangs in the dream-air. It does not answer. But something shifts — a door opens somewhere you did not know was closed. (+6 Resonance, +6 Archive, next Rest heals 50%)';
+        },
+      },
+      {
+        id: 'dream_surrender',
+        label: '"Take what you need." (Covenant ≥ 20)',
+        requirement: (p) => p.faction.covenant >= 20,
+        onSuccess: (player, ctx) => {
+          player.faction.covenant += 12;
+          player.resonance = Math.min(100, player.resonance + 8);
+          player.currentHP = Math.max(1, player.currentHP - Math.round(player.derived.maxHP * 0.15));
+          return 'Something reaches into you and takes — not much, not nothing. You wake with a nosebleed and a clarity you have never felt. (+12 Covenant, +8 Resonance, -15% HP)';
+        },
+      },
+      {
+        id: 'dream_wake',
+        label: 'Wake up. Now. (Sable prayer ≥ 20)',
+        requirement: (p) => p.faction.sable >= 20,
+        onSuccess: (player, ctx) => {
+          player.faction.sable += 8;
+          player.resonance = Math.max(0, player.resonance - 4);
+          ctx.setFlag('loom_silenced');
+          return 'You force yourself awake, gasping. The dream-scene crumbles. The Loom is still there, waiting, but it will not approach you in sleep again this run. (+8 Sable, -4 Resonance)';
+        },
+      },
+    ],
+  },
 };
 
 export const TRAPS: Record<string, TrapDef> = {
@@ -993,6 +1535,36 @@ export const TRAPS: Record<string, TrapDef> = {
     },
     onAvoid: () => 'You grab the edge in time, boots dangling over a very old drop.',
   },
+
+  identity_trap: {
+    id: 'identity_trap',
+    title: 'Identity Trap',
+    flavorText: 'The mirror shows a face that is not yours. The reflection blinks. You did not blink.',
+    avoidStat: 'dex',
+    avoidDC: 13,
+    onTrigger: (player, ctx) => {
+      const loss = rollDie(2, ctx.rng);
+      player.resonance = Math.max(0, player.resonance - loss);
+      const dmg = player.resonance < 10 ? 12 : 10;
+      player.currentHP = Math.max(1, player.currentHP - dmg);
+      return `The reflection reaches through. You lose ${loss} Resonance and take ${dmg} damage.`;
+    },
+    onAvoid: () => 'You look away before the reflection looks back. The trap stays dormant.',
+  },
+
+  collapsing_ceiling: {
+    id: 'collapsing_ceiling',
+    title: 'Collapsing Ceiling',
+    flavorText: 'The Venn built for eternity. They did not build for you. The ceiling groans, then surrenders.',
+    avoidStat: 'dex',
+    avoidDC: 11,
+    onTrigger: (player, ctx) => {
+      const back = rollDie(2, ctx.rng);
+      player.currentHP = Math.max(1, player.currentHP - 8);
+      return `You dive sideways as stone fills the corridor. Move back ${back} nodes, take 8 damage.`;
+    },
+    onAvoid: () => 'You hear the hairline crack a full second before the fall and press yourself flat against the wall. The ceiling collapses exactly where you were standing.',
+  },
 };
 
 export function eligibleEvents(page: number, resonance: number, seen: Set<string>, flags: Record<string, boolean> = {}): EventDef[] {
@@ -1005,3 +1577,10 @@ export function eligibleEvents(page: number, resonance: number, seen: Set<string
     return true;
   });
 }
+
+export const HOSTILE_FLAVOR: Record<string, string> = {
+  sable: 'The Sable agent sees your face and reaches for their blade.',
+  archive: 'The Archive doors are barred. Through the grates, you see armed custodians.',
+  covenant: 'The air shimmers with hostile intent. They know you refused the gift.',
+  caravan: 'The campfire goes out as you approach. No one offers you food.',
+};

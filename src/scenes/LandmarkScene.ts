@@ -9,6 +9,7 @@ import { createDialogBox, type DialogBox } from '@ui/DialogBox';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { applyShardBonus } from '@systems/EchoShardSystem';
+import { spawnCelebrationParticles } from '@systems/particles';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
@@ -44,7 +45,62 @@ export class LandmarkScene extends Phaser.Scene {
       this.showAftermath(data.bossId, data.combatFlags ?? {});
       return;
     }
-    this.showApproach(data.bossId);
+    this.showBossCard(data.bossId);
+  }
+
+  private showBossCard(bossId: string) {
+    const boss = BOSSES[bossId];
+    const cx = GAME_WIDTH / 2;
+    const depth = 100;
+    const scene = this;
+
+    const overlay = this.add.rectangle(cx, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.95).setDepth(depth).setAlpha(0);
+    this.tweens.add({ targets: overlay, alpha: 1, duration: 300, ease: 'Sine.easeOut' });
+
+    const nameText = this.add.text(cx, GAME_HEIGHT / 2 - 50, '', {
+      fontFamily: FONT_SERIF, fontSize: '48px', color: PALETTE_HEX.gold,
+    }).setOrigin(0.5).setDepth(depth + 1);
+
+    let charIndex = 0;
+    const nameTimer = this.time.addEvent({
+      delay: 60, callback: () => {
+        charIndex++;
+        nameText.setText(boss.name.slice(0, charIndex));
+        if (charIndex <= boss.name.length) audio.confirm();
+        if (charIndex >= boss.name.length) {
+          nameTimer.remove();
+          scene.showSubtitleElements(boss, cx, depth, overlay, nameText, bossId);
+        }
+      }, loop: true,
+    });
+  }
+
+  private showSubtitleElements(boss: typeof BOSSES[string], cx: number, depth: number, overlay: Phaser.GameObjects.Rectangle, nameText: Phaser.GameObjects.Text, bossId: string) {
+    const vennText = this.add.text(cx, GAME_HEIGHT / 2, `"${boss.vennName}"`, {
+      fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+    }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
+    this.tweens.add({ targets: vennText, alpha: 1, duration: 500, delay: 200, ease: 'Sine.easeOut' });
+
+    const themeText = this.add.text(cx, GAME_HEIGHT / 2 + 40, boss.theme, {
+      fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.bone, fontStyle: 'italic',
+    }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
+    this.tweens.add({ targets: themeText, alpha: 1, duration: 500, delay: 600, ease: 'Sine.easeOut' });
+
+    const border = this.add.rectangle(cx, GAME_HEIGHT / 2 - 10, 500, 120, 0x000000, 0).setStrokeStyle(1, 0xc9a24b, 0.3).setDepth(depth + 1);
+    this.tweens.add({
+      targets: border, strokeAlpha: { from: 0.3, to: 0.8 }, duration: 1000, yoyo: true, repeat: -1,
+    });
+
+    this.input.once('pointerdown', () => {
+      this.tweens.add({
+        targets: [overlay, nameText, vennText, themeText, border],
+        alpha: 0, duration: 300, ease: 'Sine.easeIn',
+        onComplete: () => {
+          overlay.destroy(); nameText.destroy(); vennText.destroy(); themeText.destroy(); border.destroy();
+          this.showApproach(bossId);
+        },
+      });
+    });
   }
 
   private showApproach(bossId: string) {
@@ -163,32 +219,57 @@ export class LandmarkScene extends Phaser.Scene {
     }
     store.persist();
 
+    spawnCelebrationParticles(this, GAME_WIDTH / 2, 100);
+
     this.add.text(GAME_WIDTH / 2, 70, `${boss.name} — Aftermath`, { fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold }).setOrigin(0.5);
     this.dialog?.destroy();
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 280, 860, 220);
     this.dialog = dialog;
     dialog.setText(boss.aftermathText(flags), () => {
-      this.add
-        .text(GAME_WIDTH / 2, 440, notes.join('   ·   '), { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.boneMuted })
-        .setOrigin(0.5);
-      this.continueBtn?.destroy();
-      this.continueBtn = createButton(
-        this,
-        GAME_WIDTH / 2,
-        GAME_HEIGHT - 80,
-        bossId === 'reflection' ? 'See how it ends' : 'Continue',
-        () => {
-          if (bossId === 'reflection') {
-            fadeToScene(this, 'Ending');
-          } else {
-            fadeToScene(this, 'Board');
-          }
-        },
-        { width: 260 },
-      );
+      this.showRewardNotes(notes, () => {
+        this.continueBtn?.destroy();
+        this.continueBtn = createButton(
+          this,
+          GAME_WIDTH / 2,
+          GAME_HEIGHT - 80,
+          bossId === 'reflection' ? 'See how it ends' : 'Continue',
+          () => {
+            if (bossId === 'reflection') {
+              fadeToScene(this, 'Ending');
+            } else {
+              fadeToScene(this, 'Board');
+            }
+          },
+          { width: 260 },
+        );
+      });
     });
     this.input.removeAllListeners('pointerdown');
     this.input.on('pointerdown', () => dialog.skip());
+  }
+
+  private showRewardNotes(notes: string[], onDone: () => void) {
+    if (notes.length === 0) { onDone(); return; }
+    const rewardTexts: Phaser.GameObjects.Text[] = [];
+    let index = 0;
+
+    const showNext = () => {
+      if (index >= notes.length) {
+        rewardTexts.forEach((t) => t.destroy());
+        onDone();
+        return;
+      }
+      const rewardY = 440 + index * 24;
+      const t = this.add.text(GAME_WIDTH / 2, rewardY, `✦ ${notes[index]}`, {
+        fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.goldBright,
+      }).setOrigin(0.5).setAlpha(0);
+      rewardTexts.push(t);
+      audio.shardGain();
+      this.tweens.add({ targets: t, alpha: 1, duration: 400, ease: 'Sine.easeOut' });
+      index++;
+      this.time.delayedCall(400, showNext);
+    };
+    showNext();
   }
 
   shutdown() {

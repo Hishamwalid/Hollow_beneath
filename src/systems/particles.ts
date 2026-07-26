@@ -41,3 +41,16 @@ export function spawnMomentumParticles(scene: Phaser.Scene, x: number, y: number
   emitter.explode(12);
   scene.time.delayedCall(600, () => emitter.destroy());
 }
+
+export function spawnCelebrationParticles(scene: Phaser.Scene, x: number, y: number): void {
+  const emitter = scene.add.particles(x, y, 'particle', {
+    speed: { min: 80, max: 200 },
+    angle: { min: 240, max: 300 },
+    scale: { start: 1.2, end: 0 },
+    lifespan: { min: 600, max: 1200 },
+    quantity: 4,
+    frequency: 100,
+    tint: [0xc9a24b, 0xe9c876, 0x5c8a5c, 0x9a9488],
+  });
+  scene.time.delayedCall(1400, () => emitter.destroy());
+}

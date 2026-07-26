@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
-import type { BoardNode } from '@data/types';
+import type { BoardNode, FactionState } from '@data/types';
 import { CHECKPOINTS, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
+import { FIRST_NODE_TOOLTIPS } from '@data/tutorialText';
 import { rollDie, rollMovement } from '@systems/checks';
-import { TOTAL_NODES, PAGES, NODES_PER_PAGE } from '@/config';
+import { TOTAL_NODES, PAGES, NODES_PER_PAGE, GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { pickEvent } from '@systems/EventEngine';
 import { resolveTrap } from '@systems/EventEngine';
 import { TRAPS } from '@data/events';
@@ -19,7 +20,16 @@ import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
 import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
-import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
+import { influenceStatus } from '@data/factions';
+
+const CHAPTER_PAGES = [1, 5, 9, 13, 17];
+const CHAPTER_NAMES: Record<number, string> = {
+  1: 'The Archive Opens',
+  5: 'The Sable March',
+  9: 'The Chorus Calls',
+  13: 'The Fossil Throne',
+  17: 'The Final Descent',
+};
 
 const COLS = 10;
 const ORIGIN_X = 90;
@@ -27,6 +37,18 @@ const ORIGIN_Y = 210;
 const COL_SPACING = 108;
 const ROW_SPACING = 54;
 const VISIBILITY_RANGE = 4;
+const AMBUSH_CHANCE = 0.30;
+const REST_DISRUPT_CHANCE = 0.20;
+const AMBUSH_TABLE: Record<string, string[]> = {
+  sable: ['sable_zealot', 'sable_zealot'],
+  archive: ['venn_custodian', 'archive_cipher_wraith'],
+  covenant: ['ash_seer', 'ash_seer'],
+  caravan: ['dust_road_raider', 'dust_wight'],
+};
+
+function isAnyFactionHostile(faction: FactionState): boolean {
+  return Object.values(faction).some((v) => influenceStatus(v) === 'Hostile');
+}
 
 function nodePosition(index: number): { x: number; y: number } {
   const row = Math.floor((index - 1) / COLS);
@@ -46,6 +68,7 @@ export class BoardScene extends Phaser.Scene {
   private depthLadder?: Phaser.GameObjects.GameObject[];
   private pageLabel?: Phaser.GameObjects.Text;
   private busy = false;
+  private firstNodeTooltips: Record<string, boolean> = {};
 
   constructor() {
     super('Board');
@@ -74,6 +97,11 @@ export class BoardScene extends Phaser.Scene {
     if (game.currentNodeIndex > 0) this.preview.show(game.nodes[game.currentNodeIndex - 1]);
     createButton(this, GAME_WIDTH - 100, 160, 'Bag', () => fadeToScene(this, 'Inventory'), { width: 60, height: 30, fontSize: '11px' });
 
+    this.add.text(GAME_WIDTH - 100, 200, `Skills (${player.skillPoints})`, {
+      fontFamily: FONT_MONO, fontSize: '11px', color: player.skillPoints > 0 ? PALETTE_HEX.gold : '#555555',
+    }).setOrigin(0.5).setDepth(5);
+    createButton(this, GAME_WIDTH - 100, 220, 'Skills', () => fadeToScene(this, 'SkillTree'), { width: 60, height: 25, fontSize: '10px' });
+
     this.pageLabel = this.add.text(GAME_WIDTH / 2, 16, `Page ${game.currentPage} / 20`, {
       fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5, 0).setDepth(5);
@@ -95,6 +123,13 @@ export class BoardScene extends Phaser.Scene {
 
     if (game.currentNodeIndex >= TOTAL_NODES) {
       this.rollBtn.setEnabled(false);
+    }
+
+    if (game.pendingNodeIndex != null && game.pendingNodeIndex > game.currentNodeIndex) {
+      const target = game.pendingNodeIndex;
+      useGameStore.setState({ game: { ...game, pendingNodeIndex: null } });
+      this.log('The ambush dealt with, you continue forward.');
+      this.moveTo(target);
     }
   }
 
@@ -184,6 +219,7 @@ export class BoardScene extends Phaser.Scene {
 
     this.diceRoller?.roll(roll, () => {
       try {
+        if (this.tryAmbush(target)) return;
         this.moveTo(target);
       } catch (e) {
         console.error('Roll handler failed', e);
@@ -191,6 +227,28 @@ export class BoardScene extends Phaser.Scene {
         this.rollBtn?.setEnabled(true);
       }
     });
+  }
+
+  private tryAmbush(target: number): boolean {
+    const { player, game } = useGameStore.getState();
+    if (!player || !game) return false;
+    if (!isAnyFactionHostile(player.faction)) return false;
+    if (Math.random() >= AMBUSH_CHANCE) return false;
+
+    const hostileKey = (Object.keys(player.faction) as (keyof FactionState)[]).find(
+      (k) => influenceStatus(player.faction[k]) === 'Hostile',
+    );
+    const enemies = hostileKey && AMBUSH_TABLE[hostileKey] ? AMBUSH_TABLE[hostileKey] : ['sable_zealot', 'sable_zealot'];
+    const page = Math.max(1, game.currentPage);
+    useGameStore.setState({ game: { ...game, pendingNodeIndex: target } });
+
+    const factionNames: Record<string, string> = { sable: 'Sable', archive: 'Archive', covenant: 'Covenant', caravan: 'Caravan' };
+    const factionLabel = hostileKey ? (factionNames[hostileKey] ?? hostileKey) : 'unknown';
+    this.log(`The ${factionLabel} ambushes you! +${enemies.length} enemies.`);
+    this.time.delayedCall(600, () => {
+      fadeToScene(this, 'Combat', { mode: 'wild', enemyIds: enemies, page });
+    });
+    return true;
   }
 
   private moveTo(target: number) {
@@ -213,12 +271,58 @@ export class BoardScene extends Phaser.Scene {
     advance();
   }
 
+  private showChapterCard(page: number, node: BoardNode) {
+    const num = CHAPTER_PAGES.indexOf(page) + 1;
+    const name = CHAPTER_NAMES[page];
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2;
+    const depth = 200;
+
+    const container = this.add.container(0, 0).setDepth(depth);
+    const bg = this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(depth).setAlpha(0);
+    container.add(bg);
+
+    const chapterText = this.add.text(cx, cy - 30, `CHAPTER ${num}`, {
+      fontFamily: FONT_SERIF, fontSize: '28px', color: PALETTE_HEX.gold,
+    }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
+    container.add(chapterText);
+
+    const nameText = this.add.text(cx, cy + 20, name, {
+      fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.bone, fontStyle: 'italic',
+    }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
+    container.add(nameText);
+
+    const elements = [bg, chapterText, nameText];
+    this.tweens.add({
+      targets: elements,
+      alpha: { from: 0, to: 1 },
+      duration: 500,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        this.time.delayedCall(2500, () => {
+          this.tweens.add({
+            targets: elements,
+            alpha: 0,
+            duration: 400,
+            ease: 'Sine.easeIn',
+            onComplete: () => {
+              container.destroy();
+              this.log(this.pageFlavor(page));
+              this.resolveNode(node);
+            },
+          });
+        });
+      },
+    });
+  }
+
   private finishMove(target: number) {
     const store = useGameStore.getState();
     const { player, game } = store;
     if (!player || !game) return;
 
     const page = Math.min(PAGES, Math.ceil(target / NODES_PER_PAGE));
+    const prevPage = game.currentPage;
     player.echoShards += applyShardBonus(player, shardsForNodeVisit());
     const updatedNodes = game.nodes.map((n) => ({ ...n }));
     const node = updatedNodes[target - 1];
@@ -230,9 +334,13 @@ export class BoardScene extends Phaser.Scene {
     this.preview?.show(node);
     this.pageLabel?.setText(`Page ${page} / ${PAGES}`);
     this.buildDepthLadder(page);
-    this.log(this.pageFlavor(page));
 
-    this.resolveNode(node);
+    if (page !== prevPage && CHAPTER_PAGES.includes(page)) {
+      this.showChapterCard(page, node);
+    } else {
+      this.log(this.pageFlavor(page));
+      this.resolveNode(node);
+    }
     this.applyFactionGearBonus(player);
   }
 
@@ -240,6 +348,12 @@ export class BoardScene extends Phaser.Scene {
     const store = useGameStore.getState();
     const { player, game } = store;
     if (!player || !game) return;
+
+    if (player.totalRuns === 0 && game.currentPage <= 1 && !this.firstNodeTooltips[node.type]) {
+      this.firstNodeTooltips[node.type] = true;
+      const tip = FIRST_NODE_TOOLTIPS[node.type];
+      if (tip) this.showNodeTooltip(tip);
+    }
 
     if (node.type === 'landmark') {
       fadeToScene(this, 'Landmark', { bossId: node.subtype });
@@ -251,8 +365,8 @@ export class BoardScene extends Phaser.Scene {
     }
     if (node.type === 'event') {
       const seen = new Set(player.history.filter((h) => h.startsWith('event_seen:')).map((h) => h.slice('event_seen:'.length)));
-      const event = pickEvent(node.page, player.resonance, seen, Math.random, player.flags);
-      fadeToScene(this, 'Event', { eventId: event.id });
+      const event = pickEvent(player, node.page, player.resonance, seen, Math.random, player.flags);
+      fadeToScene(this, 'Event', { eventDef: event });
       return;
     }
     if (node.type === 'trap') {
@@ -279,7 +393,7 @@ export class BoardScene extends Phaser.Scene {
     if (node.type === 'discovery') {
       if (node.subtype === 'capture_point' && MINOR_LANDMARKS[node.index]) {
         this.markResolved(node);
-        fadeToScene(this, 'Event', { eventId: MINOR_LANDMARKS[node.index].id });
+        fadeToScene(this, 'Event', { eventDef: MINOR_LANDMARKS[node.index] });
         return;
       }
       this.resolveDiscovery(player, node);
@@ -290,22 +404,49 @@ export class BoardScene extends Phaser.Scene {
     this.afterInlineResolution();
   }
 
+  private showNodeTooltip(text: string) {
+    const tx = this.add.text(GAME_WIDTH / 2, 200, text, {
+      fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.gold,
+      align: 'center', wordWrap: { width: 500 },
+    }).setOrigin(0.5).setDepth(100).setAlpha(0);
+    this.tweens.add({
+      targets: tx, alpha: 1, duration: 300, ease: 'Sine.easeOut',
+      onComplete: () => {
+        this.time.delayedCall(2500, () => {
+          this.tweens.add({
+            targets: tx, alpha: 0, duration: 300, ease: 'Sine.easeIn',
+            onComplete: () => tx.destroy(),
+          });
+        });
+      },
+    });
+  }
+
   private resolveRest(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>) {
     if (player.flags.skip_next_rest) {
       delete player.flags.skip_next_rest;
       this.log('You look for somewhere to rest. The floor here remembers your last fall, and offers nothing.');
       return;
     }
+    let disrupted = false;
+    if (isAnyFactionHostile(player.faction) && Math.random() < REST_DISRUPT_CHANCE) {
+      disrupted = true;
+    }
     let healPct = player.flags.next_rest_double ? 50 : 25;
     if (player.flags.next_rest_double) delete player.flags.next_rest_double;
     if (player.skillsKnown.includes('deep_breath')) healPct += 10;
+    if (disrupted) healPct = Math.round(healPct * 0.5);
     const heal = Math.round(player.derived.maxHP * (healPct / 100));
     player.currentHP = Math.min(player.derived.maxHP, player.currentHP + heal);
-    const mpRestore = Math.round(player.derived.maxMP * 0.3);
+    const mpRestore = disrupted ? Math.round(player.derived.maxMP * 0.15) : Math.round(player.derived.maxMP * 0.3);
     player.currentMP = Math.min(player.derived.maxMP, player.currentMP + mpRestore);
     player.resonance = Math.max(0, player.resonance - 1);
     audio.heal();
-    this.log(`You rest a while. +${heal} HP, +${mpRestore} MP (-1 Resonance).`);
+    if (disrupted) {
+      this.log(`You wake to the sound of blades being drawn. Not enough rest. +${heal} HP, +${mpRestore} MP (-1 Resonance).`);
+    } else {
+      this.log(`You rest a while. +${heal} HP, +${mpRestore} MP (-1 Resonance).`);
+    }
   }
 
   private resolveDiscovery(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {

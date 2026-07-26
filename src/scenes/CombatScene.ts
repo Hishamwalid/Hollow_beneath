@@ -14,6 +14,7 @@ import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { settingsManager } from '@systems/SettingsManager';
 import { spawnHitParticles, spawnHealParticles, spawnMomentumParticles } from '@systems/particles';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -128,6 +129,27 @@ export class CombatScene extends Phaser.Scene {
     if (whisper) showWhisper(this, GAME_WIDTH / 2, 100, whisper.text, 520);
 
     this.refresh(initialSnap);
+    if (data.mode === 'boss') this.showBossEntry();
+  }
+
+  private showBossEntry() {
+    if (settingsManager.get().screenShake) {
+      this.cameras.main.shake(200, 0.008);
+    }
+    const flash = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x8b0000, 0).setDepth(60);
+    this.tweens.add({
+      targets: flash, alpha: 0.25, duration: 200, yoyo: true, ease: 'Sine.easeOut',
+      onComplete: () => flash.destroy(),
+    });
+    if (this.enemyDisplays.length > 0) {
+      const first = this.enemyDisplays[0];
+      const ring = this.add.circle(
+        first.container.x, first.container.y - 18, 44, 0x000000, 0,
+      ).setStrokeStyle(2, 0xc9a24b, 0.4).setDepth(6);
+      this.tweens.add({
+        targets: ring, alpha: { from: 0.4, to: 1 }, duration: 1000, yoyo: true, repeat: -1,
+      });
+    }
   }
 
   private buildEnemyDisplays(snap: CombatSnapshot) {
@@ -331,7 +353,9 @@ export class CombatScene extends Phaser.Scene {
         break;
       }
       case 'withdraw': {
-        this.cameras.main.shake(200, 0.005);
+        if (settingsManager.get().screenShake) {
+          this.cameras.main.shake(200, 0.005);
+        }
         break;
       }
       default: {

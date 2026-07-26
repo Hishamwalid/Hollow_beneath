@@ -3,12 +3,16 @@ import type { EquipmentBonuses } from '@data/stats';
 import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES, getEquipmentBonuses } from '@data/stats';
 import { STARTING_FACTIONS } from '@data/factions';
 import { STARTING_INVENTORY } from '@data/items';
-import type { GameState, PlayerState, StatBlock } from '@data/types';
+import type { GameState, PlayerState, StatBlock, BestRunStats, RunStats, Equipment } from '@data/types';
 import { generateBoard } from '@systems/BoardGenerator';
 import { mulberry32, randomSeed } from '@systems/rng';
 import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } from '@systems/SaveManager';
 import { applyUnlocksToNewRun, deathRefund, shardsForEnding } from '@systems/EchoShardSystem';
 import { computeLevelUp } from '@systems/LevelSystem';
+import { SKILL_TREES } from '@data/skillTree';
+import { TOTAL_MAJOR_BOSSES } from '@data/bosses';
+import { getLoreFragment, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
+import { resonanceTier, TIER_LABELS } from '@systems/ResonanceSystem';
 
 export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[]): PlayerState {
   const derived = computeDerivedStats(stats, STARTING_EQUIPMENT_BONUSES as EquipmentBonuses);
@@ -20,8 +24,10 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     level: 1,
     xp: 0,
     skillPoints: 0,
+    skillTreePurchases: {},
     skillsKnown: [],
     resonance: 0,
+    resonancePeak: 0,
     faction: { ...STARTING_FACTIONS },
     equipment: { weapon: 'rusty_dagger', armour: 'leather_vest', accessory: null, focus: 'cracked_lens' },
     inventory: STARTING_INVENTORY.map((i) => ({ ...i })),
@@ -35,10 +41,45 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     unlocks: [...purchasedUnlocks],
     gold: 50,
     totalRuns: 0,
-    bestRun: { page: 0, time: 0 },
+    bestRun: { page: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
   };
   applyUnlocksToNewRun(player, purchasedUnlocks);
   return player;
+}
+
+function computeRunStatsImpl(
+  player: PlayerState,
+  game: GameState,
+  meta: ReturnType<typeof defaultMeta>,
+  earnedShards: number,
+  endingId: string | null,
+): RunStats {
+  const peak = player.resonance > player.resonancePeak ? player.resonance : player.resonancePeak;
+  const isBetter = game.currentPage > meta.bestRun.page ||
+    (game.currentPage === meta.bestRun.page && (Date.now() - game.runStartedAt) < meta.bestRun.time);
+  const newLoreIds = player.loreFragments.filter(id => !meta.loreFragmentsSeen.includes(id));
+  const newLoreTitles = newLoreIds.map(id => getLoreFragment(id)?.title ?? id);
+  return {
+    nodesVisited: game.path.length,
+    enemiesKilled: player.enemiesKilled,
+    bossesDefeated: player.bossesDefeated.length,
+    totalBosses: TOTAL_MAJOR_BOSSES,
+    levelReached: player.level,
+    resonancePeak: peak,
+    resonanceTier: TIER_LABELS[resonanceTier(peak)],
+    choicesMade: game.choicesMade,
+    loreFound: player.loreFragments.length,
+    totalLore: TOTAL_LORE_FRAGMENTS,
+    runTimeSeconds: Math.floor((Date.now() - game.runStartedAt) / 1000),
+    newLoreIds,
+    newLoreTitles,
+    echoShardsEarned: earnedShards,
+    totalEchoShards: meta.echoShards + earnedShards,
+    bestRun: meta.bestRun,
+    pageReached: game.currentPage,
+    endingUnlocked: endingId,
+    isNewBest: isBetter && meta.bestRun.page > 0,
+  };
 }
 
 interface GameStore {
@@ -58,6 +99,10 @@ interface GameStore {
   awardStatPoint: (stat: keyof StatBlock) => void;
   awardSkillPoint: () => void;
   consumeSkillPoint: () => void;
+  purchaseSkillTreeTier: (treeId: string, skillId: string) => boolean;
+  resetSkillTreePurchases: () => void;
+  computeRunStats: () => RunStats | null;
+  equipItem: (slot: keyof Equipment, itemId: string | null) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -88,6 +133,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       checkpointPage: 0,
       checkpointSnapshot: JSON.parse(JSON.stringify(player)),
       deathNodeIndex: null,
+      pendingNodeIndex: null,
       nodes,
       isRunActive: true,
       isDead: false,
@@ -105,6 +151,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   persist: () => {
     const { meta, player, game } = get();
     if (player && game) {
+      if (player.resonance > player.resonancePeak) {
+        player.resonancePeak = player.resonance;
+      }
       saveGame(meta, { player, game });
     } else {
       saveGame(meta, null);
@@ -123,11 +172,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { player, game, meta } = get();
     if (!player || !game) return;
     const refund = deathRefund(player.echoShards);
+    const runStats = computeRunStatsImpl(player, game, meta, refund, null);
     const newMeta = {
       ...meta,
       echoShards: meta.echoShards + refund,
       deathCount: meta.deathCount + 1,
       loreFragmentsSeen: Array.from(new Set([...meta.loreFragmentsSeen, ...player.loreFragments])),
+      lastRunStats: runStats,
     };
     if (game.checkpointPage === 0) {
       set({ meta: newMeta, player: null, game: null });
@@ -149,6 +200,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { player, game, meta } = get();
     if (!player || !game) return;
     const earned = player.echoShards + shardsForEnding();
+    const peak = player.resonance > player.resonancePeak ? player.resonance : player.resonancePeak;
+    const runTime = Date.now() - game.runStartedAt;
+    const currentRunStats: BestRunStats = {
+      page: game.currentPage,
+      time: runTime,
+      nodesVisited: game.path.length,
+      enemiesKilled: player.enemiesKilled,
+      bossesDefeated: player.bossesDefeated.length,
+      levelReached: player.level,
+      resonancePeak: peak,
+      choicesMade: game.choicesMade,
+      loreFound: player.loreFragments.length,
+    };
+    const isBetter = game.currentPage > meta.bestRun.page ||
+      (game.currentPage === meta.bestRun.page && runTime < meta.bestRun.time);
+    const runStats = computeRunStatsImpl(player, game, meta, earned, endingId);
+    runStats.isNewBest = isBetter && meta.bestRun.page > 0;
     const newMeta = {
       ...meta,
       echoShards: meta.echoShards + earned,
@@ -156,7 +224,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       endingsAchieved: meta.endingsAchieved.includes(endingId) ? meta.endingsAchieved : [...meta.endingsAchieved, endingId],
       loreFragmentsSeen: Array.from(new Set([...meta.loreFragmentsSeen, ...player.loreFragments])),
       bossesEverDefeated: Array.from(new Set([...meta.bossesEverDefeated, ...player.bossesDefeated])),
-      bestRun: game.currentPage > meta.bestRun.page ? { page: game.currentPage, time: Date.now() - game.runStartedAt } : meta.bestRun,
+      bestRun: isBetter ? currentRunStats : meta.bestRun,
+      lastRunStats: runStats,
     };
     set({ meta: newMeta, player: null, game: { ...game, isRunActive: false, endingAchieved: endingId } });
     get().persist();
@@ -205,5 +274,73 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!player) return;
     if (player.skillPoints > 0) player.skillPoints -= 1;
     set({ player: { ...player } });
+  },
+
+  purchaseSkillTreeTier: (treeId: string, skillId: string) => {
+    const { player } = get();
+    if (!player) return false;
+    const tree = SKILL_TREES.find((t) => t.id === treeId);
+    if (!tree) return false;
+    const node = tree.nodes.find((n) => n.id === skillId);
+    if (!node) return false;
+    const bought = player.skillTreePurchases[treeId] ?? 0;
+    const nodeTierIndex = tree.nodes.indexOf(node);
+    if (nodeTierIndex !== bought) return false;
+    if (player.skillPoints < node.cost) return false;
+    if (player.skillsKnown.includes(skillId)) return false;
+    player.skillPoints -= node.cost;
+    player.skillTreePurchases[treeId] = (player.skillTreePurchases[treeId] ?? 0) + 1;
+    player.skillsKnown.push(skillId);
+    set({ player: { ...player } });
+    get().persist();
+    return true;
+  },
+
+  resetSkillTreePurchases: () => {
+    const { player } = get();
+    if (!player) return;
+    player.skillTreePurchases = {};
+    set({ player: { ...player } });
+  },
+
+  equipItem: (slot: keyof Equipment, itemId: string | null) => {
+    const { player } = get();
+    if (!player) return;
+    const currentId = player.equipment[slot];
+    if (currentId === itemId) return;
+    if (itemId === null && slot !== 'accessory') return;
+    if (itemId !== null) {
+      const invIdx = player.inventory.findIndex((i) => i.id === itemId);
+      if (invIdx === -1) return;
+      const invEntry = player.inventory[invIdx];
+      if (invEntry.qty > 1) {
+        invEntry.qty -= 1;
+      } else {
+        player.inventory.splice(invIdx, 1);
+      }
+    }
+    if (currentId !== null) {
+      const existing = player.inventory.find((i) => i.id === currentId);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        player.inventory.push({ id: currentId, qty: 1 });
+      }
+    }
+    player.equipment = { ...player.equipment, [slot]: itemId };
+    const bonuses = getEquipmentBonuses(player.equipment);
+    const oldMaxHP = player.derived.maxHP;
+    const oldMaxMP = player.derived.maxMP;
+    player.derived = computeDerivedStats(player.stats, bonuses);
+    player.currentHP = Math.min(player.currentHP, player.derived.maxHP);
+    player.currentMP = Math.min(player.currentMP, player.derived.maxMP);
+    set({ player: { ...player } });
+    get().persist();
+  },
+
+  computeRunStats: () => {
+    const { player, game, meta } = get();
+    if (!player || !game) return null;
+    return computeRunStatsImpl(player, game, meta, player.echoShards, game.endingAchieved);
   },
 }));

@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
-import { EVENTS } from '@data/events';
-import { MINOR_LANDMARKS } from '@data/minorLandmarks';
-import type { EventChoice, EventDef } from '@data/types';
+import { HOSTILE_FLAVOR } from '@data/events';
+import type { EventChoice, EventDef, FactionState } from '@data/types';
 import { useGameStore } from '@store/gameStore';
 import { resolveEventChoice } from '@systems/EventEngine';
 import { createDialogBox, type DialogBox } from '@ui/DialogBox';
@@ -10,15 +9,10 @@ import { createButton } from '@ui/Button';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
+import { influenceStatus } from '@data/factions';
 
 interface EventSceneData {
-  eventId: string;
-}
-
-/** Resolves an id against the main pool first, then the minor-landmark vignettes (never in the random pool). */
-function findEvent(id: string): EventDef | undefined {
-  if (EVENTS[id]) return EVENTS[id];
-  return Object.values(MINOR_LANDMARKS).find((e) => e.id === id);
+  eventDef: EventDef;
 }
 
 export class EventScene extends Phaser.Scene {
@@ -34,7 +28,7 @@ export class EventScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
     const { player } = useGameStore.getState();
-    const event = findEvent(data.eventId);
+    const event = data.eventDef;
     if (!player || !event) {
       fadeToScene(this, 'Board');
       return;
@@ -48,7 +42,8 @@ export class EventScene extends Phaser.Scene {
 
     this.dialog?.destroy();
     this.dialog = createDialogBox(this, GAME_WIDTH / 2, 260, 820, 220);
-    this.dialog.setText(event.flavorText, () => this.showChoices(event.choices));
+    const hostileSuffix = this.hostileFlavorSuffix(player);
+    this.dialog.setText(hostileSuffix ? `${event.flavorText}\n\n${hostileSuffix}` : event.flavorText, () => this.showChoices(event.choices));
 
     this.input.on('pointerdown', () => this.dialog?.skip());
   }
@@ -63,12 +58,24 @@ export class EventScene extends Phaser.Scene {
       this,
       GAME_WIDTH / 2,
       430,
-      visible.map((c) => ({
-        label: c.label,
-        onSelect: () => this.pickChoice(c),
-      })),
+      visible.map((c) => {
+        const locked = c.factionGate && influenceStatus(player.faction[c.factionGate]) === 'Hostile';
+        return {
+          label: locked ? `${c.label}  ✦ LOCKED` : c.label,
+          disabled: !!locked,
+          onSelect: () => { if (!locked) this.pickChoice(c); },
+        };
+      }),
       { width: 620, spacing: 58 },
     );
+  }
+
+  private hostileFlavorSuffix(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>): string | null {
+    const hostile = (Object.keys(player.faction) as (keyof FactionState)[]).find(
+      (k) => influenceStatus(player.faction[k]) === 'Hostile',
+    );
+    if (!hostile) return null;
+    return HOSTILE_FLAVOR[hostile] ?? null;
   }
 
   private pickChoice(choice: EventChoice) {

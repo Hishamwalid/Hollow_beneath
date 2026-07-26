@@ -1,6 +1,8 @@
 import type { BossDef, BossPhaseInfo, BossTurnContext } from './types';
 import { statCheck } from '@systems/checks';
 
+export const TOTAL_MAJOR_BOSSES = 5;
+
 function bossDamage(atk: number, def: number, power: number): number {
   return Math.max(3, Math.round((atk - def / 2) * power));
 }
@@ -156,8 +158,18 @@ export const PATRIARCH: BossDef = {
         return "He tells you. His voice doesn't shake, but his hands do. (Patriarch's Defense -20% this fight)";
       },
     },
-  ],
-  getPhase(hpPercent) {
+    {
+      id: 'confront',
+      label: '"I know what you burned."',
+      requirement: (p) => !!p.flags.sable_scripture_unlocked,
+      apply: (player, flags) => {
+        player.faction.sable += 10;
+        flags.scriptureDefWeakened = 1;
+        return '"I know what you burned." The Patriarch freezes. For a moment, you see fear in his eyes. (Defense -10% this fight, +10 Sable)';
+      },
+    },
+    ],
+    getPhase(hpPercent) {
     if (hpPercent > 0.3) {
       return { key: 'devout', label: 'The Devout', hpFloorPercent: 0.3, affinities: { shadow: 1.5, pierce: 1.2, sacred: 0.25, flame: 0.5 } };
     }
@@ -167,6 +179,10 @@ export const PATRIARCH: BossDef = {
     if (ctx.flags.cassDefWeakened === 1 && !ctx.flags.cassDefWeakenedApplied) {
       ctx.flags.cassDefWeakenedApplied = 1;
       ctx.self.def = Math.round(ctx.self.def * 0.8);
+    }
+    if (ctx.flags.scriptureDefWeakened === 1 && !ctx.flags.scriptureDefWeakenedApplied) {
+      ctx.flags.scriptureDefWeakenedApplied = 1;
+      ctx.self.def = Math.round(ctx.self.def * 0.9);
     }
     if (ctx.turn === 1) {
       ctx.setBarrier(40);

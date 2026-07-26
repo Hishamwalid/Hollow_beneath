@@ -32,7 +32,7 @@ export function pageForIndex(index: number): number {
 /** Builds the full 200-node board. Deterministic given the same seeded rng. */
 export function generateBoard(rng: () => number): BoardNode[] {
   const nodes: BoardNode[] = [];
-  const trapPool = ['memory_trap', 'collapsing_floor'];
+  const trapPool = ['memory_trap', 'collapsing_floor', 'identity_trap', 'collapsing_ceiling'];
 
   for (let i = 1; i <= TOTAL_NODES; i++) {
     const page = pageForIndex(i);

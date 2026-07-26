@@ -1,8 +1,8 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { evaluateEnding } from '@data/endings';
+import { showRunStatsScreen } from '@ui/RunStatsScreen';
 import { createDialogBox } from '@ui/DialogBox';
-import { createButton } from '@ui/Button';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { spawnHealParticles } from '@systems/particles';
 import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
@@ -51,7 +51,18 @@ export class EndingScene extends Phaser.Scene {
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 380, 880, 260);
     dialog.setText(ending.epilogue, () => {
       store.finalizeRun(ending.id);
-      createButton(this, GAME_WIDTH / 2, 640, 'Return to the Surface', () => fadeToScene(this, 'Menu'), { width: 300 });
+      const meta = useGameStore.getState().meta;
+      if (meta.lastRunStats) {
+        showRunStatsScreen(
+          this,
+          meta.lastRunStats,
+          false,
+          () => fadeToScene(this, 'Menu'),
+          () => fadeToScene(this, 'LoreCodex'),
+        );
+      } else {
+        fadeToScene(this, 'Menu');
+      }
     });
     this.input.on('pointerdown', () => dialog.skip());
   }

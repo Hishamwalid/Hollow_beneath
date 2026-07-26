@@ -21,7 +21,17 @@ export class MenuScene extends Phaser.Scene {
 
     const buttons: { label: string; onClick: () => void }[] = [];
     if (canContinue) buttons.push({ label: 'Continue', onClick: () => fadeToScene(this, 'Board') });
-    buttons.push({ label: 'New Descent', onClick: () => fadeToScene(this, 'CharacterCreation') });
+    buttons.push({
+      label: 'New Descent',
+      onClick: () => {
+        if (meta.totalRuns === 0) {
+          fadeToScene(this, 'Tutorial', { returnTo: 'CharacterCreation' });
+        } else {
+          fadeToScene(this, 'CharacterCreation');
+        }
+      },
+    });
+    buttons.push({ label: 'How to Play', onClick: () => fadeToScene(this, 'Tutorial', { returnTo: 'Menu' }) });
     buttons.push({ label: 'Echo Shard Shop', onClick: () => fadeToScene(this, 'ShardShop') });
     buttons.push({ label: 'Lore Codex', onClick: () => fadeToScene(this, 'LoreCodex') });
     buttons.push({ label: 'Settings', onClick: () => fadeToScene(this, 'Settings') });

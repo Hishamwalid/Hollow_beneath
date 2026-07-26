@@ -1,5 +1,6 @@
 import type { EventApplyCtx, EventChoice, EventDef, PlayerState, TrapDef } from '@data/types';
-import { eligibleEvents, EVENTS } from '@data/events';
+import { eligibleEvents } from '@data/events';
+import { generateFallbackEvent } from '@data/eventTemplates';
 import { statCheck } from './checks';
 import { pick } from './rng';
 import { shardsForLoreFragment, applyShardBonus } from './EchoShardSystem';
@@ -57,10 +58,10 @@ export function resolveTrap(trap: TrapDef, player: PlayerState, rng: () => numbe
   return { avoided, text };
 }
 
-export function pickEvent(page: number, resonance: number, seen: Set<string>, rng: () => number, flags: Record<string, boolean> = {}): EventDef {
+export function pickEvent(player: PlayerState, page: number, resonance: number, seen: Set<string>, rng: () => number, flags: Record<string, boolean> = {}): EventDef {
   // Map pages 11-20 to 1-10 so events with pageRange [1,10] cover the full 200-node board
   const mappedPage = page > 10 ? page - 10 : page;
   const pool = eligibleEvents(mappedPage, resonance, seen, flags);
-  if (pool.length === 0) return EVENTS.quiet_passage;
-  return pick(pool, rng) ?? EVENTS.quiet_passage;
+  if (pool.length === 0) return generateFallbackEvent(player, rng);
+  return pick(pool, rng) ?? generateFallbackEvent(player, rng);
 }

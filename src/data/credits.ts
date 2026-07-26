@@ -1,0 +1,16 @@
+export const CREDITS = [
+  'THE HOLLOW BENEATH',
+  '',
+  'Design & Development: [Name]',
+  'Narrative Design: [Name]',
+  'Original Concept: [Name]',
+  '',
+  'Built with Phaser 3.70 + TypeScript',
+  'State management: Zustand',
+  'Build tool: Vite',
+  '',
+  'Font: Georgia (serif), Courier New (mono)',
+  '',
+  'Special thanks to the playtesters',
+  'who descended into the Hollow.',
+];
