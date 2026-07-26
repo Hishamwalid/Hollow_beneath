@@ -13,15 +13,21 @@ let recentlyShown: string[] = [];
 
 /**
  * Roll for whether a whisper should appear right now.
- * `chance` defaults to ~1-in-6 so whispers stay ambient, not constant.
+ * `chance` defaults to a value scaled by Resonance tier
+ * (stable 0.12, awakened 0.18, unmoored 0.28, transcendent 0.38)
+ * so whispers become more frequent as the player distorts reality.
  * Returns null most of the time by design — callers should treat null as "show nothing."
  */
 export function maybePickWhisper(
   resonance: number,
   context: WhisperDef['context'],
   rng: () => number = Math.random,
-  chance = 0.18
+  chance?: number
 ): WhisperDef | null {
+  if (chance === undefined) {
+    const tier = resonanceTier(resonance);
+    chance = tier === 'transcendent' ? 0.38 : tier === 'unmoored' ? 0.28 : tier === 'awakened' ? 0.18 : 0.12;
+  }
   if (rng() > chance) return null;
 
   const tier = resonanceTier(resonance);

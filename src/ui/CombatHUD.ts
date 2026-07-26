@@ -20,10 +20,10 @@ export function createEnemyDisplay(
   onClick: () => void,
 ): EnemyDisplay {
   const container = scene.add.container(x, y).setDepth(5);
-  const panelBg = scene.add.image(0, 0, 'panel_enemy').setAlpha(0.75);
+  const panelBg = scene.add.image(0, 0, 'panel_enemy').setAlpha(0.75).setInteractive({ useHandCursor: true });
   const selectRing = scene.add.circle(0, 0, 40, 0x000000, 0).setStrokeStyle(3, 0xc9a24b, 0).setVisible(false);
-  const token = scene.add.image(0, -18, textureKey).setDisplaySize(72, 72).setInteractive({ useHandCursor: true });
-  const nameText = scene.add.text(0, 30, '', { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone }).setOrigin(0.5, 0);
+  const token = scene.add.image(0, -18, textureKey).setDisplaySize(72, 72);
+  const nameText = scene.add.text(0, 30, '', { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone, wordWrap: { width: 120 }, align: 'center' }).setOrigin(0.5, 0);
   const hpBg = scene.add.rectangle(0, 52, 84, 8, 0x2a2e33);
   const hpFg = scene.add.rectangle(-42, 52, 84, 8, 0xb0453f).setOrigin(0, 0.5);
   const hpText = scene.add.text(0, 60, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5, 0);
@@ -31,7 +31,7 @@ export function createEnemyDisplay(
   const statusText = scene.add.text(0, 76, '', { fontFamily: FONT_MONO, fontSize: '9px', color: '#e67e22', align: 'center', wordWrap: { width: 100 } }).setOrigin(0.5, 0);
 
   container.add([panelBg, selectRing, token, nameText, hpBg, hpFg, hpText, affinityText, statusText]);
-  token.on('pointerdown', onClick);
+  panelBg.on('pointerdown', onClick);
 
   return {
     container,

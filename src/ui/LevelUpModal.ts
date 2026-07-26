@@ -18,7 +18,7 @@ export function showLevelUpModal(
 ): LevelUpModalHandle {
   const container = scene.add.container(GAME_WIDTH / 2, 0).setDepth(100);
 
-  const bg = scene.add.rectangle(0, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.7).setDepth(100);
+  const bg = scene.add.rectangle(0, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.7).setDepth(100).setInteractive();
   container.add(bg);
 
   const title = scene.add.text(0, GAME_HEIGHT / 2 - 140, `LEVEL ${level}!`, {
@@ -76,8 +76,10 @@ export function showStatChoiceModal(
   onCancel: () => void,
 ): LevelUpModalHandle {
   const container = scene.add.container(GAME_WIDTH / 2, 0).setDepth(110);
-  const bg = scene.add.rectangle(0, GAME_HEIGHT / 2, 360, 320, 0x1a1d22).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(110);
+  const bg = scene.add.rectangle(0, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.7).setDepth(110).setInteractive();
   container.add(bg);
+  const panelBg = scene.add.rectangle(0, GAME_HEIGHT / 2, 360, 320, 0x1a1d22).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(111);
+  container.add(panelBg);
 
   const title = scene.add.text(0, GAME_HEIGHT / 2 - 130, 'Choose a Stat', {
     fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.gold,
@@ -95,11 +97,11 @@ export function showStatChoiceModal(
   const startY = GAME_HEIGHT / 2 - 85;
   stats.forEach((s, i) => {
     const y = startY + i * 42;
-    const rowBg = scene.add.rectangle(0, y, 300, 36, 0x2a2e33).setStrokeStyle(1, 0x555555, 0.4).setDepth(111);
-    const nameText = scene.add.text(-130, y, `+1 ${s.label}`, {
+    const rowBg = scene.add.rectangle(0, y, 320, 36, 0x2a2e33).setStrokeStyle(1, 0x555555, 0.4).setDepth(111);
+    const nameText = scene.add.text(-140, y, `+1 ${s.label}`, {
       fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5).setDepth(112);
-    const descText = scene.add.text(50, y, s.desc, {
+    const descText = scene.add.text(40, y, s.desc, {
       fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5).setDepth(112);
     rowBg.setInteractive({ useHandCursor: true })

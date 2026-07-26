@@ -98,6 +98,7 @@ export const EVENTS: Record<string, EventDef> = {
       {
         id: 'hand_over',
         label: 'Hand over the tablet.',
+        factionGate: 'sable',
         onSuccess: (player, ctx) => {
           player.faction.sable += 15;
           player.resonance = Math.max(0, player.resonance - 5);
@@ -119,6 +120,7 @@ export const EVENTS: Record<string, EventDef> = {
       {
         id: 'quote',
         label: 'Quote Venn scripture. (INT ≥ 7)',
+        factionGate: 'sable',
         requirement: (p) => p.stats.int >= 7,
         onSuccess: (player, ctx) => {
           player.faction.sable += 10;
@@ -160,6 +162,7 @@ export const EVENTS: Record<string, EventDef> = {
       {
         id: 'record',
         label: 'Record the frequency. (INT ≥ 6)',
+        factionGate: 'archive',
         requirement: (p) => p.stats.int >= 6,
         onSuccess: (player) => {
           player.faction.archive += 8;
@@ -199,6 +202,7 @@ export const EVENTS: Record<string, EventDef> = {
       {
         id: 'buy_supplies',
         label: 'Buy supplies. (30 gold)',
+        factionGate: 'caravan',
         requirement: (p) => p.gold >= 30,
         onSuccess: (player) => {
           player.gold -= 30;
@@ -209,6 +213,7 @@ export const EVENTS: Record<string, EventDef> = {
       {
         id: 'blank_book_gold',
         label: 'Ask about the blank book. (Pay 50 gold)',
+        factionGate: 'caravan',
         requirement: (p) => p.gold >= 50,
         onSuccess: (player) => {
           player.gold -= 50;
@@ -219,9 +224,10 @@ export const EVENTS: Record<string, EventDef> = {
       {
         id: 'blank_book_resonance',
         label: 'Ask about the blank book. (Pay 8 Resonance)',
+        factionGate: 'caravan',
         requirement: (p) => p.resonance >= 8,
         onSuccess: (player) => {
-          player.resonance -= 8;
+          player.resonance = Math.max(0, player.resonance - 8);
           player.inventory.push({ id: 'blank_book', qty: 1 });
           return 'She looks at you a long moment, then takes payment you didn\'t know you could spend. (-8 Resonance, Blank Book)';
         },
@@ -229,6 +235,7 @@ export const EVENTS: Record<string, EventDef> = {
       {
         id: 'ask_why',
         label: 'Ask why she left.',
+        factionGate: 'caravan',
         onSuccess: (player, ctx) => {
           player.faction.caravan += 5;
           player.faction.archive += 3;
@@ -1307,7 +1314,7 @@ export const EVENTS: Record<string, EventDef> = {
         label: 'Ask about the route ahead. (Pay 6 Resonance)',
         requirement: (p) => p.resonance >= 6,
         onSuccess: (player, ctx) => {
-          player.resonance -= 6;
+          player.resonance = Math.max(0, player.resonance - 6);
           player.faction.caravan += 8;
           ctx.setFlag('bought_route_info');
           return 'She draws the path in the dirt with a stick — three shortcuts, two danger zones, one place you should absolutely not sleep. (-6 Resonance, +8 Caravan)';

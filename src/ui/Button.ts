@@ -10,6 +10,7 @@ export interface ButtonOptions {
   subtitle?: string;
   textureKey?: string;
   textureHoverKey?: string;
+  depth?: number;
 }
 
 export interface Button {
@@ -49,34 +50,37 @@ export function createButton(
   }
   const container = scene.add.container(x, y, items);
   container.setSize(width, height);
+  if (opts.depth !== undefined) container.setDepth(opts.depth);
 
   let enabled = !opts.disabled;
   bg.setAlpha(enabled ? 1 : 0.4);
   text.setAlpha(enabled ? 1 : 0.5);
 
-  if (enabled) {
-    bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerover', () => {
-      if (!enabled) return;
-      bg.setTexture(texHoverKey);
-      scene.tweens.killTweensOf(container);
-      container.setScale(1);
-      scene.tweens.add({ targets: container, scale: 1.03, duration: 120, ease: 'Sine.easeOut' });
-    });
-    bg.on('pointerout', () => {
-      if (!enabled) return;
-      bg.setTexture(texKey);
-      scene.tweens.killTweensOf(container);
-      container.setScale(1);
-    });
-    bg.on('pointerdown', () => {
-      if (!enabled) return;
-      audio.click();
-      scene.tweens.killTweensOf(container);
-      container.setScale(1);
-      scene.tweens.add({ targets: container, scale: 0.96, duration: 70, yoyo: true, ease: 'Sine.easeOut' });
-      onClick();
-    });
+  bg.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Rectangle(-width / 2, -height / 2, width, height), hitAreaCallback: Phaser.Geom.Rectangle.Contains });
+  bg.on('pointerover', () => {
+    if (!enabled) return;
+    bg.setTexture(texHoverKey);
+    scene.tweens.killTweensOf(container);
+    container.setScale(1);
+    scene.tweens.add({ targets: container, scale: 1.03, duration: 120, ease: 'Sine.easeOut' });
+  });
+  bg.on('pointerout', () => {
+    if (!enabled) return;
+    bg.setTexture(texKey);
+    scene.tweens.killTweensOf(container);
+    container.setScale(1);
+  });
+  bg.on('pointerdown', () => {
+    if (!enabled) return;
+    audio.click();
+    scene.tweens.killTweensOf(container);
+    container.setScale(1);
+    scene.tweens.add({ targets: container, scale: 0.96, duration: 70, yoyo: true, ease: 'Sine.easeOut' });
+    onClick();
+  });
+
+  if (opts.disabled) {
+    bg.disableInteractive();
   }
 
   return {
@@ -88,7 +92,7 @@ export function createButton(
       bg.setAlpha(v ? 1 : 0.4);
       text.setAlpha(v ? 1 : 0.5);
       bg.setTexture(texKey);
-      if (v) bg.setInteractive({ useHandCursor: true });
+      if (v) bg.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Rectangle(-width / 2, -height / 2, width, height), hitAreaCallback: Phaser.Geom.Rectangle.Contains });
       else bg.disableInteractive();
     },
     destroy: () => container.destroy(),

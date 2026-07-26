@@ -404,6 +404,7 @@ export interface GameState {
   combatRounds: number;
   choicesMade: number;
   checkpointPage: number; // last checkpoint reached (0/40/80/120/160)
+  checkpointNodeIndex: number; // exact node index where checkpoint was taken
   checkpointSnapshot: PlayerState | null;
   deathNodeIndex: number | null;
   pendingNodeIndex: number | null; // after ambush combat, resume movement here

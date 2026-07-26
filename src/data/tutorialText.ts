@@ -44,4 +44,5 @@ export const FIRST_NODE_TOOLTIPS: Record<string, string> = {
   discovery: 'This is a Discovery node. Search for items and lore.',
   rest: 'Restore HP and MP at Rest nodes.',
   trap: 'This is a Trap node. Watch your step.',
+  landmark: 'This is a Landmark — a major boss waits here.',
 };

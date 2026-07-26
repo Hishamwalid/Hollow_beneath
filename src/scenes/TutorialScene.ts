@@ -54,7 +54,10 @@ export class TutorialScene extends Phaser.Scene {
     this.skipText = this.add.text(GAME_WIDTH - 20, 20, '[Skip Tutorial]', {
       fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(1, 0).setDepth(20).setInteractive({ useHandCursor: true });
-    this.skipText.on('pointerdown', () => this.exitTutorial());
+    this.skipText.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointer.event.stopImmediatePropagation?.();
+      this.exitTutorial();
+    });
     this.skipText.on('pointerover', () => this.skipText.setColor(PALETTE_HEX.gold));
     this.skipText.on('pointerout', () => this.skipText.setColor(PALETTE_HEX.boneMuted));
 
@@ -136,6 +139,7 @@ export class TutorialScene extends Phaser.Scene {
   }
 
   private exitTutorial() {
+    this.busy = true;
     this.timer?.remove();
     this.timer = null;
     audio.click();

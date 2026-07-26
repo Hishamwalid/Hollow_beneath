@@ -96,9 +96,11 @@ export function statMultiplier(statuses: StatusInstance[], stat: 'atk' | 'def' |
   let mult = 1.0;
   if (stat === 'matk' && hasStatus(statuses, 'focus')) mult *= 1.2;
   if (stat === 'def' && hasStatus(statuses, 'fortify')) mult *= 1.3;
+  if (stat === 'mdef' && hasStatus(statuses, 'fortify')) mult *= 1.3;
   if (stat === 'spd' && hasStatus(statuses, 'haste')) mult *= 1.25;
   if (stat === 'atk' && hasStatus(statuses, 'weakness')) mult *= 0.8;
   if (stat === 'def' && hasStatus(statuses, 'defense_down')) mult *= 0.7;
+  if (stat === 'mdef' && hasStatus(statuses, 'defense_down')) mult *= 0.7;
   if (stat === 'def' && hasStatus(statuses, 'armour_break')) mult *= 0.5;
   if (stat === 'spd' && hasStatus(statuses, 'slow')) mult *= 0.75;
   if (stat === 'spd' && hasStatus(statuses, 'root')) mult *= 0.5;

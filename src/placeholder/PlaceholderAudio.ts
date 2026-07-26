@@ -58,6 +58,7 @@ class PlaceholderAudioEngine {
   levelUp(): void { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 140, 'triangle', i * 90)); }
   shardGain(): void { this.tone(900, 50, 'sine'); this.tone(1200, 70, 'sine', 40); }
   pageTurn(): void { this.tone(200, 40, 'triangle'); this.tone(160, 60, 'triangle', 30); }
+  checkpoint(): void { this.tone(660, 80, 'triangle'); this.tone(880, 120, 'triangle', 90); }
 
   setMasterVolume(v: number): void {
     this.masterVolume = Math.min(1, Math.max(0, v / 100));

@@ -42,7 +42,7 @@ export const DEBUFF_LABELS: Record<DebuffId, string> = {
   slow: 'Slow — Speed -25%',
   armour_break: 'Armour Break — Defense -50%',
   seal_mind: 'Seal Mind — cannot gain Momentum',
-  fragile_perception: 'Fragile Perception — Resonance gain doubled',
+  fragile_perception: 'Fragile Perception — Doubles Momentum gain; Resonance abilities cost 2 Resonance',
 };
 
 export function statusLabel(id: StatusId): string {

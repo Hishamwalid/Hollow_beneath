@@ -17,6 +17,7 @@ import { createDiceRoller } from '@ui/DiceRoller';
 import { createNodePreview } from '@ui/NodePreview';
 import { createButton } from '@ui/Button';
 import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
+import { addResonanceEffects } from '@systems/ResonanceFX';
 import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
@@ -88,7 +89,7 @@ export class BoardScene extends Phaser.Scene {
     this.playerToken = this.add.image(0, 0, 'tok_player').setDisplaySize(30, 30).setDepth(20);
     this.placeTokenAt(game.currentNodeIndex);
 
-    applyResonanceTint(this, player.resonance, GAME_WIDTH, GAME_HEIGHT);
+    addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT);
 
     this.statPanel = createStatPanel(this, 16, 16, 300);
     this.statPanel.update(player);
@@ -116,6 +117,7 @@ export class BoardScene extends Phaser.Scene {
       fontSize: '12px',
       color: PALETTE_HEX.boneMuted,
       align: 'center',
+      wordWrap: { width: GAME_WIDTH - 60 },
     }).setOrigin(0.5).setDepth(6);
 
     this.diceRoller = createDiceRoller(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT - 170);
@@ -170,6 +172,7 @@ export class BoardScene extends Phaser.Scene {
       const isLandmark = LANDMARK_INDICES.includes(node.index);
       const isVisible = node.index <= visibleLimit;
       const icon = this.add.image(x, y, `node_${node.type}`).setDisplaySize(isLandmark ? 26 : 16, isLandmark ? 26 : 16).setDepth(0);
+      icon.setName(`node_${node.index}`).setData('resolved', node.resolved);
       const baseAlpha = isVisible ? (node.resolved && !isLandmark ? 0.35 : 0.9) : 0;
       icon.setAlpha(baseAlpha);
       if (!isVisible) icon.setTint(0x000000);
@@ -608,6 +611,7 @@ export class BoardScene extends Phaser.Scene {
     if (!player || !game) return;
     store.persist();
     if (CHECKPOINTS.includes(game.currentNodeIndex)) {
+      audio.checkpoint();
       const tx = this.add.text(GAME_WIDTH / 2, 300, '✦ Checkpoint Reached — Progress Saved ✦', {
         fontFamily: FONT_MONO, fontSize: '14px', color: '#c9a24b',
       }).setOrigin(0.5).setDepth(100).setAlpha(1);
@@ -633,11 +637,44 @@ export class BoardScene extends Phaser.Scene {
     const store = useGameStore.getState();
     const { game } = store;
     const hadCheckpoint = !!game?.checkpointSnapshot && (game?.checkpointPage ?? 0) > 0;
-    store.handleDeath();
-    if (hadCheckpoint) {
-      fadeToScene(this, 'Board');
-    } else {
+    if (!hadCheckpoint) {
+      store.handleDeath();
       fadeToScene(this, 'GameOver');
+      return;
     }
+
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2;
+    const d = 200;
+
+    this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(d).setInteractive();
+    this.add.text(cx, cy - 90, 'You fell. But the Loom remembers.', {
+      fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold,
+    }).setOrigin(0.5).setDepth(d);
+
+    this.add.text(cx, cy - 40, `Fallen at Page ${game.currentPage}.`, {
+      fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.bone,
+    }).setOrigin(0.5).setDepth(d);
+
+    this.add.text(cx, cy - 10, `Return to checkpoint at Page ${game.checkpointPage}.`, {
+      fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.boneMuted,
+    }).setOrigin(0.5).setDepth(d);
+
+    this.add.text(cx, cy + 20, 'HP and MP restored to 50%.', {
+      fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.gold,
+    }).setOrigin(0.5).setDepth(d);
+
+    createButton(this, cx - 110, cy + 80, 'Continue', () => {
+      store.handleDeath();
+      fadeToScene(this, 'Board');
+    }, { width: 180, height: 44, fontSize: '15px' }).container.setDepth(d);
+
+    createButton(this, cx + 110, cy + 80, 'Return to Menu', () => {
+      const { meta } = useGameStore.getState();
+      const newMeta = { ...meta, deathCount: meta.deathCount + 1 };
+      useGameStore.setState({ meta: newMeta, player: null, game: null });
+      audio.click();
+      fadeToScene(this, 'Menu');
+    }, { width: 180, height: 44, fontSize: '15px' }).container.setDepth(d);
   }
 }

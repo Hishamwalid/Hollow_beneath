@@ -157,15 +157,17 @@ export function showRunStatsScreen(
   container.add(flavorText);
 
   const btnY = GAME_HEIGHT - 50;
-  createButton(scene, cx - 80, btnY, 'Return to Menu', () => {
+  const menuBtn = createButton(scene, cx - 80, btnY, 'Return to Menu', () => {
     container.destroy();
     onReturnToMenu();
-  }, { width: 180 });
+  }, { width: 180, depth: depth + 2 });
+  container.add(menuBtn.container);
   if (onViewLoreCodex) {
-    createButton(scene, cx + 100, btnY, 'View Lore Codex', () => {
+    const codexBtn = createButton(scene, cx + 100, btnY, 'View Lore Codex', () => {
       container.destroy();
       onViewLoreCodex();
-    }, { width: 180 });
+    }, { width: 180, depth: depth + 2 });
+    container.add(codexBtn.container);
   }
 
   return {

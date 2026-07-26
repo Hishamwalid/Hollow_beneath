@@ -70,6 +70,7 @@ export function takeCheckpoint(game: GameState, player: PlayerState): GameState 
   return {
     ...game,
     checkpointPage: game.currentPage,
+    checkpointNodeIndex: game.currentNodeIndex,
     checkpointSnapshot: JSON.parse(JSON.stringify(player)) as PlayerState,
   };
 }
@@ -78,10 +79,10 @@ export function takeCheckpoint(game: GameState, player: PlayerState): GameState 
 export function restoreCheckpoint(game: GameState): { game: GameState; player: PlayerState | null } {
   if (!game.checkpointSnapshot) return { game: { ...game, isDead: false }, player: null };
   const restoredPlayer = JSON.parse(JSON.stringify(game.checkpointSnapshot)) as PlayerState;
-  const firstNodeOfPage = (game.checkpointPage - 1) * 10 + 1;
+  const restoredNode = game.checkpointNodeIndex ?? (game.checkpointPage - 1) * 10 + 1;
   const restoredGame: GameState = {
     ...game,
-    currentNodeIndex: firstNodeOfPage,
+    currentNodeIndex: restoredNode,
     currentPage: game.checkpointPage,
     isDead: false,
   };

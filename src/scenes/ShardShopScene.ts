@@ -41,7 +41,7 @@ export class ShardShopScene extends Phaser.Scene {
         .text(cx - 200, y, entry.description, { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted, wordWrap: { width: 340 } })
         .setOrigin(0, 0.5);
 
-      const costLabel = this.add.text(cx + 300, y, '', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+      const costLabel = this.add.text(cx + 350, y, '', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold }).setOrigin(0.5);
       const btn = createButton(
         this,
         cx + 250,

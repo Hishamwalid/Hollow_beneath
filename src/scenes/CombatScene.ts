@@ -7,7 +7,8 @@ import type { EventApplyCtx, PlayerState } from '@data/types';
 import { CombatEngine, type CombatSnapshot, type MomentumChoice } from '@systems/CombatEngine';
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
-import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
+import { showWhisper } from '@ui/WhisperOverlay';
+import { addResonanceEffects } from '@systems/ResonanceFX';
 import { createStatPanel } from '@ui/StatPanel';
 import { createEnemyDisplay, createApPips, createActionBar, createSpeedBar, type EnemyDisplay } from '@ui/CombatHUD';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
@@ -73,7 +74,7 @@ export class CombatScene extends Phaser.Scene {
       fadeToScene(this, 'Board');
       return;
     }
-    applyResonanceTint(this, player.resonance, GAME_WIDTH, GAME_HEIGHT);
+    addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT, { nodePulse: false, shimmer: false });
 
     const bossDef = data.mode === 'boss' && data.bossId ? BOSSES[data.bossId] : undefined;
     const safeEnemyIds = data.enemyIds ?? [];
@@ -332,23 +333,23 @@ export class CombatScene extends Phaser.Scene {
       }
       case 'guard': {
         if (this.statPanel) this.flashTarget(this.statPanel.container, 0x4a6fa5);
-        this.floatingText(200, 620, 'GUARD', PALETTE_HEX.player);
+        this.floatingText(280, 620, 'GUARD', PALETTE_HEX.player);
         break;
       }
       case 'item': {
         if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
         const healed = snap.playerHP - prevPlayerHP;
-        if (healed > 0) this.floatingText(200, 620, `+${healed} HP`, PALETTE_HEX.ok);
+        if (healed > 0) this.floatingText(280, 640, `+${healed} HP`, PALETTE_HEX.ok);
         break;
       }
       case 'analyze': {
         if (display) { this.flashTarget(display.container, 0xc9a24b); }
-        if (targetKey) this.floatingText(200, 260, 'WEAKNESSES READ', PALETTE_HEX.gold);
+        if (targetKey) this.floatingText(280, 260, 'WEAKNESSES READ', PALETTE_HEX.gold);
         break;
       }
       case 'sunder': {
         if (display) { this.flashTarget(display.container, 0xe67e22); this.shakeTarget(display.container); }
-        if (targetKey) this.floatingText(200, 260, 'ARMOR BROKEN', '#e67e22');
+        if (targetKey) this.floatingText(280, 260, 'ARMOR BROKEN', '#e67e22');
         showAllEnemyDamage();
         break;
       }
@@ -367,7 +368,7 @@ export class CombatScene extends Phaser.Scene {
       audio.damageTaken();
       if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
       const dmg = prevPlayerHP - snap.playerHP;
-      this.floatingText(200, 600, `-${dmg}`, PALETTE_HEX.danger);
+      this.floatingText(280, 600, `-${dmg}`, PALETTE_HEX.danger);
     }
     this.lastPlayerHP = snap.playerHP;
   }
@@ -459,7 +460,7 @@ export class CombatScene extends Phaser.Scene {
           const healed = snap.playerHP - prevHP;
           if (healed > 0) {
             if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
-            this.floatingText(200, 620, `+${healed} HP`, PALETTE_HEX.ok);
+            this.floatingText(280, 640, `+${healed} HP`, PALETTE_HEX.ok);
           }
           this.lastPlayerHP = snap.playerHP;
         },
@@ -478,7 +479,7 @@ export class CombatScene extends Phaser.Scene {
       audio.damageTaken();
       if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
       const dmg = prevHP - snap.playerHP;
-      this.floatingText(200, 600, `-${dmg}`, PALETTE_HEX.danger);
+      this.floatingText(280, 600, `-${dmg}`, PALETTE_HEX.danger);
     }
     this.lastPlayerHP = snap.playerHP;
     if (snap.phase === 'player' || (snap.phase !== 'victory' && snap.phase !== 'defeat' && snap.phase !== 'fled' && snap.phase !== 'momentum_choice')) {
@@ -489,7 +490,7 @@ export class CombatScene extends Phaser.Scene {
           audio.damageTaken();
           if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
           const dmg2 = this.lastPlayerHP - next.playerHP;
-          this.floatingText(200, 600, `-${dmg2}`, PALETTE_HEX.danger);
+          this.floatingText(280, 600, `-${dmg2}`, PALETTE_HEX.danger);
         }
         this.lastPlayerHP = next.playerHP;
       });
@@ -603,6 +604,6 @@ export class CombatScene extends Phaser.Scene {
         wordWrap: { width: 640 },
       })
       .setOrigin(0.5, 0);
-    createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140, 'Continue', () => fadeToScene(this, 'Board'), { width: 220 });
+    createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140, 'Continue', () => fadeToScene(this, 'Board'), { width: 220, depth: 37 });
   }
 }

@@ -10,6 +10,7 @@ import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { influenceStatus } from '@data/factions';
+import { addResonanceEffects } from '@systems/ResonanceFX';
 
 interface EventSceneData {
   eventDef: EventDef;
@@ -33,6 +34,7 @@ export class EventScene extends Phaser.Scene {
       fadeToScene(this, 'Board');
       return;
     }
+    addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT, { nodePulse: false, shake: false, shimmer: false });
 
     if (!player.history.includes(`event_seen:${event.id}`)) {
       player.history.push(`event_seen:${event.id}`);
@@ -49,6 +51,7 @@ export class EventScene extends Phaser.Scene {
   }
 
   private showChoices(choices: EventChoice[]) {
+    this.input.removeAllListeners('pointerdown');
     const { player } = useGameStore.getState();
     if (!player) return;
     const visible = choices.filter((c) => !c.requirement || c.requirement?.(player));

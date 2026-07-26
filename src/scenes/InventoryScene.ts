@@ -6,6 +6,7 @@ import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
+import { addResonanceEffects } from '@systems/ResonanceFX';
 
 const SLOT_LABELS: Record<keyof Equipment, string> = {
   weapon: 'Weapon',
@@ -59,6 +60,7 @@ export class InventoryScene extends Phaser.Scene {
     const store = useGameStore.getState();
     const player = store.player;
     if (!player) { fadeToScene(this, 'Menu'); return; }
+    addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT, { nodePulse: false, shake: false, shimmer: false, textGlitch: false });
 
     this.add.text(cx, 50, 'Inventory', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
     this.add.text(cx, 85, `Gold: ${player.gold}`, { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.goldBright }).setOrigin(0.5);
@@ -123,17 +125,24 @@ export class InventoryScene extends Phaser.Scene {
     if (items.length === 0) {
       this.add.text(panelX + 20, 440, 'Nothing carried.', { fontFamily: FONT_SERIF, fontSize: '13px', color: '#555555', fontStyle: 'italic' });
     } else {
-      items.forEach((entry, i) => {
+      const maxVisible = Math.min(items.length, 10);
+      for (let i = 0; i < maxVisible; i++) {
+        const entry = items[i];
         const y = 440 + i * 34;
         const def = ITEMS[entry.id];
         const itemName = def?.name ?? entry.id;
         const desc = def?.description ?? '';
         const kind = def?.kind ?? '';
         this.add.text(panelX + 20, y, `×${entry.qty}`, { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold });
-        this.add.text(panelX + 55, y, itemName, { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone });
-        this.add.text(panelX + 270, y, desc, { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted });
+        this.add.text(panelX + 55, y, itemName, { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone, wordWrap: { width: 200 } });
+        this.add.text(panelX + 270, y, desc, { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted, wordWrap: { width: 300 } });
         this.add.text(panelX + 600, y, kind, { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted });
-      });
+      }
+      if (items.length > 10) {
+        this.add.text(panelX + 20, 440 + 10 * 34, `... and ${items.length - 10} more items`, {
+          fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+        });
+      }
     }
   }
 

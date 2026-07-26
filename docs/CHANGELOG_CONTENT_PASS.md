@@ -68,15 +68,92 @@ Items completed from the full overhaul plan:
 | **C1** | Onboarding / Tutorial (5-screen tutorial auto-shown on first run, How to Play button, first-run contextual tooltips, per PLAN_OVERHAUL §3.1) | ✅ Done |
 | **C5** | Settings Expansion (master volume slider, text speed slider, screen shake toggle, credits, clear data, localStorage persistence, per PLAN_OVERHAUL §6.1) | ✅ Done |
 | **C2** | Landmark Cinematic (boss approach cards with letter-by-letter name reveal, screen shake + red flash on boss combat entry, pulsing gold border, celebration particles + sequential reward animations on defeat, per PLAN_OVERHAUL §3.2) | ✅ Done |
+| **C3** | Resonance Visual Effects (tier-based screen effects, ResonanceFX system, per PLAN_OVERHAUL §3.3) | ✅ Done |
+| **D1** | Build verification (tsc, tests, vite build) | ✅ Done |
 
-New files: `src/systems/LevelSystem.ts`, `src/ui/LevelUpModal.ts`, `src/data/skillTree.ts`, `src/scenes/SkillTreeScene.ts`, `src/ui/RunStatsScreen.ts`, `src/data/eventTemplates.ts`, `src/scenes/TutorialScene.ts`, `src/data/tutorialText.ts`, `src/systems/SettingsManager.ts`, `src/data/credits.ts`.
+New files: `src/systems/LevelSystem.ts`, `src/ui/LevelUpModal.ts`, `src/data/skillTree.ts`, `src/scenes/SkillTreeScene.ts`, `src/ui/RunStatsScreen.ts`, `src/data/eventTemplates.ts`, `src/scenes/TutorialScene.ts`, `src/data/tutorialText.ts`, `src/systems/SettingsManager.ts`, `src/data/credits.ts`, `src/systems/ResonanceFX.ts`.
 
 ### Remaining
 
 | Item | Description |
 |------|-------------|
-| **C3** | Resonance Visual Effects (tier-based screen effects, ResonanceFX system, per PLAN_OVERHAUL §3.3) |
-| **D1–D9** | Integration & test phase (build verification, full playthrough, edge cases, bug fix pass) |
+| **D2–D8** | Manual integration tests (full playthrough, edge cases, save/load, settings) |
+| **D9** | Final wrap (changelog update, commit) |
+
+## Deep Audit Bug Fix Pass
+
+Three parallel audit agents (CombatSystem, Economy/Items, Events/Board/Scenes) ran a super in-depth codebase review. **27 bugs** found and fixed across 10 files.
+
+### Critical
+
+| Bug | File | Impact |
+|-----|------|--------|
+| `beginRound` set `phase='player'` after `checkOutcome()` set defeat/victory | `CombatEngine.ts` | Could soft-lock on death |
+| `useSkill` consumed AP before MP check — AP lost on insufficient MP | `CombatEngine.ts` | Wasted action points |
+| `resonanceAbility` consumed MP before AP check — MP lost on insufficient AP | `CombatEngine.ts` | Wasted mana |
+| `veilStepGuaranteed` not reset per round — infinite dodge exploit | `CombatEngine.ts` | Balance break |
+| `fossilLastLaw` flag persisted across rounds — permanent skill-repeat lock | `CombatEngine.ts` | Entire combat broken |
+| Phalanx: 50% damage dealt to *each* ally instead of split among them | `CombatEngine.ts` | Damage multiplication |
+| Hunter's Mark bypassed `computeAndApplyDamage` — no crit/momentum/resonance | `CombatEngine.ts` | Missing bonuses |
+| EventEngine `resolveEventChoice` dropped `combat` field on check-pass path | `EventEngine.ts` | Event combats never triggered |
+| 2 resonance `-=` mutations not clamped with `Math.max(0, …)` | `events.ts` | Resonance could go negative |
+| `addXp` had no `MAX_LEVEL` cap — could over-level past 15 | `gameStore.ts` | Economy break |
+| `awardStatPoint` had no `STAT_MAX` cap — stats above 10 | `gameStore.ts` | Economy break |
+| `player.totalRuns` never synced from `meta.totalRuns` — always 0 | `gameStore.ts` | First-run tooltip every run |
+| Checkpoint restored to page start instead of exact node index | `SaveManager.ts`, `types.ts` | Lost up to 9 nodes of progress |
+| `handleDeath` passed stale `game` (without `deathNodeIndex`) to `restoreCheckpoint` | `gameStore.ts` | Ghost never showed |
+| "Return to Menu" set `lastRunStats: null`, overwriting death record | `BoardScene.ts` | Lost death stats |
+
+### Medium
+
+| Bug | File | Impact |
+|-----|------|--------|
+| `statMultiplier` had no `mdef` branch — magic defense immune to status | `StatusEffectSystem.ts` | Missing gameplay |
+| `fragile_perception` description said "Resonance gain doubled" (wrong) | `statusEffects.ts` | Misled players |
+| `landmark` missing from `FIRST_NODE_TOOLTIPS` | `tutorialText.ts` | Missing tooltip |
+| Initiative order double-sorted | `CombatEngine.ts` | Redundant code |
+
+## UI / Layout Bug Fix Pass
+
+**18 layout and click-registration issues** found and fixed across 10 files.
+
+### Critical
+
+| Issue | File | Fix |
+|-------|------|-----|
+| Button hit area used original texture size (e.g. 32×32) not `setDisplaySize` | `Button.ts` | Added explicit `Phaser.Geom.Rectangle` hit area |
+| `setEnabled(true)` never re-attached event handlers after `disabled=true` | `Button.ts` | Always attach handlers; disable via `disableInteractive()` |
+| RunStatsScreen buttons at depth 0 behind overlay at depth 200 — **invisible** | `RunStatsScreen.ts` | Added buttons to container with proper depth |
+| CombatScene Victory "Continue" button at depth 0 behind overlay at depth 35 — **invisible** | `CombatScene.ts` | Set button depth=37 |
+| MenuScene title at y=−6 — top 32px clipped off-screen | `MenuScene.ts` | Reduced font 52→44px, clamped y≥20 |
+| TutorialScene "Skip Tutorial" fired both `exitTutorial` AND scene-wide handler — **double transition** | `TutorialScene.ts` | `stopImmediatePropagation` + `busy=true` guard |
+| SkillTreeScene confirm purchase overlay not interactive — clicks passed through to nodes | `SkillTreeScene.ts` | Added `.setInteractive()` |
+| LevelUpModal backgrounds not interactive — clicks fell through to CombatScene | `LevelUpModal.ts` | Added `.setInteractive()` to both modal backgrounds |
+
+### High
+
+| Issue | File | Fix |
+|-------|------|-----|
+| Stat description text (x=50) overflowed row bg (right edge x=150) | `LevelUpModal.ts` | Adjusted row width, name/desc positions |
+| `sceneTransition.fadeToScene` had no debounce — rapid clicks queued multiple transitions | `sceneTransition.ts` | Added `transitioning` guard flag |
+| Enemy token hit area mismatch (same as Button.ts bug) | `CombatHUD.ts` | Click handler moved to `panelBg` |
+| Enemy name/affinity no wordWrap — long names overflowed panel | `CombatHUD.ts` | Added `wordWrap: { width: 120 }` |
+| EventScene scene-wide `pointerdown` remained active after choices shown | `EventScene.ts` | `removeAllListeners` in `showChoices()` |
+| Inventory items overflowed below screen; description had no wordWrap | `InventoryScene.ts` | Capped at 10 items, wordWrap on name/desc, "+N more" |
+| SettingsScene credits could overflow below viewport | `SettingsScene.ts` | Added y-bound guard |
+| Floating combat text at (200, 600/620) overlapped StatPanel (16→256 x-range) | `CombatScene.ts` | All floating text moved to x=280 |
+
+### Medium
+
+| Issue | File | Fix |
+|-------|------|-----|
+| ShardShop Buy button (x=250, w=90) and cost label (x=300 center) overlapped | `ShardShopScene.ts` | Cost label moved to x=350 |
+| ChoiceMenu buttons compressed to 6px gap with many items | `ChoiceMenu.ts` | Min spacing 56→62 |
+| BoardScene log text no wordWrap — long messages overflowed screen | `BoardScene.ts` | Added `wordWrap` |
+
+## Validation
+
+`npx tsc --noEmit` clean, `npm run test` (20 smoke tests) passes, `npx vite build` produces production bundle — all verified after every bug fix batch.
 
 ## Validation
 

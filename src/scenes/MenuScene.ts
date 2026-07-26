@@ -39,13 +39,13 @@ export class MenuScene extends Phaser.Scene {
     const btnH = 52;
     const btnGap = 70;
     const buttonsH = buttons.length * btnH + (buttons.length - 1) * btnGap;
-    const contentH = 52 + 30 + 16 + 30 + 14 + 60 + buttonsH;
-    let y = (GAME_HEIGHT - contentH) / 2;
+    const contentH = 52 + 16 + 30 + 16 + 14 + 60 + buttonsH;
+    let y = Math.max(20, (GAME_HEIGHT - contentH) / 2);
 
     this.add
-      .text(cx, y + 26, 'THE HOLLOW BENEATH', { fontFamily: FONT_SERIF, fontSize: '52px', color: PALETTE_HEX.gold })
+      .text(cx, y, 'THE HOLLOW BENEATH', { fontFamily: FONT_SERIF, fontSize: '44px', color: PALETTE_HEX.gold })
       .setOrigin(0.5);
-    y += 52 + 30;
+    y += 44 + 24;
 
     this.add
       .text(cx, y, 'a descent, a translation, a mistake made carefully', {

@@ -42,10 +42,10 @@ export function resolveEventChoice(player: PlayerState, choice: EventChoice, rng
   if (choice.check) {
     const passed = statCheck(player.stats[choice.check.stat], choice.check.dc, rng);
     if (passed) {
-      return { text: choice.onSuccess(player, ctx) };
+      return { text: choice.onSuccess(player, ctx), combat: choice.combat };
     }
     const text = choice.onFailure ? choice.onFailure(player, ctx) : choice.onSuccess(player, ctx);
-    return { text, combat: choice.onFailure ? choice.combat : undefined };
+    return { text, combat: choice.combat };
   }
   const text = choice.onSuccess(player, ctx);
   return { text, combat: choice.combat };

@@ -135,7 +135,10 @@ export class SettingsScene extends Phaser.Scene {
     }).setOrigin(0.5);
     y += 30;
 
-    CREDITS.forEach((line) => {
+    const maxLines = 14;
+    const shown = CREDITS.slice(0, maxLines);
+    shown.forEach((line) => {
+      if (y > GAME_HEIGHT - 80) return;
       const isTitle = line === 'THE HOLLOW BENEATH';
       const isEmpty = line === '';
       const t = this.add.text(cx, y, line, {
@@ -146,6 +149,11 @@ export class SettingsScene extends Phaser.Scene {
       }).setOrigin(0.5);
       y += isEmpty ? 10 : (isTitle ? 22 : 18);
     });
+    if (CREDITS.length > maxLines) {
+      this.add.text(cx, y, `... ${CREDITS.length - maxLines} more lines`, {
+        fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+      }).setOrigin(0.5);
+    }
   }
 
   private buildClearData(cx: number) {

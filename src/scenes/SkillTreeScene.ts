@@ -183,7 +183,7 @@ export class SkillTreeScene extends Phaser.Scene {
 
   private confirmPurchase(tree: SkillTreeDef, node: SkillTreeNode, refreshPointText: () => void) {
     this.hideTooltip();
-    const overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.7).setDepth(30);
+    const overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.7).setDepth(30).setInteractive();
     const box = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 400, 180, 0x1a1d22).setStrokeStyle(1, 0xc9a24b, 0.6).setDepth(31);
 
     const skillDef = NAMED_SKILLS[node.id];

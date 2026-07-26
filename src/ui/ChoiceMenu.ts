@@ -37,7 +37,7 @@ export function createChoiceMenu(
   const n = Math.max(1, items.length);
 
   const maxSpacingThatFits = n > 1 ? (bottomBound - halfButton - y) / (n - 1) : desiredSpacing;
-  const spacing = n > 1 ? Math.max(56, Math.min(desiredSpacing, maxSpacingThatFits)) : desiredSpacing;
+  const spacing = n > 1 ? Math.max(62, Math.min(desiredSpacing, maxSpacingThatFits)) : desiredSpacing;
 
   const blockBottom = y + (n - 1) * spacing + halfButton;
   const shiftUp = Math.max(0, blockBottom - bottomBound);

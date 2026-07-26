@@ -108,6 +108,8 @@ export class CombatEngine {
   private firstAttackUsed = false;
   /** Tracks whether the player used resonanceAbility or a magic-type skill last turn, for venn_custodian AI. */
   private _playerUsedMagicLastTurn = false;
+  /** Whether fossilLastLaw was enforced this combat; reset per round. */
+  private fossilLastLawEnforced = false;
 
   constructor(setup: CombatSetup) {
     this.player = setup.player;
@@ -217,6 +219,9 @@ export class CombatEngine {
     this.playerAP = 2 + (this.round === 1 && this.player.skillsKnown.includes('borrowed_time') ? 1 : 0);
     this.guarding = false;
     this.lastActionRepeated = false;
+    this.veilStepGuaranteed = false;
+    this.fossilLastLawEnforced = false;
+    this.flags.fossilLastLaw = 0;
 
     const alive = this.aliveEnemies();
     for (const e of alive) {
@@ -230,6 +235,7 @@ export class CombatEngine {
     for (const e of faster) this.resolveEnemyTurn(e);
 
     this.checkOutcome();
+    if (this.player.currentHP <= 0 || this.aliveEnemies().length === 0) return this.snapshot();
     this.phase = 'player';
     return this.snapshot();
   }
@@ -490,8 +496,8 @@ export class CombatEngine {
     return this.rng() < 0.1;
   }
 
-  private computeAndApplyDamage(target: InternalEnemy, sourcePower: number, defenseStat: number, damageType: DamageType, label: string, statKey: 'def' | 'mdef' = 'def'): { dmg: number; hit: boolean; crit: boolean; weak: boolean } {
-    if (!this.rollHit(target)) {
+  private computeAndApplyDamage(target: InternalEnemy, sourcePower: number, defenseStat: number, damageType: DamageType, label: string, statKey: 'def' | 'mdef' = 'def', guaranteedHit = false): { dmg: number; hit: boolean; crit: boolean; weak: boolean } {
+    if (!guaranteedHit && !this.rollHit(target)) {
       this.log.push(`${label} misses ${target.name}.`);
       return { dmg: 0, hit: false, crit: false, weak: false };
     }
@@ -535,15 +541,15 @@ export class CombatEngine {
     if (mitigated < dmg) this.log.push(`${target.name}'s Barrier absorbs part of the blow.`);
     target.hp = Math.max(0, target.hp - mitigated);
 
-    // Echo-Soldier Phalanx: when one is damaged, allies share the remaining damage
+    // Echo-Soldier Phalanx: when one is damaged, 50% is split among allies
     if (target.defId === 'echo_soldier' && mitigated > 0) {
       const phalanxAllies = this.aliveEnemies().filter((e) => e.defId === 'echo_soldier' && e._key !== target._key);
       if (phalanxAllies.length > 0) {
-        const shared = Math.round(mitigated * 0.5);
+        const shared = Math.round((mitigated * 0.5) / phalanxAllies.length);
         for (const ally of phalanxAllies) {
           ally.hp = Math.max(0, ally.hp - shared);
         }
-        this.log.push(`The phalanx shares the blow — ${phalanxAllies.map((a) => a.name).join(', ')} each take ${shared} redirected damage.`);
+        this.log.push(`The phalanx shares the blow — ${phalanxAllies.map((a) => a.name).join(', ')} take ${shared} redirected damage each.`);
       }
     }
 
@@ -586,9 +592,17 @@ export class CombatEngine {
     }
 
     // Last Law: fossil_king prevents repeating the same skill twice in a row
-    if (this.flags.fossilLastLaw === 1 && this.lastActionId === `skill:${skillId}`) {
+    if ((this.fossilLastLawEnforced || this.flags.fossilLastLaw === 1) && this.lastActionId === `skill:${skillId}`) {
       this.log.push('The Last Law prohibits repeating the same skill. The action is wasted.');
-      this.flags.fossilLastLaw = 0;
+      this.fossilLastLawEnforced = true;
+      this.checkOutcome();
+      return this.snapshot();
+    }
+
+    // MP cost check — before AP deduction
+    const mpCost = skill.mpCost ?? 0;
+    if (mpCost > 0 && this.player.currentMP < mpCost) {
+      this.log.push(`Not enough MP (need ${mpCost}).`);
       this.checkOutcome();
       return this.snapshot();
     }
@@ -597,14 +611,6 @@ export class CombatEngine {
     if (this.playerAP < cost) return this.snapshot();
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
-
-    // MP cost check
-    const mpCost = skill.mpCost ?? 0;
-    if (mpCost > 0 && this.player.currentMP < mpCost) {
-      this.log.push(`Not enough MP (need ${mpCost}).`);
-      this.checkOutcome();
-      return this.snapshot();
-    }
     if (mpCost > 0) this.player.currentMP = Math.max(0, this.player.currentMP - mpCost);
 
     if (skill.tag === 'active_martyrs_flame') {
@@ -634,12 +640,7 @@ export class CombatEngine {
       const target = this.pickTarget(targetKey);
       if (target) {
         const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk') * (skill.skillPower ?? 1);
-        const weakness = target.affinities.pierce ?? 1.0;
-        const variance = 0.9 + this.rng() * 0.2;
-        const raw = Math.max(3, Math.round((atk - target.def / 2) * weakness * variance));
-        const mitigated = applyBarrier(target.statuses, raw);
-        target.hp = Math.max(0, target.hp - mitigated);
-        this.log.push(`Hunter's Mark cannot miss — hits ${target.name} for ${mitigated} damage.`);
+        this.computeAndApplyDamage(target, atk, target.def, 'pierce', "Hunter's Mark", 'def', true);
       }
     } else if (skill.tag === 'active_overwritten_truth') {
       const target = this.pickTarget(targetKey);
@@ -669,15 +670,15 @@ export class CombatEngine {
   resonanceAbility(targetKey?: string): CombatSnapshot {
     if (this.phase !== 'player' || this.player.resonance < 25) return this.snapshot();
     if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    const baseCost = this.player.skillsKnown.includes('resonant_study') ? 1 : ACTION_AP_COST.resonance_ability;
+    const cost = this.freeActionCharges > 0 ? 0 : baseCost;
+    if (this.playerAP < cost) return this.snapshot();
     if (this.player.currentMP < 10) {
       this.log.push('Not enough MP to channel Resonance (need 10 MP).');
       this.checkOutcome();
       return this.snapshot();
     }
     this.player.currentMP -= 10;
-    const baseCost = this.player.skillsKnown.includes('resonant_study') ? 1 : ACTION_AP_COST.resonance_ability;
-    const cost = this.freeActionCharges > 0 ? 0 : baseCost;
-    if (this.playerAP < cost) return this.snapshot();
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     const target = this.pickTarget(targetKey);
@@ -841,15 +842,11 @@ export class CombatEngine {
     const bossAlive = this.enemies.find((e) => e._isBoss && e.hp > 0);
     const aliveEnemies = this.enemies.filter((e) => e.hp > 0);
     const playerSpd = this.effectivePlayerSpeed();
-    const playerKey = 'player';
+    const sortedEnemies = [...this.aliveEnemies()].sort((a, b) => b.spd - a.spd);
     const initiativeOrder = [
-      playerKey,
-      ...aliveEnemies.sort((a, b) => b.spd - a.spd).map((e) => e._key),
-    ].sort((a, b) => {
-      const spdA = a === playerKey ? playerSpd : aliveEnemies.find((e) => e._key === a)!.spd;
-      const spdB = b === playerKey ? playerSpd : aliveEnemies.find((e) => e._key === b)!.spd;
-      return spdB - spdA;
-    });
+      'player',
+      ...sortedEnemies.map((e) => e._key),
+    ];
     return {
       round: this.round,
       phase: this.phase,

@@ -6,14 +6,16 @@ import { EVENTS, eligibleEvents } from '@data/events';
 import { MINOR_LANDMARKS } from '@data/minorLandmarks';
 import { resolveEventChoice } from '@systems/EventEngine';
 import { evaluateEnding } from '@data/endings';
-import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES } from '@data/stats';
+import { computeDerivedStats, getEquipmentBonuses, STARTING_EQUIPMENT_BONUSES } from '@data/stats';
 import { STARTING_FACTIONS } from '@data/factions';
 import { ENEMIES } from '@data/enemies';
 import { ITEMS } from '@data/items';
 import { NAMED_SKILLS, DISCOVERABLE_SKILLS, PRESET_STARTING_SKILL } from '@data/skills';
 import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { TOTAL_WHISPERS, WHISPERS } from '@data/whispers';
-import type { PlayerState, StatBlock } from '@data/types';
+import type { PlayerState, StatBlock, Equipment } from '@data/types';
+import { xpForLevel, computeLevelUp, MAX_LEVEL } from '@systems/LevelSystem';
+import { settingsManager } from '@systems/SettingsManager';
 
 let failures = 0;
 function assert(cond: boolean, msg: string) {
@@ -37,6 +39,7 @@ function makeTestPlayer(stats: StatBlock): PlayerState {
     xp: 0,
     skillsKnown: ['martyrs_flame', 'sealing_strike'],
     resonance: 40,
+    resonancePeak: 40,
     faction: { ...STARTING_FACTIONS },
     equipment: { weapon: 'rusty_dagger', armour: 'leather_vest', accessory: null, focus: 'cracked_lens' },
     inventory: [{ id: 'ration', qty: 2 }, { id: 'bandage', qty: 1 }],
@@ -51,6 +54,8 @@ function makeTestPlayer(stats: StatBlock): PlayerState {
     gold: 50,
     totalRuns: 0,
     bestRun: { page: 0, time: 0 },
+    skillPoints: 0,
+    skillTreePurchases: {},
   };
 }
 
@@ -230,6 +235,80 @@ ok('all documented events/choices exercised');
     assert(count >= 5, `whisper tier "${t}" has reasonable coverage (has ${count})`);
   }
   ok('whisper registry has coverage across all 4 resonance tiers');
+}
+
+// ---- 11. Level-up thresholds -----------------------------------------------
+{
+  assert(xpForLevel(1) === 0, 'xpForLevel(1) = 0');
+  assert(xpForLevel(2) === 61, 'xpForLevel(2) = 61');
+  const res1 = computeLevelUp(0, 1);
+  assert(res1.newLevel === 1 && res1.levelsGained === 0, '0 XP → no level up');
+  const res2 = computeLevelUp(61, 1);
+  assert(res2.newLevel === 2 && res2.levelsGained === 1, '61 XP → level 2');
+  const res3 = computeLevelUp(1320, 1);
+  assert(res3.newLevel >= 12 && res3.levelsGained >= 11, '1320 XP → level 12+');
+  ok(`level-up thresholds verified; max_level=${MAX_LEVEL}`);
+}
+
+// ---- 12. MP costs in combat -------------------------------------------------
+{
+  const player = makeTestPlayer({ str: 8, dex: 6, con: 8, int: 10, will: 8 });
+  player.skillsKnown.push('hunters_mark');
+  const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set() });
+  let snap = engine.beginRound();
+  const mpBefore = snap.playerMP;
+  snap = engine.useSkill('hunters_mark'); // apCost:1, mpCost:3
+  assert(snap.phase === 'player', 'useSkill with enough MP/AP does not end turn');
+  assert(snap.playerMP <= mpBefore - 3, 'MP deducted after skill use (3 MP spent)');
+  player.currentMP = 0;
+  snap = engine.useSkill('hunters_mark');
+  assert(snap.log.some(l => l.includes('Not enough MP')), '"not enough MP" entry when MP is 0');
+  ok('MP cost deduction and insufficient-MP block verified');
+}
+
+// ---- 13. Equipment stat bonuses --------------------------------------------
+{
+  const bonuses = getEquipmentBonuses({
+    weapon: 'rusty_dagger', armour: 'leather_vest', accessory: null, focus: 'cracked_lens',
+  });
+  assert(bonuses.weaponAtk === 2, 'rusty_dagger grants +2 ATK');
+  assert(bonuses.armourDef === 1, 'leather_vest grants +1 DEF');
+  assert(bonuses.focusMatk === 1, 'cracked_lens grants +1 MATK');
+  const derived = computeDerivedStats({ str: 8, dex: 6, con: 8, int: 4, will: 4 }, bonuses);
+  assert(derived.attack === 8 * 2 + 2, 'ATK = STR*2 + weapon bonus');
+  assert(derived.defense === 8 * 2 + 1, 'DEF = CON*2 + armour bonus');
+  assert(derived.magicAttack === 4 * 2 + 1, 'MATK = INT*2 + focus bonus');
+  ok('equipment bonus calculations verified');
+}
+
+// ---- 14. Settings persistence (in-memory) ----------------------------------
+{
+  const s = settingsManager;
+  const defaults = s.get();
+  assert(defaults.masterVolume === 100 && defaults.textSpeed === 100 && defaults.screenShake === true, 'default settings values');
+  s.set({ masterVolume: 50, textSpeed: 150, screenShake: false });
+  const changed = s.get();
+  assert(changed.masterVolume === 50, 'masterVolume persisted to 50');
+  assert(changed.textSpeed === 150, 'textSpeed persisted to 150');
+  assert(changed.screenShake === false, 'screenShake persisted to false');
+  s.reset();
+  const restored = s.get();
+  assert(restored.masterVolume === 100, 'reset restores masterVolume to 100');
+  ok('settings manager get/set/reset works');
+}
+
+// ---- 15. Event chain flag filtering -----------------------------------------
+{
+  const player = makeTestPlayer({ str: 5, dex: 5, con: 5, int: 5, will: 5 });
+  player.flags = {};
+  const poolWithout = eligibleEvents(5, 50, new Set(), player.flags);
+  const hasGhost = poolWithout.some(e => e.id === 'ghosts_question');
+  assert(!hasGhost, 'ghosts_question not eligible without ate_venn_bread flag');
+  player.flags = { ate_venn_bread: true };
+  const poolWith = eligibleEvents(5, 50, new Set(), player.flags);
+  const hasGhostNow = poolWith.some(e => e.id === 'ghosts_question');
+  assert(hasGhostNow, 'ghosts_question eligible when ate_venn_bread flag is set');
+  ok('event chain flag filtering via requiresAnyFlag works');
 }
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} SMOKE TEST(S) FAILED`);

@@ -1,7 +1,7 @@
 # THE HOLLOW BENEATH — Full Overhaul Plan
 ### Storytelling × Understandability × Fun
 
-Based on comparison between current codebase and [`THE_HOLLOW_BENEATH_Improved_GDD_v2.md`](./THE_HOLLOW_BENEATH_Improved_GDD_v2.md).
+Based on comparison between current codebase and the GDD v2 specification (see `docs/THE_HOLLOW_BENEATH_Art_Audio_Asset_Checklist.md` for the reconciled asset inventory).
 
 ---
 

@@ -3,18 +3,19 @@ import type { EquipmentBonuses } from '@data/stats';
 import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES, getEquipmentBonuses } from '@data/stats';
 import { STARTING_FACTIONS } from '@data/factions';
 import { STARTING_INVENTORY } from '@data/items';
+import { STAT_MAX } from '@data/stats';
 import type { GameState, PlayerState, StatBlock, BestRunStats, RunStats, Equipment } from '@data/types';
 import { generateBoard } from '@systems/BoardGenerator';
 import { mulberry32, randomSeed } from '@systems/rng';
 import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } from '@systems/SaveManager';
 import { applyUnlocksToNewRun, deathRefund, shardsForEnding } from '@systems/EchoShardSystem';
-import { computeLevelUp } from '@systems/LevelSystem';
+import { computeLevelUp, MAX_LEVEL } from '@systems/LevelSystem';
 import { SKILL_TREES } from '@data/skillTree';
 import { TOTAL_MAJOR_BOSSES } from '@data/bosses';
 import { getLoreFragment, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { resonanceTier, TIER_LABELS } from '@systems/ResonanceSystem';
 
-export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[]): PlayerState {
+export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0): PlayerState {
   const derived = computeDerivedStats(stats, STARTING_EQUIPMENT_BONUSES as EquipmentBonuses);
   const player: PlayerState = {
     stats,
@@ -40,7 +41,7 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     echoShards: 0,
     unlocks: [...purchasedUnlocks],
     gold: 50,
-    totalRuns: 0,
+    totalRuns,
     bestRun: { page: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
   };
   applyUnlocksToNewRun(player, purchasedUnlocks);
@@ -119,7 +120,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { meta } = get();
     const seed = randomSeed();
     const rng = mulberry32(seed);
-    const player = createStartingPlayer(stats, meta.purchasedUnlocks);
+    const player = createStartingPlayer(stats, meta.purchasedUnlocks, meta.totalRuns);
     const nodes = generateBoard(rng);
     const game: GameState = {
       currentNodeIndex: 0,
@@ -131,6 +132,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       combatRounds: 0,
       choicesMade: 0,
       checkpointPage: 0,
+      checkpointNodeIndex: 0,
       checkpointSnapshot: JSON.parse(JSON.stringify(player)),
       deathNodeIndex: null,
       pendingNodeIndex: null,
@@ -185,8 +187,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().persist();
       return;
     }
-    set({ game: { ...game, deathNodeIndex: game.currentNodeIndex } });
-    const { game: restoredGame, player: restoredPlayer } = restoreCheckpoint({ ...game, isDead: true });
+    const { game: restoredGame, player: restoredPlayer } = restoreCheckpoint({ ...game, deathNodeIndex: game.currentNodeIndex, isDead: true });
     if (restoredPlayer) {
       restoredPlayer.echoShards = Math.max(0, restoredPlayer.echoShards - refund);
       set({ meta: newMeta, player: restoredPlayer, game: restoredGame });
@@ -236,21 +237,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
   addXp: (amount: number) => {
     const { player } = get();
     if (!player) return 0;
+    if (player.level >= MAX_LEVEL) return 0;
     player.xp += amount;
     const { newLevel, levelsGained } = computeLevelUp(player.xp, player.level);
-    if (levelsGained > 0) {
-      player.level = newLevel;
-      player.skillPoints += levelsGained;
+    const actualLevels = Math.min(levelsGained, MAX_LEVEL - player.level);
+    if (actualLevels > 0) {
+      player.level += actualLevels;
+      player.skillPoints += actualLevels;
+      if (player.level >= MAX_LEVEL) player.xp = 0;
       set({ player: { ...player } });
     } else {
       set({ player: { ...player } });
     }
-    return levelsGained;
+    return actualLevels;
   },
 
   awardStatPoint: (stat: keyof StatBlock) => {
     const { player } = get();
     if (!player) return;
+    if (player.stats[stat] >= STAT_MAX) return;
     player.stats[stat] += 1;
     const bonuses = getEquipmentBonuses(player.equipment);
     const oldHP = player.currentHP;
