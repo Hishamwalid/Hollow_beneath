@@ -9,6 +9,12 @@ export class PreloadScene extends Phaser.Scene {
     super('Preload');
   }
 
+  preload() {
+    for (let i = 1; i <= 5; i++) {
+      this.load.image(`map_${i}`, `assets/image_assets/backgrounds/map${i}.jpeg`);
+    }
+  }
+
   create() {
     fadeIn(this);
     const { width, height } = this.scale;

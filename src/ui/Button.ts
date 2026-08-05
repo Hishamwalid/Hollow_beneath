@@ -56,19 +56,14 @@ export function createButton(
   bg.setAlpha(enabled ? 1 : 0.4);
   text.setAlpha(enabled ? 1 : 0.5);
 
-  bg.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Rectangle(-width / 2, -height / 2, width, height), hitAreaCallback: Phaser.Geom.Rectangle.Contains });
+  bg.setInteractive({ useHandCursor: true });
   bg.on('pointerover', () => {
     if (!enabled) return;
     bg.setTexture(texHoverKey);
-    scene.tweens.killTweensOf(container);
-    container.setScale(1);
-    scene.tweens.add({ targets: container, scale: 1.03, duration: 120, ease: 'Sine.easeOut' });
   });
   bg.on('pointerout', () => {
     if (!enabled) return;
     bg.setTexture(texKey);
-    scene.tweens.killTweensOf(container);
-    container.setScale(1);
   });
   bg.on('pointerdown', () => {
     if (!enabled) return;
@@ -92,7 +87,7 @@ export function createButton(
       bg.setAlpha(v ? 1 : 0.4);
       text.setAlpha(v ? 1 : 0.5);
       bg.setTexture(texKey);
-      if (v) bg.setInteractive({ useHandCursor: true, hitArea: new Phaser.Geom.Rectangle(-width / 2, -height / 2, width, height), hitAreaCallback: Phaser.Geom.Rectangle.Contains });
+      if (v) bg.setInteractive({ useHandCursor: true });
       else bg.disableInteractive();
     },
     destroy: () => container.destroy(),

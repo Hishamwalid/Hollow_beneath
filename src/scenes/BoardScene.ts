@@ -32,6 +32,20 @@ const CHAPTER_NAMES: Record<number, string> = {
   17: 'The Final Descent',
 };
 
+const NODES_PER_MAP = 40;
+const MAP_COUNT = 5;
+const MAP_TEXTURE_W = 1600;
+const MAP_TEXTURE_H = 900;
+const MAP_COVER_SCALE = Math.max(GAME_WIDTH / MAP_TEXTURE_W, GAME_HEIGHT / MAP_TEXTURE_H);
+
+function chapterForNode(index: number): number {
+  return index <= 0 ? 1 : Math.min(MAP_COUNT, Math.ceil(index / NODES_PER_MAP));
+}
+
+function mapKeyForChapter(chapter: number): string {
+  return `map_${Math.min(MAP_COUNT, Math.max(1, chapter))}`;
+}
+
 const COLS = 10;
 const ORIGIN_X = 90;
 const ORIGIN_Y = 210;
@@ -69,6 +83,7 @@ export class BoardScene extends Phaser.Scene {
   private depthLadder?: Phaser.GameObjects.GameObject[];
   private pageLabel?: Phaser.GameObjects.Text;
   private boardNodeLayer?: Phaser.GameObjects.Container;
+  private mapImage?: Phaser.GameObjects.Image;
   private ghostToken?: Phaser.GameObjects.Image;
   private busy = false;
   private firstNodeTooltips: Record<string, boolean> = {};
@@ -87,7 +102,11 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
 
-    this.boardNodeLayer = this.add.container(0, 0);
+    this.mapImage = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, mapKeyForChapter(chapterForNode(game.currentNodeIndex)))
+      .setOrigin(0.5)
+      .setScale(MAP_COVER_SCALE)
+      .setDepth(0);
+    this.boardNodeLayer = this.add.container(0, 0).setDepth(1);
     this.drawBoard(game.nodes, game.currentNodeIndex + VISIBILITY_RANGE);
     this.playerToken = this.add.image(0, 0, 'tok_player').setDisplaySize(30, 30).setDepth(20);
     this.placeTokenAt(game.currentNodeIndex);
@@ -97,14 +116,16 @@ export class BoardScene extends Phaser.Scene {
     this.statPanel = createStatPanel(this, 16, 16, 300);
     this.statPanel.update(player);
 
-    this.preview = createNodePreview(this, GAME_WIDTH - 130, 40);
+    this.preview = createNodePreview(this, GAME_WIDTH - 160, 44);
     if (game.currentNodeIndex > 0) this.preview.show(game.nodes[game.currentNodeIndex - 1]);
-    createButton(this, GAME_WIDTH - 100, 160, 'Bag', () => fadeToScene(this, 'Inventory'), { width: 60, height: 30, fontSize: '11px' });
 
-    this.add.text(GAME_WIDTH - 100, 200, `Skills (${player.skillPoints})`, {
+    const rightX = GAME_WIDTH - 120;
+    createButton(this, rightX, 150, 'Bag', () => fadeToScene(this, 'Inventory'), { width: 64, height: 30, fontSize: '11px' });
+
+    this.add.text(rightX, 184, `Skills (${player.skillPoints})`, {
       fontFamily: FONT_MONO, fontSize: '11px', color: player.skillPoints > 0 ? PALETTE_HEX.gold : '#555555',
     }).setOrigin(0.5).setDepth(5);
-    createButton(this, GAME_WIDTH - 100, 220, 'Skills', () => fadeToScene(this, 'SkillTree'), { width: 60, height: 25, fontSize: '10px' });
+    createButton(this, rightX, 204, 'Skills', () => fadeToScene(this, 'SkillTree'), { width: 64, height: 25, fontSize: '10px' });
 
     this.pageLabel = this.add.text(GAME_WIDTH / 2, 16, `Page ${game.currentPage} / 20`, {
       fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.gold,
@@ -123,8 +144,8 @@ export class BoardScene extends Phaser.Scene {
       wordWrap: { width: GAME_WIDTH - 60 },
     }).setOrigin(0.5).setDepth(6);
 
-    this.diceRoller = createDiceRoller(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT - 170);
-    this.rollBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 100, 'Roll (1d6)', () => this.handleRoll(), { width: 200 });
+    this.diceRoller = createDiceRoller(this, GAME_WIDTH / 2 - 90, GAME_HEIGHT - 210);
+    this.rollBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 110, 'Roll (1d6)', () => this.handleRoll(), { width: 200 });
 
     if (game.currentNodeIndex >= TOTAL_NODES) {
       this.rollBtn.setEnabled(false);
@@ -266,20 +287,9 @@ export class BoardScene extends Phaser.Scene {
     const { player, game } = useGameStore.getState();
     if (!player || !game) return;
 
-    const steps = target - game.currentNodeIndex;
-    let step = 0;
-    const advance = () => {
-      step += 1;
-      const idx = game.currentNodeIndex + step;
-      this.placeTokenAt(idx);
-      audio.moveStep();
-      if (step < steps) {
-        this.time.delayedCall(140, advance);
-      } else {
-        this.finishMove(target);
-      }
-    };
-    advance();
+    this.placeTokenAt(target);
+    audio.moveStep();
+    this.finishMove(target);
   }
 
   private showChapterCard(page: number, node: BoardNode) {
@@ -334,6 +344,8 @@ export class BoardScene extends Phaser.Scene {
 
     const page = Math.min(PAGES, Math.ceil(target / NODES_PER_PAGE));
     const prevPage = game.currentPage;
+    const nextChapter = chapterForNode(target);
+    const prevChapter = chapterForNode(game.currentNodeIndex);
     player.echoShards += applyShardBonus(player, shardsForNodeVisit());
     const updatedNodes = game.nodes.map((n) => ({ ...n }));
     const node = updatedNodes[target - 1];
@@ -347,13 +359,54 @@ export class BoardScene extends Phaser.Scene {
     this.pageLabel?.setText(`Page ${page} / ${PAGES}`);
     this.buildDepthLadder(page);
 
-    if (page !== prevPage && CHAPTER_PAGES.includes(page)) {
-      this.showChapterCard(page, node);
+    const showChapterOrResolve = () => {
+      if (page !== prevPage && CHAPTER_PAGES.includes(page)) {
+        this.showChapterCard(page, node);
+      } else {
+        this.log(this.pageFlavor(page));
+        this.resolveNode(node);
+      }
+    };
+
+    if (nextChapter !== prevChapter) {
+      this.flipToChapter(nextChapter, showChapterOrResolve);
     } else {
-      this.log(this.pageFlavor(page));
-      this.resolveNode(node);
+      showChapterOrResolve();
     }
     this.applyFactionGearBonus(player);
+  }
+
+  /** Turns the current map away like a page to reveal the next chapter's map, then resolves the landing. */
+  private flipToChapter(chapter: number, onComplete: () => void) {
+    const oldMap = this.mapImage;
+    if (!oldMap) {
+      onComplete();
+      return;
+    }
+
+    const newMap = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, mapKeyForChapter(chapter))
+      .setOrigin(0.5)
+      .setScale(MAP_COVER_SCALE)
+      .setDepth(0);
+    this.mapImage = newMap;
+
+    const page = this.add.image(0, GAME_HEIGHT / 2, oldMap.texture.key)
+      .setOrigin(0, 0.5)
+      .setScale(MAP_COVER_SCALE)
+      .setDepth(2);
+    audio.pageTurn();
+
+    this.tweens.add({
+      targets: page,
+      scaleX: 0,
+      ease: 'Sine.easeInOut',
+      duration: 700,
+      onComplete: () => {
+        page.destroy();
+        oldMap.destroy();
+        onComplete();
+      },
+    });
   }
 
   private resolveNode(node: BoardNode) {

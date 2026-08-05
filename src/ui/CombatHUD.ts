@@ -114,9 +114,6 @@ export function createActionBar(
       bg.setInteractive({ useHandCursor: true });
       bg.on('pointerover', () => {
         bg.setTexture('panel_button_hover');
-        scene.tweens.killTweensOf(bg);
-        bg.setScale(1);
-        scene.tweens.add({ targets: bg, scale: 1.03, duration: 120, ease: 'Sine.easeOut' });
         if (item.description) {
           tooltipTimer?.remove();
           tooltipTimer = scene.time.delayedCall(300, () => {
@@ -130,8 +127,6 @@ export function createActionBar(
       });
       bg.on('pointerout', () => {
         bg.setTexture('panel_button');
-        scene.tweens.killTweensOf(bg);
-        bg.setScale(1);
         tooltipTimer?.remove();
         scene.tweens.killTweensOf(sharedTooltip);
         sharedTooltip.setAlpha(0);
