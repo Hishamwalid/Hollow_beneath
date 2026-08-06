@@ -56,6 +56,7 @@ export interface CombatSnapshot {
   round: number;
   phase: CombatPhase;
   playerAP: number;
+  bankedAP: number;
   freeActionCharges: number;
   playerHP: number;
   playerMaxHP: number;
@@ -77,8 +78,10 @@ interface InternalEnemy extends CombatState_Enemy {
   _isBoss: boolean;
 }
 
-const MOMENTUM_CHOICES = ['extra_turn', 'chorus_heal', 'clarity', 'forgotten_technique', 'unravel'] as const;
+const MOMENTUM_CHOICES = ['extra_turn', 'chorus_heal', 'clarity', 'forgotten_technique', 'unravel', 'echo_surge', 'phase_shift', 'desperate_strike'] as const;
 export type MomentumChoice = (typeof MOMENTUM_CHOICES)[number];
+
+const MOMENTUM_CAP = 5;
 
 export class CombatEngine {
   private player: PlayerState;
@@ -92,7 +95,8 @@ export class CombatEngine {
 
   round = 0;
   phase: CombatPhase = 'player';
-  playerAP = 2;
+  playerAP = 3;
+  bankedAP = 0;
   guarding = false;
   log: string[] = [];
   private bossOwnTurnCounter = 0;
@@ -106,6 +110,12 @@ export class CombatEngine {
   private analyzeBonusMultiplier = 1;
   private veilStepGuaranteed = false;
   private firstAttackUsed = false;
+  /** Counts actions taken this round; used to allow banking up to 2 AP when the player idles. */
+  private actionsTakenThisRound = 0;
+  /** Phase Shift: dodge the next N attacks (momentum trigger). */
+  private phaseShiftCharges = 0;
+  /** Desperate Strike: force-crit while active (reset at round start). */
+  private desperateStrike = false;
   /** Tracks whether the player used resonanceAbility or a magic-type skill last turn, for venn_custodian AI. */
   private _playerUsedMagicLastTurn = false;
   /** Whether fossilLastLaw was enforced this combat; reset per round. */
@@ -216,11 +226,14 @@ export class CombatEngine {
   beginRound(): CombatSnapshot {
     if (this.phase === 'victory' || this.phase === 'defeat' || this.phase === 'fled') return this.snapshot();
     this.round += 1;
-    this.playerAP = 2 + (this.round === 1 && this.player.skillsKnown.includes('borrowed_time') ? 1 : 0);
+    this.playerAP = 3 + (this.round === 1 && this.player.skillsKnown.includes('borrowed_time') ? 1 : 0) + this.bankedAP;
+    this.bankedAP = 0;
     this.guarding = false;
     this.lastActionRepeated = false;
     this.veilStepGuaranteed = false;
     this.fossilLastLawEnforced = false;
+    this.desperateStrike = false;
+    this.actionsTakenThisRound = 0;
     this.flags.fossilLastLaw = 0;
 
     const alive = this.aliveEnemies();
@@ -232,11 +245,17 @@ export class CombatEngine {
     this._playerUsedMagicLastTurn = false;
     const playerSpd = this.effectivePlayerSpeed();
     const faster = alive.filter((e) => e.spd > playerSpd).sort((a, b) => b.spd - a.spd);
+    this.resolvingEnemyTurns = true;
     for (const e of faster) this.resolveEnemyTurn(e);
+    this.resolvingEnemyTurns = false;
 
     this.checkOutcome();
     if (this.player.currentHP <= 0 || this.aliveEnemies().length === 0) return this.snapshot();
     this.phase = 'player';
+    if (this.momentumChoicePending && this.player.momentum >= MOMENTUM_CAP) {
+      this.momentumChoicePending = false;
+      this.phase = 'momentum_choice';
+    }
     return this.snapshot();
   }
 
@@ -245,10 +264,19 @@ export class CombatEngine {
     this.lastActionRepeated = this.lastActionId !== null && this.lastActionId === this._prevActionId;
     this._prevActionId = this.lastActionId;
 
+    // AP banking: leftover AP banks 1 (max 1 stored); idling the whole turn banks up to 2.
+    if (this.playerAP > 0) {
+      const cap = this.actionsTakenThisRound === 0 ? 2 : 1;
+      this.bankedAP = Math.max(this.bankedAP, Math.min(cap, this.playerAP));
+    }
+    this.actionsTakenThisRound = 0;
+
     const alive = this.aliveEnemies();
     const playerSpd = this.effectivePlayerSpeed();
     const slowerOrEqual = alive.filter((e) => e.spd <= playerSpd).sort((a, b) => b.spd - a.spd);
+    this.resolvingEnemyTurns = true;
     for (const e of slowerOrEqual) this.resolveEnemyTurn(e);
+    this.resolvingEnemyTurns = false;
 
     // End of round: DoTs tick for player and all enemies, durations decrement
     const playerDot = tickDots(this.playerStatuses);
@@ -398,19 +426,26 @@ export class CombatEngine {
   /** Applies incoming damage to the player, honoring Dodge / Guard / Barrier / Reflection. */
   private dealDamageToPlayer(amount: number, type: DamageType, label: string, bypassGuard = false): number {
     let dodge = this.player.derived.dodge + (this.player.skillsKnown.includes('chorus_step') ? 10 : 0);
+    if (this.phaseShiftCharges > 0) {
+      dodge = 100;
+      this.phaseShiftCharges -= 1;
+      this.log.push(`Phase Shift: you slip out of ${label}.`);
+    }
     if (this.veilStepGuaranteed) {
       dodge = 100;
       this.veilStepGuaranteed = false;
     }
     if (this.rng() * 100 < dodge) {
       this.log.push(`You dodge ${label}.`);
+      this.gainMomentum(1);
       return 0;
     }
 
     let dmg = amount;
     if (this.guarding && !bypassGuard) {
       const guardMultiplier = this.player.skillsKnown.includes('iron_resolve') ? 0.35 : 0.5;
-      dmg = Math.round(dmg * guardMultiplier);
+      const braceBonus = hasStatus(this.playerStatuses, 'brace') ? 0.8 : 1;
+      dmg = Math.round(dmg * guardMultiplier * braceBonus);
       if (this.player.skillsKnown.includes('retaliation')) {
         const blocked = amount - dmg;
         const reflected = Math.round(blocked * 0.2);
@@ -420,6 +455,7 @@ export class CombatEngine {
           this.log.push(`Retaliation reflects ${reflected} damage back.`);
         }
       }
+      this.gainMomentum(1);
     }
     dmg = applyBarrier(this.playerStatuses, dmg);
     this.player.currentHP = Math.max(0, this.player.currentHP - dmg);
@@ -470,11 +506,18 @@ export class CombatEngine {
       return;
     }
     if (hasStatus(this.playerStatuses, 'fragile_perception')) n *= 2;
-    this.player.momentum = Math.min(3, this.player.momentum + n);
-    if (this.player.momentum >= 3) {
-      this.phase = 'momentum_choice';
+    this.player.momentum = Math.min(MOMENTUM_CAP, this.player.momentum + n);
+    if (this.player.momentum >= MOMENTUM_CAP) {
+      if (this.resolvingEnemyTurns) {
+        this.momentumChoicePending = true;
+      } else {
+        this.phase = 'momentum_choice';
+      }
     }
   }
+
+  private momentumChoicePending = false;
+  private resolvingEnemyTurns = false;
 
   private pickTarget(targetKey?: string): InternalEnemy | undefined {
     const alive = this.aliveEnemies();
@@ -493,6 +536,7 @@ export class CombatEngine {
   }
 
   private rollCrit(): boolean {
+    if (this.desperateStrike) return true;
     return this.rng() < 0.1;
   }
 
@@ -507,13 +551,14 @@ export class CombatEngine {
     let unravelMult = 1;
     let defReduction = 1;
     if (this.unravelPending) {
-      unravelMult = 2.0;
-      defReduction = 0.5;
+      unravelMult = 2.5;
+      defReduction = 0.25;
       this.unravelPending = false;
     }
     const effDef = Math.round(defenseStat * defReduction * statMultiplier(target.statuses, statKey));
     let dmg = Math.max(3, Math.round((sourcePower - effDef / 2) * weakness * variance * unravelMult));
     if (crit) dmg = Math.round(dmg * 1.5);
+    if (hasStatus(this.playerStatuses, 'echo_surge')) dmg = Math.round(dmg * 1.2);
     const resonanceBonus = target._isBoss ? 1 : resonancePlayerDamageBonus(this.player.resonance);
     dmg = Math.round(dmg * resonanceBonus);
     if (damageType === 'sacred' && hasStatus(this.playerStatuses, 'blessing')) {
@@ -555,7 +600,9 @@ export class CombatEngine {
 
     const weak = weakness > 1;
     this.log.push(`${label} hits ${target.name} for ${mitigated} damage${crit ? ' (Critical!)' : ''}${weak ? ' — weakness exploited!' : ''}.`);
-    if (weak || crit) this.gainMomentum(1);
+    if (weak) this.gainMomentum(2);
+    if (crit) this.gainMomentum(1);
+    if (target.hp <= 0) this.gainMomentum(1);
     return { dmg: mitigated, hit: true, crit, weak };
   }
 
@@ -566,6 +613,7 @@ export class CombatEngine {
     if (!target) return this.snapshot();
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.attack;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
     let atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk');
     if (!this.firstAttackUsed && this.player.skillsKnown.includes('opening_strike')) {
       atk = Math.round(atk * 1.2);
@@ -611,6 +659,7 @@ export class CombatEngine {
     if (this.playerAP < cost) return this.snapshot();
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
     if (mpCost > 0) this.player.currentMP = Math.max(0, this.player.currentMP - mpCost);
 
     if (skill.tag === 'active_martyrs_flame') {
@@ -681,6 +730,7 @@ export class CombatEngine {
     this.player.currentMP -= 10;
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
     const target = this.pickTarget(targetKey);
     if (target) {
       const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk');
@@ -701,9 +751,38 @@ export class CombatEngine {
     if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.guard;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
     this.guarding = true;
     this.log.push('You raise your guard.');
     this.lastActionId = 'guard';
+    this.lastActionType = null;
+    return this.snapshot();
+  }
+
+  focus(): CombatSnapshot {
+    if (this.phase !== 'player' || (this.playerAP < ACTION_AP_COST.focus && this.freeActionCharges < 1)) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.focus;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
+    const mpRestore = Math.min(this.player.derived.maxMP, this.player.currentMP + 15);
+    this.player.currentMP = mpRestore;
+    this.log.push('You focus your will, restoring 15 MP.');
+    this.gainMomentum(1);
+    this.lastActionId = 'focus';
+    this.lastActionType = null;
+    return this.snapshot();
+  }
+
+  brace(): CombatSnapshot {
+    if (this.phase !== 'player' || (this.playerAP < ACTION_AP_COST.brace && this.freeActionCharges < 1)) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.brace;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
+    applyStatus(this.playerStatuses, 'brace', 2);
+    this.log.push('You brace yourself — Guard blocks 20% more damage for 2 turns.');
+    this.lastActionId = 'brace';
     this.lastActionType = null;
     return this.snapshot();
   }
@@ -716,6 +795,7 @@ export class CombatEngine {
     if (!item || !entry) return this.snapshot();
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.use_item;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
     entry.qty -= 1;
     this.player.inventory = this.player.inventory.filter((i) => i.qty > 0);
 
@@ -743,6 +823,7 @@ export class CombatEngine {
     if (this.playerAP < analyzeCost && this.freeActionCharges < 1) return this.snapshot();
     this.playerAP -= this.freeActionCharges > 0 ? 0 : analyzeCost;
     if (this.freeActionCharges > 0 && analyzeCost > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
     const target = this.pickTarget(targetKey);
     if (target) {
       (target as InternalEnemy)._revealed = true;
@@ -760,6 +841,7 @@ export class CombatEngine {
     if (this.playerAP < ACTION_AP_COST.sunder && this.freeActionCharges < 1) return this.snapshot();
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.sunder;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
     const target = this.pickTarget(targetKey);
     if (target) {
       applyStatus(target.statuses, 'armour_break', 2);
@@ -780,6 +862,7 @@ export class CombatEngine {
     }
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.withdraw;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
     const alive = this.aliveEnemies();
     const avgSpd = alive.reduce((s, e) => s + e.spd, 0) / Math.max(1, alive.length);
     const chance = Math.max(10, Math.min(90, 60 + (this.effectivePlayerSpeed() - avgSpd)));
@@ -801,11 +884,11 @@ export class CombatEngine {
       this.playerAP += 2;
       this.log.push('Momentum: Extra Turn — you act again immediately.');
     } else if (choice === 'chorus_heal') {
-      const heal = Math.round(this.player.derived.maxHP * 0.2);
+      const heal = Math.round(this.player.derived.maxHP * 0.25);
       this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
       this.log.push(`Momentum: Chorus Heal — restored ${heal} HP.`);
     } else if (choice === 'clarity') {
-      const restore = Math.round(this.player.derived.maxMP * 0.3);
+      const restore = Math.round(this.player.derived.maxMP * 0.4);
       this.player.currentMP = Math.min(this.player.derived.maxMP, this.player.currentMP + restore);
       this.log.push(`Momentum: Clarity — restored ${restore} MP.`);
     } else if (choice === 'forgotten_technique') {
@@ -813,7 +896,16 @@ export class CombatEngine {
       this.log.push('Momentum: Forgotten Technique — your next action costs 0 AP.');
     } else if (choice === 'unravel') {
       this.unravelPending = true;
-      this.log.push('Momentum: Unravel — your next hit deals 2.0x damage, ignoring 50% Defense.');
+      this.log.push('Momentum: Unravel — your next hit deals 2.5x damage, ignoring 75% Defense.');
+    } else if (choice === 'echo_surge') {
+      applyStatus(this.playerStatuses, 'echo_surge', 2);
+      this.log.push('Momentum: Echo Surge — all your damage +20% for 2 turns.');
+    } else if (choice === 'phase_shift') {
+      this.phaseShiftCharges = 2;
+      this.log.push('Momentum: Phase Shift — you will dodge the next 2 attacks.');
+    } else if (choice === 'desperate_strike') {
+      this.desperateStrike = true;
+      this.log.push('Momentum: Desperate Strike — all your attacks crit this turn.');
     }
     this.phase = 'player';
     return this.snapshot();
@@ -851,6 +943,7 @@ export class CombatEngine {
       round: this.round,
       phase: this.phase,
       playerAP: this.playerAP,
+      bankedAP: this.bankedAP,
       freeActionCharges: this.freeActionCharges,
       playerHP: this.player.currentHP,
       playerMaxHP: this.player.derived.maxHP,

@@ -48,7 +48,7 @@ export function removeStatus(statuses: StatusInstance[], id: StatusId): void {
 
 /** Removes all "beneficial" statuses — used by Dispel Holy-type effects. */
 export function removeAllBuffs(statuses: StatusInstance[]): void {
-  const buffIds = ['focus', 'barrier', 'regeneration', 'fortify', 'blessing', 'haste', 'reflection'];
+  const buffIds = ['focus', 'barrier', 'regeneration', 'fortify', 'blessing', 'haste', 'reflection', 'brace', 'echo_surge'];
   for (let i = statuses.length - 1; i >= 0; i--) {
     if (buffIds.includes(statuses[i].id)) statuses.splice(i, 1);
   }

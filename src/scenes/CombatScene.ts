@@ -33,10 +33,13 @@ interface CombatSceneData {
 
 const MOMENTUM_LABELS: Record<MomentumChoice, { label: string; subtitle: string }> = {
   extra_turn: { label: 'Extra Turn', subtitle: 'Act again immediately' },
-  chorus_heal: { label: 'Chorus Heal', subtitle: '+20% Max HP now' },
-  clarity: { label: 'Clarity', subtitle: '+30% Max MP now' },
+  chorus_heal: { label: 'Chorus Heal', subtitle: '+25% Max HP now' },
+  clarity: { label: 'Clarity', subtitle: '+40% Max MP now' },
   forgotten_technique: { label: 'Forgotten Technique', subtitle: 'Next action costs 0 AP' },
-  unravel: { label: 'Unravel', subtitle: 'Next hit: 2.0x dmg, ignore 50% Def' },
+  unravel: { label: 'Unravel', subtitle: 'Next hit: 2.5x dmg, ignore 75% Def' },
+  echo_surge: { label: 'Echo Surge', subtitle: 'All damage +20% for 2 turns' },
+  phase_shift: { label: 'Phase Shift', subtitle: 'Dodge the next 2 attacks' },
+  desperate_strike: { label: 'Desperate Strike', subtitle: 'All attacks crit this turn' },
 };
 
 export class CombatScene extends Phaser.Scene {
@@ -184,8 +187,8 @@ export class CombatScene extends Phaser.Scene {
 
   private refresh(snap: CombatSnapshot) {
     const { player } = useGameStore.getState();
-    if (player) this.statPanel?.update(player);
-    this.apPips?.update(snap.playerAP);
+    if (player)     this.statPanel?.update(player);
+    this.apPips?.update(snap.playerAP, snap.bankedAP);
     this.phaseLabelText?.setText(snap.bossPhaseLabel ?? '');
     if (this.selectedTarget && !snap.enemies.some((e) => e.key === this.selectedTarget)) {
       this.selectedTarget = snap.enemies[0]?.key ?? null;
@@ -220,7 +223,7 @@ export class CombatScene extends Phaser.Scene {
     const canAct = snap.phase === 'player';
     const hasFree = snap.freeActionCharges > 0;
     const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
-    const resonanceCost = player.skillsKnown.includes('resonant_study') ? 1 : 2;
+    const resonanceCost = player.skillsKnown.includes('resonant_study') ? 1 : 3;
     const analyzeCost = player.skillsKnown.includes('cross_reference') ? 0 : 1;
 
     const items = [
@@ -257,7 +260,9 @@ export class CombatScene extends Phaser.Scene {
       },
       { id: 'analyze', label: 'Analyze', apCost: analyzeCost, description: 'Reveal enemy weaknesses and affinities.', disabled: !canAct || !canAfford(analyzeCost), onClick: () => this.doAction('analyze', () => this.engine.analyze(this.selectedTarget ?? undefined)) },
       { id: 'sunder', label: 'Sunder', apCost: 2, description: 'Sunder an enemy: reduce its Defense by 50% for 2 turns.', disabled: !canAct || !canAfford(2), onClick: () => this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)) },
-      { id: 'withdraw', label: 'Withdraw', apCost: 1, description: 'Attempt to flee from combat. Speed-based success chance.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('withdraw', () => this.engine.withdraw()) },
+      { id: 'focus', label: 'Focus', apCost: 1, description: 'Regain 15 MP and gain +1 Momentum.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('focus', () => this.engine.focus()) },
+      { id: 'brace', label: 'Brace', apCost: 1, description: 'Guard blocks 20% more damage for 2 turns.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('brace', () => this.engine.brace()) },
+      { id: 'withdraw', label: 'Withdraw', apCost: 2, description: 'Attempt to flee from combat. Speed-based success chance.', disabled: !canAct || !canAfford(2), onClick: () => this.doAction('withdraw', () => this.engine.withdraw()) },
     ];
 
     const sharedTooltip = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 200, '', {
@@ -312,7 +317,7 @@ export class CombatScene extends Phaser.Scene {
     if (playerHealed && this.statPanel) {
       spawnHealParticles(this, this.statPanel.container.x + 40, this.statPanel.container.y + 10);
     }
-    if (snap.momentum === 3 && this.statPanel) {
+    if (snap.momentum >= 5 && this.statPanel) {
       spawnMomentumParticles(this, this.statPanel.container.x + 260, this.statPanel.container.y + 68);
     }
     switch (type) {
@@ -444,7 +449,7 @@ export class CombatScene extends Phaser.Scene {
     audio.momentumFull();
     this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75).setDepth(35);
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 170, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold }).setOrigin(0.5).setDepth(36);
-    const choices: MomentumChoice[] = ['extra_turn', 'chorus_heal', 'clarity', 'forgotten_technique', 'unravel'];
+    const choices: MomentumChoice[] = ['extra_turn', 'chorus_heal', 'clarity', 'forgotten_technique', 'unravel', 'echo_surge', 'phase_shift', 'desperate_strike'];
     this.overlayMenu = createChoiceMenu(
       this,
       GAME_WIDTH / 2,

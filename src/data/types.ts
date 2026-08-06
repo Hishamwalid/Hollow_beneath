@@ -44,7 +44,7 @@ export type AffinityMap = Partial<Record<DamageType, number>>;
 
 export type DotId = 'poison' | 'burn' | 'bleed' | 'curse' | 'frostbite' | 'shock_dot';
 export type ControlId = 'sleep' | 'fear' | 'silence' | 'blind' | 'confuse' | 'stun' | 'root';
-export type BuffId = 'focus' | 'barrier' | 'regeneration' | 'fortify' | 'blessing' | 'haste' | 'reflection';
+export type BuffId = 'focus' | 'barrier' | 'regeneration' | 'fortify' | 'blessing' | 'haste' | 'reflection' | 'brace' | 'echo_surge';
 export type DebuffId = 'weakness' | 'defense_down' | 'slow' | 'armour_break' | 'seal_mind' | 'fragile_perception';
 export type StatusId = DotId | ControlId | BuffId | DebuffId;
 
@@ -65,7 +65,9 @@ export type ActionId =
   | 'use_item'
   | 'analyze'
   | 'sunder'
-  | 'withdraw';
+  | 'withdraw'
+  | 'focus'
+  | 'brace';
 
 export interface SkillDef {
   id: string;

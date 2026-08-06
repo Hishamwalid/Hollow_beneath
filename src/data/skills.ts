@@ -1,15 +1,17 @@
 import type { ActionId, SkillDef } from './types';
 
-/** AP cost for the seven fixed combat actions (GDD 5.1). 'skill' cost comes from the SkillDef chosen. */
+/** AP cost for the combat actions (Battle Plan Part 2). 'skill' cost comes from the SkillDef chosen. */
 export const ACTION_AP_COST: Record<ActionId, number> = {
   attack: 1,
   skill: 1,
-  resonance_ability: 2,
+  resonance_ability: 3,
   guard: 1,
   use_item: 1,
   analyze: 1,
   sunder: 2,
-  withdraw: 1,
+  withdraw: 2,
+  focus: 1,
+  brace: 1,
 };
 
 export const ACTION_LABELS: Record<ActionId, string> = {
@@ -21,6 +23,8 @@ export const ACTION_LABELS: Record<ActionId, string> = {
   analyze: 'Analyze',
   sunder: 'Sunder',
   withdraw: 'Withdraw',
+  focus: 'Focus',
+  brace: 'Brace',
 };
 
 /**
@@ -92,7 +96,7 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   sealing_strike: {
     id: 'sealing_strike',
     name: 'Sealing Strike',
-    apCost: 1,
+    apCost: 2,
     damageType: 'sacred',
     skillPower: 1.1,
     description: 'A Sable rite turned to combat use. -2 Resonance on hit.',
@@ -112,7 +116,7 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   reckless_swing: {
     id: 'reckless_swing',
     name: 'Reckless Swing',
-    apCost: 1,
+    apCost: 2,
     damageType: 'slash',
     skillPower: 1.8,
     description: 'A heavy overcommitted strike. Costs 8% of your current HP to cast.',
@@ -148,7 +152,7 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   hunters_mark: {
     id: 'hunters_mark',
     name: "Hunter's Mark",
-    apCost: 1,
+    apCost: 2,
     mpCost: 3,
     damageType: 'pierce',
     skillPower: 1.3,
@@ -162,7 +166,7 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     id: 'resonant_study',
     name: 'Resonant Study',
     apCost: 0,
-    description: 'Passive. Resonance Ability costs 1 AP instead of 2.',
+    description: 'Passive. Resonance Ability costs 1 AP instead of 3.',
     tag: 'passive_resonance_efficiency',
     tree: 'scholar',
   },
@@ -216,7 +220,7 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   veil_step: {
     id: 'veil_step',
     name: 'Veil Step',
-    apCost: 1,
+    apCost: 2,
     mpCost: 4,
     description: "Guarantees you avoid the enemy's next attack this turn.",
     tag: 'active_veil_step',

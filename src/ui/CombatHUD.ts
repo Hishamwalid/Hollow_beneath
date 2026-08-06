@@ -60,19 +60,22 @@ export function createEnemyDisplay(
   };
 }
 
-export function createApPips(scene: Phaser.Scene, x: number, y: number): { update: (ap: number) => void; destroy: () => void } {
+export function createApPips(scene: Phaser.Scene, x: number, y: number): { update: (ap: number, banked: number) => void; destroy: () => void } {
   const container = scene.add.container(x, y);
   const label = scene.add.text(-10, -10, 'AP', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted }).setOrigin(1, 0.5);
   container.add(label);
   const dots: Phaser.GameObjects.Arc[] = [];
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     const d = scene.add.circle(i * 20, 0, 8, 0x2a2e33).setStrokeStyle(2, 0xc9a24b);
     dots.push(d);
     container.add(d);
   }
+  const reserveText = scene.add.text(-10, 18, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold }).setOrigin(1, 0.5);
+  container.add(reserveText);
   return {
-    update: (ap: number) => {
+    update: (ap: number, banked: number) => {
       dots.forEach((d, i) => d.setFillStyle(i < ap ? 0xc9a24b : 0x2a2e33));
+      reserveText.setText(banked > 0 ? `RES ${banked}` : '');
     },
     destroy: () => container.destroy(),
   };
