@@ -1,0 +1,31 @@
+
+> hollow-beneath@0.1.0-mvp dev
+> vite
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m258[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m3000[22m/[39m
+[2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[2m[32m  ➜[39m[22m[2m  press [22m[1mh + enter[22m[2m to show help[22m
+[2m12:23:18 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/scenes/SkillTreeScene.ts[22m
+[2m12:23:27 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/ui/CombatHUD.ts[22m
+[2m12:23:34 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/scenes/CombatScene.ts[22m
+[2m12:23:42 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/scenes/CombatScene.ts[22m
+[2m12:29:52 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/scenes/CombatScene.ts[22m
+[2m12:29:59 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/scenes/CombatScene.ts[22m
+[2m12:58:26 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.ts[22m
+[2m12:58:32 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.ts[22m
+[2m1:08:06 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.ts[22m
+[2m1:11:01 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/systems/CombatEngine.ts[22m
+[2m1:11:06 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/systems/CombatEngine.ts[22m
+[2m1:11:14 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/ui/CombatHUD.ts[22m
+[2m1:11:20 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/ui/CombatHUD.ts[22m
+[2m1:11:26 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/systems/CombatEngine.ts[22m
+[2m1:11:43 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/scenes/CombatScene.ts[22m
+[2m1:11:48 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/scenes/CombatScene.ts[22m
+[2m1:11:58 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/scenes/CombatScene.ts[22m
+[2m1:13:03 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.ts[22m
+[2m1:17:55 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/main.ts[22m
+[2m1:27:34 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/ui/StatPanel.ts[22m
+[2m1:28:22 AM[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2msrc/systems/CombatEngine.ts[22m

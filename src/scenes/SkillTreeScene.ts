@@ -205,11 +205,11 @@ export class SkillTreeScene extends Phaser.Scene {
           this.scene.restart();
         });
       }
-    }, { width: 120, height: 36 });
+    }, { width: 120, height: 36, depth: 33 });
 
     const cancelBtn = createButton(this, GAME_WIDTH / 2 + 80, GAME_HEIGHT / 2 + 40, 'Cancel', () => {
       overlayBg.destroy(); box.destroy(); text.destroy();
       confirmBtn.destroy(); cancelBtn.destroy();
-    }, { width: 120, height: 36 });
+    }, { width: 120, height: 36, depth: 33 });
   }
 }

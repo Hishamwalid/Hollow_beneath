@@ -9,6 +9,7 @@ export interface EnemyDisplay {
   container: Phaser.GameObjects.Container;
   update: (view: EnemyView) => void;
   setSelected: (v: boolean) => void;
+  setState: (state: 'idle' | 'attack' | 'hit') => void;
   destroy: () => void;
 }
 
@@ -22,16 +23,27 @@ export function createEnemyDisplay(
   const container = scene.add.container(x, y).setDepth(5);
   const panelBg = scene.add.image(0, 0, 'panel_enemy').setAlpha(0.75).setInteractive({ useHandCursor: true });
   const selectRing = scene.add.circle(0, 0, 40, 0x000000, 0).setStrokeStyle(3, 0xc9a24b, 0).setVisible(false);
-  const token = scene.add.image(0, -18, textureKey).setDisplaySize(72, 72);
+  const token = scene.add.image(0, -18, 'enemy_idle');
+  token.setDisplaySize(84, 110);
   const nameText = scene.add.text(0, 30, '', { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone, wordWrap: { width: 120 }, align: 'center' }).setOrigin(0.5, 0);
   const hpBg = scene.add.rectangle(0, 52, 84, 8, 0x2a2e33);
   const hpFg = scene.add.rectangle(-42, 52, 84, 8, 0xb0453f).setOrigin(0, 0.5);
   const hpText = scene.add.text(0, 60, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5, 0);
   const affinityText = scene.add.text(0, -64, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold, align: 'center' }).setOrigin(0.5, 1);
-  const statusText = scene.add.text(0, 76, '', { fontFamily: FONT_MONO, fontSize: '9px', color: '#e67e22', align: 'center', wordWrap: { width: 100 } }).setOrigin(0.5, 0);
+  const statsText = scene.add.text(0, 72, '', { fontFamily: FONT_MONO, fontSize: '9px', color: PALETTE_HEX.boneMuted, align: 'center' }).setOrigin(0.5, 0);
+  const statusText = scene.add.text(0, 84, '', { fontFamily: FONT_MONO, fontSize: '9px', color: '#e67e22', align: 'center', wordWrap: { width: 100 } }).setOrigin(0.5, 0);
 
-  container.add([panelBg, selectRing, token, nameText, hpBg, hpFg, hpText, affinityText, statusText]);
+  container.add([panelBg, selectRing, token, nameText, hpBg, hpFg, hpText, affinityText, statsText, statusText]);
   panelBg.on('pointerdown', onClick);
+
+  const setState = (state: 'idle' | 'attack' | 'hit') => {
+    if (scene.textures.exists(`enemy_${state}`)) token.setTexture(`enemy_${state}`);
+    if (state === 'hit') {
+      token.setTint(0xff3b30);
+    } else {
+      token.clearTint();
+    }
+  };
 
   return {
     container,
@@ -48,14 +60,17 @@ export function createEnemyDisplay(
           .slice(0, view.revealCount)
           .map(([t, v]) => `${t}: ${weaknessLabel(v as number)}`);
         affinityText.setText(entries.join('\n'));
+        statsText.setText(`ATK ${view.atk} | DEF ${view.def} | SPD ${view.spd}`);
       } else {
         affinityText.setText('');
+        statsText.setText('');
       }
       statusText.setText(view.statuses.map((s) => statusLabel(s.id)).join(', '));
     },
     setSelected: (v: boolean) => {
       selectRing.setStrokeStyle(3, 0xc9a24b, v ? 1 : 0);
     },
+    setState,
     destroy: () => container.destroy(),
   };
 }

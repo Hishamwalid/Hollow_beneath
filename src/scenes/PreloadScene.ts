@@ -13,6 +13,11 @@ export class PreloadScene extends Phaser.Scene {
     for (let i = 1; i <= 5; i++) {
       this.load.image(`map_${i}`, `assets/image_assets/backgrounds/map${i}.jpeg`);
     }
+    for (const who of ['player', 'enemy']) {
+      for (const state of ['idle', 'attack', 'hit']) {
+        this.load.image(`${who}_${state}`, `assets/image_assets/${who}/${state}.png`);
+      }
+    }
   }
 
   create() {

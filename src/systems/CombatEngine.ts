@@ -50,6 +50,9 @@ export interface EnemyView {
   revealed: boolean;
   revealCount: number;
   affinities: AffinityMap;
+  atk: number;
+  def: number;
+  spd: number;
 }
 
 export interface CombatSnapshot {
@@ -424,7 +427,7 @@ export class CombatEngine {
   }
 
   /** Applies incoming damage to the player, honoring Dodge / Guard / Barrier / Reflection. */
-  private dealDamageToPlayer(amount: number, type: DamageType, label: string, bypassGuard = false): number {
+  private dealDamageToPlayer(amount: number, type: DamageType, label: string, bypassGuard = false, attackerKey?: string): number {
     let dodge = this.player.derived.dodge + (this.player.skillsKnown.includes('chorus_step') ? 10 : 0);
     if (this.phaseShiftCharges > 0) {
       dodge = 100;
@@ -835,6 +838,15 @@ export class CombatEngine {
     return this.snapshot();
   }
 
+  /** Free toggle: reveal/un-reveal every live enemy's weaknesses and stats. Costs no AP, no action. */
+  toggleAnalyze(): CombatSnapshot {
+    const allRevealed = this.enemies.length > 0 && this.enemies.every((e) => e._revealed);
+    for (const e of this.enemies) e._revealed = !allRevealed;
+    this.lastActionId = 'analyze';
+    this.lastActionType = null;
+    return this.snapshot();
+  }
+
   sunder(targetKey?: string): CombatSnapshot {
     if (this.phase !== 'player') return this.snapshot();
     if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
@@ -965,6 +977,9 @@ export class CombatEngine {
           revealed: e._revealed,
           revealCount: this.player.skillsKnown.includes('librarians_eye') ? 2 : 1,
           affinities: e.affinities,
+          atk: e.atk,
+          def: e.def,
+          spd: e.spd,
         })),
       initiativeOrder,
       log: this.log,

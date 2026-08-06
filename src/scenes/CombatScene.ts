@@ -10,8 +10,8 @@ import { maybePickWhisper } from '@systems/WhisperSystem';
 import { showWhisper } from '@ui/WhisperOverlay';
 import { addResonanceEffects } from '@systems/ResonanceFX';
 import { createStatPanel } from '@ui/StatPanel';
-import { createEnemyDisplay, createApPips, createActionBar, createSpeedBar, type EnemyDisplay } from '@ui/CombatHUD';
-import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
+import { createEnemyDisplay, createApPips, createActionBar, createSpeedBar, type EnemyDisplay, type ActionBarItem } from '@ui/CombatHUD';
+import { createChoiceMenu, type ChoiceMenu, type ChoiceMenuItem } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
@@ -51,6 +51,7 @@ export class CombatScene extends Phaser.Scene {
   private lastPlayerHP = 0;
   private statPanel?: ReturnType<typeof createStatPanel>;
   private apPips?: ReturnType<typeof createApPips>;
+  private playerSprite?: Phaser.GameObjects.Image;
   private actionBarContainer?: Phaser.GameObjects.Container;
   private actionBarTooltip?: Phaser.GameObjects.Text;
   private logText?: Phaser.GameObjects.Text;
@@ -109,6 +110,9 @@ export class CombatScene extends Phaser.Scene {
     this.statPanel = createStatPanel(this, 16, GAME_HEIGHT - 200, 240);
     this.apPips = createApPips(this, GAME_WIDTH - 80, GAME_HEIGHT - 200);
 
+    this.playerSprite = this.add.image(190, GAME_HEIGHT - 330, 'player_idle');
+    this.playerSprite.setDisplaySize(150, 190).setDepth(6);
+
     this.speedBar = createSpeedBar(
       this,
       GAME_WIDTH / 2 - 120,
@@ -162,9 +166,10 @@ export class CombatScene extends Phaser.Scene {
     this.enemyKeyMap.clear();
     const n = snap.enemies.length;
     const spacing = Math.min(220, (GAME_WIDTH - 200) / Math.max(1, n));
-    const startX = GAME_WIDTH / 2 - ((n - 1) * spacing) / 2;
+    const rowCenter = GAME_WIDTH * 0.62;
+    const startX = rowCenter - ((n - 1) * spacing) / 2;
     snap.enemies.forEach((e, i) => {
-      const disp = createEnemyDisplay(this, startX + i * spacing, 220, `tok_${e.key}`, () => {
+      const disp = createEnemyDisplay(this, startX + i * spacing, 210, `tok_${e.key}`, () => {
         this.selectedTarget = e.key;
         this.updateTargetHighlight(this.engine.snapshot());
       });
@@ -219,37 +224,25 @@ export class CombatScene extends Phaser.Scene {
     this.actionBarTooltip?.destroy();
     const { player } = useGameStore.getState();
     if (!player) return;
-    const activeSkills = player.skillsKnown.filter((id) => (NAMED_SKILLS[id]?.apCost ?? 0) > 0);
     const canAct = snap.phase === 'player';
     const hasFree = snap.freeActionCharges > 0;
     const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
-    const resonanceCost = player.skillsKnown.includes('resonant_study') ? 1 : 3;
-    const analyzeCost = player.skillsKnown.includes('cross_reference') ? 0 : 1;
+    const analyzeOn = snap.enemies.length > 0 && snap.enemies.every((e) => e.revealed);
 
-    const items = [
+    const items: ActionBarItem[] = [
       { id: 'attack', label: 'Attack', apCost: 1, description: 'Basic melee attack (Slash damage).', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
-      ...activeSkills.map((id) => {
-        const sk = NAMED_SKILLS[id];
-        const mpDesc = sk.mpCost ? ` | MP: ${sk.mpCost}` : '';
-        const mpOk = sk.mpCost ? (player.currentMP >= sk.mpCost) : true;
-        return {
-          id,
-          label: sk.name,
-          apCost: sk.apCost,
-          description: `${sk.description}${sk.damageType ? ` (${sk.damageType} damage)` : ''}${mpDesc}`,
-          disabled: !canAct || !canAfford(sk.apCost) || !mpOk,
-          onClick: () => this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined)),
-        };
-      }),
+      { id: 'guard', label: 'Defend', apCost: 1, description: 'Raise your guard. Take 50% less damage until your next turn.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },
       {
-        id: 'resonance',
-        label: 'Resonance',
-        apCost: resonanceCost,
-        description: `Unleash a surge of Resonance (Shadow damage). Requires 25 Resonance. Cost: ${resonanceCost} AP, 10 MP, -1 Resonance.`,
-        disabled: !canAct || !canAfford(resonanceCost) || player.resonance < 25 || player.currentMP < 10,
-        onClick: () => this.doAction('resonance', () => this.engine.resonanceAbility(this.selectedTarget ?? undefined)),
+        id: 'analyze',
+        label: analyzeOn ? 'Analyze: ON' : 'Analyze',
+        apCost: 0,
+        description: 'Toggle enemy weaknesses and stats display (free, no AP).',
+        disabled: !canAct,
+        onClick: () => {
+          const snapNow = this.engine.toggleAnalyze();
+          this.refresh(snapNow);
+        },
       },
-      { id: 'guard', label: 'Guard', apCost: 1, description: 'Raise your guard. Take 50% less damage until your next turn.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },
       {
         id: 'item',
         label: 'Item',
@@ -258,11 +251,14 @@ export class CombatScene extends Phaser.Scene {
         disabled: !canAct || !canAfford(1) || player.inventory.length === 0,
         onClick: () => this.openItemMenu(),
       },
-      { id: 'analyze', label: 'Analyze', apCost: analyzeCost, description: 'Reveal enemy weaknesses and affinities.', disabled: !canAct || !canAfford(analyzeCost), onClick: () => this.doAction('analyze', () => this.engine.analyze(this.selectedTarget ?? undefined)) },
-      { id: 'sunder', label: 'Sunder', apCost: 2, description: 'Sunder an enemy: reduce its Defense by 50% for 2 turns.', disabled: !canAct || !canAfford(2), onClick: () => this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)) },
-      { id: 'focus', label: 'Focus', apCost: 1, description: 'Regain 15 MP and gain +1 Momentum.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('focus', () => this.engine.focus()) },
-      { id: 'brace', label: 'Brace', apCost: 1, description: 'Guard blocks 20% more damage for 2 turns.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('brace', () => this.engine.brace()) },
-      { id: 'withdraw', label: 'Withdraw', apCost: 2, description: 'Attempt to flee from combat. Speed-based success chance.', disabled: !canAct || !canAfford(2), onClick: () => this.doAction('withdraw', () => this.engine.withdraw()) },
+      {
+        id: 'skill',
+        label: 'Skill',
+        apCost: 0,
+        description: 'All skills and special actions: Resonance, Sunder, Focus, Brace, Withdraw.',
+        disabled: !canAct,
+        onClick: () => this.openSkillMenu(),
+      },
     ];
 
     const sharedTooltip = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 200, '', {
@@ -271,16 +267,59 @@ export class CombatScene extends Phaser.Scene {
     }).setOrigin(0.5, 1).setAlpha(0).setDepth(100);
     this.actionBarTooltip = sharedTooltip;
 
-    const cols = 4;
-    const rowH = 52;
-    const wrapper = this.add.container(GAME_WIDTH / 2 - ((Math.min(items.length, cols)) * (120 + 6)) / 2 + 60, GAME_HEIGHT - 150);
-    const { container: row1 } = createActionBar(this, 0, 0, items.slice(0, cols), sharedTooltip);
+    const totalWidth = items.length * 126 - 6;
+    const wrapper = this.add.container(GAME_WIDTH / 2 - totalWidth / 2 + 60, GAME_HEIGHT - 150);
+    const { container: row1 } = createActionBar(this, 0, 0, items, sharedTooltip);
     wrapper.add(row1);
-    if (items.length > cols) {
-      const { container: row2 } = createActionBar(this, 0, rowH, items.slice(cols, cols * 2), sharedTooltip);
-      wrapper.add(row2);
-    }
     this.actionBarContainer = wrapper;
+  }
+
+  private openSkillMenu() {
+    const { player } = useGameStore.getState();
+    if (!player) return;
+    const snap = this.engine.snapshot();
+    if (snap.phase !== 'player') return;
+    const hasFree = snap.freeActionCharges > 0;
+    const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
+    const resonanceCost = player.skillsKnown.includes('resonant_study') ? 1 : 3;
+    const activeSkills = player.skillsKnown.filter((id) => (NAMED_SKILLS[id]?.apCost ?? 0) > 0);
+
+    const menuItems: ChoiceMenuItem[] = [
+      ...activeSkills.map((id): ChoiceMenuItem => {
+        const sk = NAMED_SKILLS[id];
+        const mpDesc = sk.mpCost ? ` | MP: ${sk.mpCost}` : '';
+        const mpOk = sk.mpCost ? (player.currentMP >= sk.mpCost) : true;
+        const disabled = !canAfford(sk.apCost) || !mpOk;
+        return {
+          label: `${sk.name} (${sk.apCost} AP)`,
+          subtitle: `${sk.description}${sk.damageType ? ` (${sk.damageType})` : ''}${mpDesc}`,
+          disabled,
+          onSelect: () => { this.closeOverlay(); this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined)); },
+        };
+      }),
+      {
+        label: `Resonance (${resonanceCost} AP)`,
+        subtitle: `Shadow burst. Needs 25 Resonance, 10 MP, -1 Resonance.`,
+        disabled: !canAfford(resonanceCost) || player.resonance < 25 || player.currentMP < 10,
+        onSelect: () => { this.closeOverlay(); this.doAction('resonance', () => this.engine.resonanceAbility(this.selectedTarget ?? undefined)); },
+      },
+      { label: 'Sunder (2 AP)', subtitle: 'Sunder an enemy: reduce its Defense by 50% for 2 turns.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)); } },
+      { label: 'Focus (1 AP)', subtitle: 'Regain 15 MP and gain +1 Momentum.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('focus', () => this.engine.focus()); } },
+      { label: 'Brace (1 AP)', subtitle: 'Guard blocks 20% more damage for 2 turns.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('brace', () => this.engine.brace()); } },
+      { label: 'Withdraw (2 AP)', subtitle: 'Attempt to flee. Speed-based success chance.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('withdraw', () => this.engine.withdraw()); } },
+    ];
+
+    this.overlayBg?.destroy();
+    this.overlayMenu?.destroy();
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive().setDepth(35);
+    this.overlayBg.on('pointerdown', () => this.closeOverlay());
+    this.overlayMenu = createChoiceMenu(
+      this,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2,
+      menuItems,
+      { width: 480, spacing: 56 },
+    );
   }
 
   private doAction(type: string, fn: () => CombatSnapshot) {
@@ -308,6 +347,9 @@ export class CombatScene extends Phaser.Scene {
         if (!ed) continue;
         if (e.hp < before) {
           this.floatingText(ed.container.x, ed.container.y - 55, `-${before - e.hp}`, PALETTE_HEX.danger);
+          this.setEnemyPose(ed, 'hit');
+          this.shakeTarget(ed.container);
+          spawnHitParticles(this, ed.container.x, ed.container.y, 0xb0453f);
         } else {
           this.floatingText(ed.container.x, ed.container.y - 55, `+${e.hp - before}`, PALETTE_HEX.ok);
         }
@@ -322,43 +364,47 @@ export class CombatScene extends Phaser.Scene {
     }
     switch (type) {
       case 'attack': {
-        if (display) { this.flashTarget(display.container, 0xff4444); this.shakeTarget(display.container); spawnHitParticles(this, display.container.x, display.container.y, 0xb0453f); }
+        this.setPlayerPose('attack');
         showAllEnemyDamage();
         break;
       }
       case 'skill': {
-        if (display) { this.flashTarget(display.container, 0x9b59b6); this.shakeTarget(display.container); spawnHitParticles(this, display.container.x, display.container.y, 0x9b59b6); }
+        this.setPlayerPose('attack');
         showAllEnemyDamage();
         break;
       }
       case 'resonance': {
-        if (display) { this.flashTarget(display.container, 0x2c3e50); this.shakeTarget(display.container, 10); spawnHitParticles(this, display.container.x, display.container.y, 0x7a7a86); }
+        this.setPlayerPose('attack');
         showAllEnemyDamage();
         break;
       }
       case 'guard': {
+        this.setPlayerPose('idle', false);
         if (this.statPanel) this.flashTarget(this.statPanel.container, 0x4a6fa5);
         this.floatingText(280, 620, 'GUARD', PALETTE_HEX.player);
         break;
       }
       case 'item': {
+        this.setPlayerPose('idle', false);
         if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
         const healed = snap.playerHP - prevPlayerHP;
         if (healed > 0) this.floatingText(280, 640, `+${healed} HP`, PALETTE_HEX.ok);
         break;
       }
       case 'analyze': {
+        this.setPlayerPose('idle', false);
         if (display) { this.flashTarget(display.container, 0xc9a24b); }
         if (targetKey) this.floatingText(280, 260, 'WEAKNESSES READ', PALETTE_HEX.gold);
         break;
       }
       case 'sunder': {
-        if (display) { this.flashTarget(display.container, 0xe67e22); this.shakeTarget(display.container); }
+        this.setPlayerPose('attack');
         if (targetKey) this.floatingText(280, 260, 'ARMOR BROKEN', '#e67e22');
         showAllEnemyDamage();
         break;
       }
       case 'withdraw': {
+        this.setPlayerPose('idle', false);
         if (settingsManager.get().screenShake) {
           this.cameras.main.shake(200, 0.005);
         }
@@ -371,6 +417,7 @@ export class CombatScene extends Phaser.Scene {
     }
     if (snap.playerHP < prevPlayerHP && type !== 'withdraw') {
       audio.damageTaken();
+      this.setPlayerPose('hit');
       if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
       const dmg = prevPlayerHP - snap.playerHP;
       this.floatingText(280, 600, `-${dmg}`, PALETTE_HEX.danger);
@@ -386,6 +433,41 @@ export class CombatScene extends Phaser.Scene {
       duration: 300,
       onComplete: () => overlay.destroy(),
     });
+  }
+
+  private setPlayerPose(state: 'idle' | 'attack' | 'hit', tween = true): void {
+    const sp = this.playerSprite;
+    if (!sp || !this.textures.exists(`player_${state}`)) return;
+    sp.setTexture(`player_${state}`);
+    if (state !== 'idle') {
+      this.time.delayedCall(320, () => {
+        if (this.playerSprite === sp) sp.setTexture('player_idle');
+      });
+    }
+    if (tween && this.playerSprite) {
+      this.tweens.add({
+        targets: sp,
+        scaleX: state === 'idle' ? 1 : 1.08,
+        scaleY: state === 'idle' ? 1 : 1.08,
+        x: state === 'attack' ? sp.x + 14 : sp.x,
+        duration: 110,
+        yoyo: false,
+        ease: 'Sine.easeOut',
+        onComplete: () => {
+          if (this.playerSprite) {
+            this.playerSprite.setScale(1);
+          }
+        },
+      });
+    }
+  }
+
+  private setEnemyPose(display: EnemyDisplay | undefined, state: 'idle' | 'attack' | 'hit'): void {
+    if (!display) return;
+    display.setState(state);
+    if (state !== 'idle') {
+      this.time.delayedCall(300, () => display.setState('idle'));
+    }
   }
 
   private shakeTarget(container: Phaser.GameObjects.Container, intensity = 6): void {
@@ -482,6 +564,8 @@ export class CombatScene extends Phaser.Scene {
     this.refresh(snap);
     if (snap.playerHP < prevHP) {
       audio.damageTaken();
+      this.setPlayerPose('hit');
+      this.animateEnemyAttack();
       if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
       const dmg = prevHP - snap.playerHP;
       this.floatingText(280, 600, `-${dmg}`, PALETTE_HEX.danger);
@@ -493,6 +577,8 @@ export class CombatScene extends Phaser.Scene {
         this.refresh(next);
         if (next.playerHP < this.lastPlayerHP) {
           audio.damageTaken();
+          this.setPlayerPose('hit');
+          this.animateEnemyAttack();
           if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
           const dmg2 = this.lastPlayerHP - next.playerHP;
           this.floatingText(280, 600, `-${dmg2}`, PALETTE_HEX.danger);
@@ -500,6 +586,11 @@ export class CombatScene extends Phaser.Scene {
         this.lastPlayerHP = next.playerHP;
       });
     }
+  }
+
+  private animateEnemyAttack(): void {
+    const alive = this.enemyDisplays.find((d) => d.container.visible);
+    if (alive) this.setEnemyPose(alive, 'attack');
   }
 
   private handleCombatEnd(phase: CombatSnapshot['phase']) {

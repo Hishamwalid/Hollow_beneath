@@ -85,6 +85,13 @@ export function createStatPanel(scene: Phaser.Scene, x: number, y: number, width
       levelText.setText(`LV ${player.level}`);
       xpBar.setPct(xpForNext > 0 ? xpInLevel / xpForNext : 1);
       xpText.setText(`${player.xp} / ${xpNeeded} XP`);
+      hpBar.setPct(player.currentHP / Math.max(1, player.derived.maxHP));
+      hpText.setText(`${player.currentHP}/${player.derived.maxHP}`);
+      mpBar.setPct(player.currentMP / Math.max(1, player.derived.maxMP));
+      mpText.setText(`${player.currentMP}/${player.derived.maxMP}`);
+      resBar.setPct(Math.max(0, Math.min(1, player.resonance / 100)));
+      resTierText.setText(resonanceTier(player.resonance));
+      momentumDots.forEach((d, i) => d.setFillStyle(i < Math.max(0, Math.min(3, player.momentum)) ? 0xc9a24b : 0x2a2e33));
     },
     destroy: () => container.destroy(),
   };
