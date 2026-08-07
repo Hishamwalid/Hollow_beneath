@@ -22,9 +22,8 @@ export function createEnemyDisplay(
 ): EnemyDisplay {
   const container = scene.add.container(x, y).setDepth(5);
   const panelBg = scene.add.image(0, 0, 'panel_enemy').setAlpha(0.75).setInteractive({ useHandCursor: true });
-  const selectRing = scene.add.circle(0, 0, 40, 0x000000, 0).setStrokeStyle(3, 0xc9a24b, 0).setVisible(false);
   const token = scene.add.image(0, -18, 'enemy_idle');
-  token.setDisplaySize(84, 110);
+  token.setDisplaySize(84, 110).setInteractive({ useHandCursor: true });
   const nameText = scene.add.text(0, 30, '', { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone, wordWrap: { width: 120 }, align: 'center' }).setOrigin(0.5, 0);
   const hpBg = scene.add.rectangle(0, 52, 84, 8, 0x2a2e33);
   const hpFg = scene.add.rectangle(-42, 52, 84, 8, 0xb0453f).setOrigin(0, 0.5);
@@ -32,9 +31,20 @@ export function createEnemyDisplay(
   const affinityText = scene.add.text(0, -64, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold, align: 'center' }).setOrigin(0.5, 1);
   const statsText = scene.add.text(0, 72, '', { fontFamily: FONT_MONO, fontSize: '9px', color: PALETTE_HEX.boneMuted, align: 'center' }).setOrigin(0.5, 0);
   const statusText = scene.add.text(0, 84, '', { fontFamily: FONT_MONO, fontSize: '9px', color: '#e67e22', align: 'center', wordWrap: { width: 100 } }).setOrigin(0.5, 0);
-
-  container.add([panelBg, selectRing, token, nameText, hpBg, hpFg, hpText, affinityText, statsText, statusText]);
+  const diamond = scene.add.graphics({ x: 0, y: -88 });
+  diamond.fillStyle(0xffd700, 1);
+  diamond.fillPoints([
+    { x: 0, y: -12 },
+    { x: 12, y: 0 },
+    { x: 0, y: 12 },
+    { x: -12, y: 0 },
+  ], true);
+  diamond.setVisible(false);
+  container.add([panelBg, token, nameText, hpBg, hpFg, hpText, affinityText, statsText, statusText, diamond]);
   panelBg.on('pointerdown', onClick);
+  token.on('pointerdown', onClick);
+  token.on('pointerover', () => { if (!selected) token.setScale(1.08); });
+  token.on('pointerout', () => { if (!selected) token.setScale(1); });
 
   const setState = (state: 'idle' | 'attack' | 'hit') => {
     if (scene.textures.exists(`enemy_${state}`)) token.setTexture(`enemy_${state}`);
@@ -42,6 +52,28 @@ export function createEnemyDisplay(
       token.setTint(0xff3b30);
     } else {
       token.clearTint();
+    }
+  };
+
+  let selected = false;
+  let diamondTween: Phaser.Tweens.Tween | undefined;
+  const setSelected = (v: boolean) => {
+    if (selected === v) return;
+    selected = v;
+    if (v) {
+      diamond.setVisible(true);
+      diamondTween = scene.tweens.add({
+        targets: diamond,
+        y: { from: -88, to: -96 },
+        duration: 700,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    } else {
+      diamond.setVisible(false);
+      if (diamondTween) { diamondTween.stop(); diamondTween = undefined; }
+      diamond.y = -88;
     }
   };
 
@@ -65,13 +97,11 @@ export function createEnemyDisplay(
         affinityText.setText('');
         statsText.setText('');
       }
-      statusText.setText(view.statuses.map((s) => statusLabel(s.id)).join(', '));
+statusText.setText(view.statuses.map((s) => statusLabel(s.id)).join(', '));
     },
-    setSelected: (v: boolean) => {
-      selectRing.setStrokeStyle(3, 0xc9a24b, v ? 1 : 0);
-    },
+    setSelected,
     setState,
-    destroy: () => container.destroy(),
+    destroy: () => { if (diamondTween) diamondTween.stop(); container.destroy(); },
   };
 }
 

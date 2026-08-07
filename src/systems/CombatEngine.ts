@@ -71,6 +71,7 @@ export interface CombatSnapshot {
   guarding: boolean;
   enemies: EnemyView[];
   initiativeOrder: string[];
+  playerHitEnemyKeys: string[];
   log: string[];
   bossPhaseLabel?: string;
 }
@@ -115,6 +116,10 @@ export class CombatEngine {
   private firstAttackUsed = false;
   /** Counts actions taken this round; used to allow banking up to 2 AP when the player idles. */
   private actionsTakenThisRound = 0;
+  /** Keys of enemies that landed damage on the player since the start of the current enemy phase. */
+  private playerHitEnemyKeys: string[] = [];
+  /** Key of the enemy currently resolving its turn (used to attribute player damage). */
+  private _currentAttackerKey: string | null = null;
   /** Phase Shift: dodge the next N attacks (momentum trigger). */
   private phaseShiftCharges = 0;
   /** Desperate Strike: force-crit while active (reset at round start). */
@@ -140,7 +145,9 @@ export class CombatEngine {
       this.enemies.push(this.buildBossCombatant(setup.bossDef));
     } else {
       for (const id of setup.enemyIds) {
-        this.enemies.push(this.buildEnemyCombatant(id));
+        const enemy = this.buildEnemyCombatant(id);
+        enemy._key = `${id}_${this.enemies.length}_0`;
+        this.enemies.push(enemy);
       }
     }
   }
@@ -277,6 +284,7 @@ export class CombatEngine {
     const alive = this.aliveEnemies();
     const playerSpd = this.effectivePlayerSpeed();
     const slowerOrEqual = alive.filter((e) => e.spd <= playerSpd).sort((a, b) => b.spd - a.spd);
+    this.playerHitEnemyKeys = [];
     this.resolvingEnemyTurns = true;
     for (const e of slowerOrEqual) this.resolveEnemyTurn(e);
     this.resolvingEnemyTurns = false;
@@ -330,6 +338,7 @@ export class CombatEngine {
 
   private resolveEnemyTurn(enemy: InternalEnemy): void {
     if (enemy.hp <= 0 || this.phase !== 'player') return;
+    this._currentAttackerKey = enemy._key;
     // Control effects that skip the turn
     if (hasStatus(enemy.statuses, 'stun')) {
       this.log.push(`${enemy.name} is stunned and cannot act.`);
@@ -462,6 +471,9 @@ export class CombatEngine {
     }
     dmg = applyBarrier(this.playerStatuses, dmg);
     this.player.currentHP = Math.max(0, this.player.currentHP - dmg);
+    if (dmg > 0 && this._currentAttackerKey) {
+      if (!this.playerHitEnemyKeys.includes(this._currentAttackerKey)) this.playerHitEnemyKeys.push(this._currentAttackerKey);
+    }
     if (hasStatus(this.playerStatuses, 'reflection') && dmg > 0) {
       const reflected = Math.round(dmg * 0.25);
       const firstEnemy = this.aliveEnemies()[0];
@@ -982,6 +994,7 @@ export class CombatEngine {
           spd: e.spd,
         })),
       initiativeOrder,
+      playerHitEnemyKeys: [...this.playerHitEnemyKeys],
       log: this.log,
       bossPhaseLabel: bossAlive && this.bossDef ? this.bossDef.getPhase(bossAlive.hp / bossAlive.maxHp).label : undefined,
     };

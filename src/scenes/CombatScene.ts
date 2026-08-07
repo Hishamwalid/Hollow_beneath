@@ -177,7 +177,7 @@ export class CombatScene extends Phaser.Scene {
       this.enemyDisplays.push(disp);
       this.enemyKeyMap.set(e.key, disp);
     });
-    if (!this.selectedTarget && snap.enemies[0]) this.selectedTarget = snap.enemies[0].key;
+    if (!this.selectedTarget && snap.enemies[0]) this.selectedTarget = null;
   }
 
   private updateTargetHighlight(snap: CombatSnapshot) {
@@ -565,8 +565,8 @@ export class CombatScene extends Phaser.Scene {
     if (snap.playerHP < prevHP) {
       audio.damageTaken();
       this.setPlayerPose('hit');
-      this.animateEnemyAttack();
-      if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
+      this.animateEnemyAttack(snap.playerHitEnemyKeys);
+      this.flashPlayerHit();
       const dmg = prevHP - snap.playerHP;
       this.floatingText(280, 600, `-${dmg}`, PALETTE_HEX.danger);
     }
@@ -578,8 +578,8 @@ export class CombatScene extends Phaser.Scene {
         if (next.playerHP < this.lastPlayerHP) {
           audio.damageTaken();
           this.setPlayerPose('hit');
-          this.animateEnemyAttack();
-          if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
+          this.animateEnemyAttack(next.playerHitEnemyKeys);
+          this.flashPlayerHit();
           const dmg2 = this.lastPlayerHP - next.playerHP;
           this.floatingText(280, 600, `-${dmg2}`, PALETTE_HEX.danger);
         }
@@ -588,9 +588,28 @@ export class CombatScene extends Phaser.Scene {
     }
   }
 
-  private animateEnemyAttack(): void {
+  private animateEnemyAttack(attackerKeys: string[] = []): void {
+    if (attackerKeys.length > 0) {
+      for (const key of attackerKeys) {
+        const display = this.enemyKeyMap.get(key);
+        if (display) this.setEnemyPose(display, 'attack');
+      }
+      return;
+    }
     const alive = this.enemyDisplays.find((d) => d.container.visible);
     if (alive) this.setEnemyPose(alive, 'attack');
+  }
+
+  private flashPlayerHit(): void {
+    const sp = this.playerSprite;
+    if (!sp) return;
+    sp.setTint(0xff3b30);
+    this.time.delayedCall(300, () => {
+      if (this.playerSprite === sp) {
+        this.playerSprite.clearTint();
+        this.playerSprite.setTexture('player_idle');
+      }
+    });
   }
 
   private handleCombatEnd(phase: CombatSnapshot['phase']) {
