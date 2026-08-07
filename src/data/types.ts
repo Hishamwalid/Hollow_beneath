@@ -44,7 +44,7 @@ export type AffinityMap = Partial<Record<DamageType, number>>;
 
 export type DotId = 'poison' | 'burn' | 'bleed' | 'curse' | 'frostbite' | 'shock_dot';
 export type ControlId = 'sleep' | 'fear' | 'silence' | 'blind' | 'confuse' | 'stun' | 'root';
-export type BuffId = 'focus' | 'barrier' | 'regeneration' | 'fortify' | 'blessing' | 'haste' | 'reflection' | 'brace' | 'echo_surge';
+export type BuffId = 'focus' | 'barrier' | 'regeneration' | 'fortify' | 'blessing' | 'haste' | 'reflection' | 'brace' | 'echo_surge' | 'atk_up';
 export type DebuffId = 'weakness' | 'defense_down' | 'slow' | 'armour_break' | 'seal_mind' | 'fragile_perception' | 'exhausted';
 export type StatusId = DotId | ControlId | BuffId | DebuffId;
 
@@ -69,20 +69,35 @@ export type ActionId =
   | 'focus'
   | 'brace';
 
+/** Structured effect resolved generically by CombatEngine (Phase 4a). */
+export type SkillEffect =
+  | { kind: 'damage'; type: DamageType; power: number; target: 'single' | 'all'; stat: 'atk' | 'magic'; guaranteed?: boolean }
+  | { kind: 'status'; id: StatusId; turns: number; stacks?: number; target: 'single' | 'all' }
+  | { kind: 'buff'; id: StatusId; turns: number }
+  | { kind: 'debuff'; id: StatusId; turns: number }
+  | { kind: 'heal'; pct?: number; flat?: number }
+  | { kind: 'barrier'; pct: number; turns: number }
+  | { kind: 'cost'; hpFlat?: number; hpPct?: number; resonance?: number; onHit?: boolean }
+  | { kind: 'resource'; momentum?: number; mp?: number }
+  | { kind: 'evade' }
+  | { kind: 'next_attack_amp'; dmg: number; guaranteed?: boolean };
+
 export interface SkillDef {
   id: string;
   name: string;
   apCost: number;
   mpCost?: number; // MP cost to use (optional, default 0)
   damageType?: DamageType;
-  skillPower?: number; // multiplier in damage formula
+  skillPower?: number; // multiplier in the damage formula (style hint / fallback for non-effects computed)
   minResonance?: number; // resonance ability gate
   description: string;
-  /** custom effect hook invoked by CombatEngine; may apply status, heal, buff, etc. */
+  /** Structured effects resolved generically by CombatEngine (Phase 4a). Active skills use this. */
+  effects?: SkillEffect[];
+  /** legacy custom effect hook — retained for passive checks & backwards-compat until full migration */
   tag?: string;
   /** organizational grouping only (Warrior/Ranger/Scholar/Guardian/Shadow/Universal); no separate spend-points system */
-  tree?: 'warrior' | 'ranger' | 'scholar' | 'guardian' | 'shadow' | 'universal';
-  /** Combo tags (Phase 3): Strike/Break/Analyze/Guard + Physical/Elemental + damage-type + specials (Mark, Counter). */
+  tree?: 'warrior' | 'ranger' | 'scholar' | 'guardian' | 'shadow' | 'balanced' | 'universal';
+  /** Combo tags (Phase 3): Strike/Break/Analyze/Guard + Physical/Elemental + damage-type + specials (Mark, Taunt). */
   tags?: ActionTag[];
 }
 
@@ -90,7 +105,7 @@ export type ActionTag =
   | 'Strike' | 'Break' | 'Analyze' | 'Guard'
   | 'Physical' | 'Elemental'
   | 'Slash' | 'Pierce' | 'Blunt' | 'Flame' | 'Frost' | 'Shock' | 'Sacred' | 'Shadow'
-  | 'Mark' | 'Counter' | 'Knowledge' | 'Mental' | 'Defense' | 'Stance';
+  | 'Mark' | 'Counter' | 'Knowledge' | 'Mental' | 'Defense' | 'Stance' | 'Taunt' | 'Stealth' | 'Charge';
 
 // ---- Combatants ----------------------------------------------------------------
 

@@ -36,6 +36,7 @@ export const BUFF_LABELS: Record<BuffId, string> = {
   reflection: 'Reflection — reflects 25% damage taken',
   brace: 'Brace — Guard blocks 20% more damage',
   echo_surge: 'Echo Surge — all damage +20%',
+  atk_up: 'Atk Up — Attack +25%',
 };
 
 export const DEBUFF_LABELS: Record<DebuffId, string> = {

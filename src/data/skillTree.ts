@@ -1,6 +1,9 @@
+import type { ClassId } from './types';
+import { CLASSES } from './classes';
+
 export interface SkillTreeNode {
   id: string;
-  tier: 1 | 2 | 3;
+  tier: number;
   cost: number;
 }
 
@@ -11,45 +14,25 @@ export interface SkillTreeDef {
   nodes: SkillTreeNode[];
 }
 
-export const SKILL_TREES: SkillTreeDef[] = [
-  {
-    id: 'warrior', name: 'Warrior', color: 0xb0453f,
-    nodes: [
-      { id: 'iron_resolve', tier: 1, cost: 1 },
-      { id: 'reckless_swing', tier: 2, cost: 2 },
-      { id: 'second_wind', tier: 3, cost: 3 },
-    ],
-  },
-  {
-    id: 'scholar', name: 'Scholar', color: 0x4a6fa5,
-    nodes: [
-      { id: 'resonant_study', tier: 1, cost: 1 },
-      { id: 'cross_reference', tier: 2, cost: 2 },
-      { id: 'overwritten_truth', tier: 3, cost: 3 },
-    ],
-  },
-  {
-    id: 'ranger', name: 'Ranger', color: 0x27ae60,
-    nodes: [
-      { id: 'quickstep', tier: 1, cost: 1 },
-      { id: 'opening_strike', tier: 2, cost: 2 },
-      { id: 'hunters_mark', tier: 3, cost: 3 },
-    ],
-  },
-  {
-    id: 'guardian', name: 'Guardian', color: 0x8e44ad,
-    nodes: [
-      { id: 'bulwark_stance', tier: 1, cost: 1 },
-      { id: 'retaliation', tier: 2, cost: 2 },
-      { id: 'unshakeable', tier: 3, cost: 3 },
-    ],
-  },
-  {
-    id: 'shadow', name: 'Shadow', color: 0x2c3e50,
-    nodes: [
-      { id: 'veil_step', tier: 1, cost: 1 },
-      { id: 'parting_words', tier: 2, cost: 2 },
-      { id: 'borrowed_time', tier: 3, cost: 3 },
-    ],
-  },
-];
+/**
+ * Six class-locked trees, one per ClassId. Each tree holds the class passive
+ * (tier 0, free), its signature (tier 1), and four progression skills (tiers 2–5).
+ * Derived from CLASSES so content stays in one place.
+ */
+export const SKILL_TREES: SkillTreeDef[] = CLASSES.map((c) => ({
+  id: c.id,
+  name: c.name,
+  color: c.color,
+  nodes: [
+    { id: c.passive.id, tier: 0, cost: 0 },
+    { id: c.signature.id, tier: 1, cost: 1 },
+    { id: c.progression[0].id, tier: 2, cost: 2 },
+    { id: c.progression[1].id, tier: 3, cost: 3 },
+    { id: c.progression[2].id, tier: 4, cost: 4 },
+    { id: c.progression[3].id, tier: 5, cost: 5 },
+  ],
+}));
+
+export function skillTreeForClass(classId: ClassId): SkillTreeDef | undefined {
+  return SKILL_TREES.find((t) => t.id === classId);
+}

@@ -5,6 +5,7 @@ import { ITEMS } from '@data/items';
 import { NAMED_SKILLS } from '@data/skills';
 import type { EventApplyCtx, PlayerState } from '@data/types';
 import { CombatEngine, type CombatSnapshot, type MomentumChoice } from '@systems/CombatEngine';
+import { BRAVERY_ACTIONS } from '@systems/combat/FearSystem';
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
 import { showWhisper } from '@ui/WhisperOverlay';
@@ -225,6 +226,10 @@ export class CombatScene extends Phaser.Scene {
       this.showMomentumModal();
       return;
     }
+    if (snap.phase === 'crisis' && snap.pendingCrisis) {
+      this.showCrisisModal(snap.pendingCrisis);
+      return;
+    }
     if ((snap.phase === 'victory' || snap.phase === 'defeat' || snap.phase === 'fled') && !this.resultShown) {
       this.resultShown = true;
       this.time.delayedCall(400, () => this.handleCombatEnd(snap.phase));
@@ -319,6 +324,14 @@ export class CombatScene extends Phaser.Scene {
       { label: 'Deep Analysis (2 AP)', subtitle: 'Full move pool, exact rules, hidden notes. Requires at least one Probe.', disabled: !canAfford(2) || targetProbes < 1, onSelect: () => { this.closeOverlay(); this.doAction('deep_analyze', () => this.engine.deepAnalyze(this.selectedTarget ?? undefined)); } },
       { label: 'Focus (1 AP)', subtitle: 'Regain 15 MP and gain +1 Momentum.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('focus', () => this.engine.focus()); } },
       { label: 'Brace (1 AP)', subtitle: 'Guard blocks 20% more damage for 2 turns.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('brace', () => this.engine.brace()); } },
+      ...(snap.fear > 50
+        ? BRAVERY_ACTIONS.map((b): ChoiceMenuItem => ({
+            label: `${b.label} (${b.apCost} AP)`,
+            subtitle: b.detail,
+            disabled: !canAfford(b.apCost),
+            onSelect: () => { this.closeOverlay(); this.doAction('bravery', () => this.engine.resolveBravery(b.id)); },
+          }))
+        : []),
       { label: 'Withdraw (2 AP)', subtitle: 'Attempt to flee. Speed-based success chance.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('withdraw', () => this.engine.withdraw()); } },
     ];
 
@@ -661,6 +674,30 @@ export class CombatScene extends Phaser.Scene {
         },
       })),
       { width: 420, spacing: 58 },
+    );
+  }
+
+  private showCrisisModal(crisis: { id: string; title: string; flavor: string; options: { id: string; label: string; subtitle: string }[] }) {
+    if (this.overlayBg) return;
+    this.closeOverlay();
+    audio.momentumFull();
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.78).setDepth(35);
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 180, crisis.title, { fontFamily: FONT_SERIF, fontSize: '28px', color: PALETTE_HEX.danger }).setOrigin(0.5).setDepth(36);
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, crisis.flavor, { fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5).setDepth(36);
+    this.overlayMenu = createChoiceMenu(
+      this,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2 - 80,
+      crisis.options.map((o) => ({
+        label: o.label,
+        subtitle: o.subtitle,
+        onSelect: () => {
+          this.closeOverlay();
+          const snap = this.engine.resolveCrisis(o.id);
+          this.refresh(snap);
+        },
+      })),
+      { width: 460, spacing: 62 },
     );
   }
 

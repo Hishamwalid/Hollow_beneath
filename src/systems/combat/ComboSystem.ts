@@ -133,6 +133,5 @@ export function tagsForSkill(skill: {
       tags.push('Physical', tag as ActionTag);
     }
   }
-  if (skill.tag === 'active_hunters_mark') tags.push('Mark');
   return tags;
 }

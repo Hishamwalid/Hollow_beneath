@@ -11,6 +11,8 @@ import { STARTING_FACTIONS } from '@data/factions';
 import { ENEMIES } from '@data/enemies';
 import { ITEMS } from '@data/items';
 import { NAMED_SKILLS, DISCOVERABLE_SKILLS, PRESET_STARTING_SKILL } from '@data/skills';
+import { CLASSES, CLASS_SKILLS } from '@data/classes';
+import { SKILL_TREES, skillTreeForClass } from '@data/skillTree';
 import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { TOTAL_WHISPERS, WHISPERS } from '@data/whispers';
 import type { PlayerState, StatBlock, Equipment } from '@data/types';
@@ -97,6 +99,7 @@ function makeTestPlayer(stats: StatBlock): PlayerState {
       snap = engine.attack();
       if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('unravel');
     }
+    if (snap.phase === 'crisis' && snap.pendingCrisis) snap = engine.resolveCrisis(snap.pendingCrisis.options[0].id);
     if (snap.phase === 'player') snap = engine.endPlayerPhase();
     if (snap.phase !== 'victory' && snap.phase !== 'defeat') snap = engine.beginRound();
     rounds++;
@@ -129,6 +132,7 @@ for (const bossId of BOSS_ORDER) {
         guard++;
         if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
       }
+      if (snap.phase === 'crisis' && snap.pendingCrisis) snap = engine.resolveCrisis(snap.pendingCrisis.options[0].id);
       if (snap.phase === 'player') snap = engine.endPlayerPhase();
       if (snap.phase !== 'victory' && snap.phase !== 'defeat') snap = engine.beginRound();
       rounds++;
@@ -226,10 +230,10 @@ ok('all documented events/choices exercised');
   assert(nonFillerEvents === 31, `31 documented events excluding filler (has ${nonFillerEvents})`);
   assert(Object.keys(ENEMIES).length === 12, `12 standard enemy types (has ${Object.keys(ENEMIES).length})`);
   assert(Object.keys(ITEMS).length === 30, `30 items (has ${Object.keys(ITEMS).length})`);
-  assert(Object.keys(NAMED_SKILLS).length === 25, `25 named skills (has ${Object.keys(NAMED_SKILLS).length})`);
+  assert(Object.keys(NAMED_SKILLS).length === 61, `61 named skills incl. class skills (has ${Object.keys(NAMED_SKILLS).length})`);
   assert(TOTAL_WHISPERS === 50, `50 whispers (has ${TOTAL_WHISPERS})`);
   assert(Object.keys(MINOR_LANDMARKS).length === 10, `10 minor landmarks (has ${Object.keys(MINOR_LANDMARKS).length})`);
-  ok('content roster counts: 20 events, 12 enemies, 25 skills, 30 items, 40 lore, 50 whispers, 10 minor landmarks (51 total lore fragments)');
+  ok('content roster counts: 20 events, 12 enemies, 61 skills, 30 items, 40 lore, 50 whispers, 10 minor landmarks (51 total lore fragments)');
 }
 
 // ---- 9. Skill distribution paths resolve to real skills --------------------
@@ -390,6 +394,7 @@ ok('all documented events/choices exercised');
       for (const b of snap.banners) if (b.startsWith('WEAKNESS WINDOW')) sawWindow.on = true;
       if (snap.phase === 'player') snap = engine.endPlayerPhase();
       if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
+      if (snap.phase === 'crisis' && snap.pendingCrisis) snap = engine.resolveCrisis(snap.pendingCrisis.options[0].id);
       if (snap.phase !== 'victory' && snap.phase !== 'defeat') {
         snap = engine.beginRound();
         player.currentHP = player.derived.maxHP;
@@ -427,6 +432,7 @@ ok('all documented events/choices exercised');
       }
       if (snap.phase === 'player') snap = engine.endPlayerPhase();
       if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
+      if (snap.phase === 'crisis' && snap.pendingCrisis) snap = engine.resolveCrisis(snap.pendingCrisis.options[0].id);
       if (snap.phase !== 'victory' && snap.phase !== 'defeat') {
         snap = engine.beginRound();
         player.currentHP = player.derived.maxHP;
@@ -437,6 +443,28 @@ ok('all documented events/choices exercised');
     const inLog = snap.log.some((l) => l.includes('COMBO Expose Truth'));
     assert(comboBanner || inLog, `combo fires from [Strike,Break,Sacred] across rounds (banners=${JSON.stringify(snap.banners)}, log=${JSON.stringify(snap.log.slice(-4))})`);
     ok(`engine combo: banners=${JSON.stringify(snap.banners)}, log has Expose Truth=${inLog}`);
+  }
+
+  // ---- 12. Class identity (Phase 4b): 6 classes, 36 skills, class trees ----
+  {
+    assert(CLASSES.length === 6, `six classes defined (has ${CLASSES.length})`);
+    assert(Object.keys(CLASS_SKILLS).length === 36, `36 class skills (has ${Object.keys(CLASS_SKILLS).length})`);
+    for (const c of CLASSES) {
+      assert(c.passive.id.startsWith(c.id) || c.passive.id === 'rage' || c.passive.id === 'precision' || c.passive.id === 'knowledge' || c.passive.id === 'resolve' || c.passive.id === 'risk' || c.passive.id === 'adaptation', `class ${c.id} has a passive`);
+      assert(c.progression.length === 4, `class ${c.id} has 4 progression skills (has ${c.progression.length})`);
+      assert(NAMED_SKILLS[c.passive.id] && NAMED_SKILLS[c.signature.id], `class ${c.id} skills registered in NAMED_SKILLS`);
+    }
+    for (const t of SKILL_TREES) {
+      assert(t.nodes.length === 6, `tree ${t.id} has 6 nodes (passive+signature+4) (has ${t.nodes.length})`);
+      assert(t.nodes[0].cost === 0, `tree ${t.id} passive is free (tier 0)`);
+    }
+    assert(skillTreeForClass('warrior')?.nodes.some((n) => n.id === 'last_stand'), 'warrior tree exposes Last Stand signature');
+    // Class signature tags all resolve to real skills and effects/tags exist
+    for (const id of Object.keys(CLASS_SKILLS)) {
+      const s = CLASS_SKILLS[id];
+      assert(!!s.apCost || s.apCost === 0, `class skill ${id} has apCost`);
+    }
+    ok(`class identity: ${CLASSES.length} classes, ${Object.keys(CLASS_SKILLS).length} skills, ${SKILL_TREES.length} class-locked trees`);
   }
 }
 

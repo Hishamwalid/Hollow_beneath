@@ -1,4 +1,5 @@
 import type { ActionId, SkillDef } from './types';
+import { CLASS_SKILLS } from './classes';
 
 /** AP cost for the combat actions (Battle Plan Part 2). 'skill' cost comes from the SkillDef chosen. */
 export const ACTION_AP_COST: Record<ActionId, number> = {
@@ -74,7 +75,11 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     damageType: 'sacred',
     skillPower: 1.6,
     description: 'Sacred AoE. Costs 10 HP and 8 MP to cast.',
-    tag: 'active_martyrs_flame',
+    effects: [
+      { kind: 'cost', hpFlat: 10 },
+      { kind: 'damage', type: 'sacred', power: 1.6, target: 'all', stat: 'magic' },
+    ],
+    tags: ['Elemental', 'Sacred', 'Strike'],
     tree: 'guardian',
   },
   archival_insight: {
@@ -100,7 +105,11 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     damageType: 'sacred',
     skillPower: 1.1,
     description: 'A Sable rite turned to combat use. -2 Resonance on hit.',
-    tag: 'active_sealing_strike',
+    effects: [
+      { kind: 'damage', type: 'sacred', power: 1.1, target: 'single', stat: 'atk' },
+      { kind: 'cost', resonance: 2, onHit: true },
+    ],
+    tags: ['Elemental', 'Sacred', 'Strike'],
     tree: 'guardian',
   },
 
@@ -120,7 +129,11 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     damageType: 'slash',
     skillPower: 1.8,
     description: 'A heavy overcommitted strike. Costs 8% of your current HP to cast.',
-    tag: 'active_reckless_swing',
+    effects: [
+      { kind: 'cost', hpPct: 8 },
+      { kind: 'damage', type: 'slash', power: 1.8, target: 'single', stat: 'atk' },
+    ],
+    tags: ['Physical', 'Slash', 'Strike'],
     tree: 'warrior',
   },
   second_wind: {
@@ -157,7 +170,8 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     damageType: 'pierce',
     skillPower: 1.3,
     description: 'A precise strike that cannot miss.',
-    tag: 'active_hunters_mark',
+    effects: [{ kind: 'damage', type: 'pierce', power: 1.3, target: 'single', stat: 'atk', guaranteed: true }],
+    tags: ['Physical', 'Pierce', 'Strike', 'Mark'],
     tree: 'ranger',
   },
 
@@ -186,7 +200,8 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     damageType: 'shock',
     skillPower: 1.7,
     description: 'A precise, INT-scaled strike of corrected fact.',
-    tag: 'active_overwritten_truth',
+    effects: [{ kind: 'damage', type: 'shock', power: 1.7, target: 'single', stat: 'magic' }],
+    tags: ['Elemental', 'Shock', 'Strike', 'Knowledge'],
     tree: 'scholar',
   },
 
@@ -223,7 +238,8 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     apCost: 2,
     mpCost: 4,
     description: "Guarantees you avoid the enemy's next attack this turn.",
-    tag: 'active_veil_step',
+    effects: [{ kind: 'evade' }],
+    tags: ['Stealth'],
     tree: 'shadow',
   },
   parting_words: {
@@ -271,6 +287,9 @@ export const PRESET_STARTING_SKILL: Record<string, string> = {
   Shadow: 'borrowed_time',
   Balanced: 'steady_hands',
 };
+
+/** Class skills merged into the discoverable/universal pool (never discoverable — class-locked). */
+Object.assign(NAMED_SKILLS, CLASS_SKILLS);
 
 /** Pool for the discovery "training notes" template — anything not already covered above. */
 export const DISCOVERABLE_SKILLS: string[] = [

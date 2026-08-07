@@ -115,17 +115,6 @@ export class CharacterCreationScene extends Phaser.Scene {
     if (!isValidBuild(this.stats)) return;
     const preset = closestPresetName(this.stats);
     useGameStore.getState().startNewRun(this.stats, CLASS_OF_PRESET[preset] ?? 'balanced');
-    const store = useGameStore.getState();
-    const player = store.player;
-    const startingSkill = PRESET_STARTING_SKILL[preset];
-    if (player && startingSkill && !player.skillsKnown.includes(startingSkill)) {
-      const updatedPlayer = { ...player, skillsKnown: [...player.skillsKnown, startingSkill] };
-      if (startingSkill === 'quickstep') updatedPlayer.derived = { ...updatedPlayer.derived, speed: player.derived.speed + 5 };
-      if (startingSkill === 'bulwark_stance') updatedPlayer.derived = { ...updatedPlayer.derived, defense: Math.round(player.derived.defense * 1.15) };
-      if (startingSkill === 'steady_hands') updatedPlayer.derived = { ...updatedPlayer.derived, accuracy: player.derived.accuracy + 10 };
-      useGameStore.setState({ player: updatedPlayer });
-      useGameStore.getState().persist();
-    }
     fadeToScene(this, 'Board');
   }
 }

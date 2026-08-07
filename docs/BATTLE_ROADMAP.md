@@ -260,9 +260,15 @@ Full doc Part 8 — each class: passive + signature (1 AP) + 4 progression skill
 `classes.ts`, `skills.ts` (refactor), `types.ts`, `CombatEngine.ts` (effects resolver + hooks), `SkillTreeScene.ts`, `CharacterCreationScene.ts`, `CombatScene.ts`, `CombatHUD.ts`, `CrisisSystem.ts`, `FearSystem.ts`, `DesperationSystem.ts`, `PlaceholderAudio.ts`.
 
 ### Done criteria
-- Choosing Warrior/Ranger/etc. changes combat feel (passive + signature active).
-- Skill trees show only your class; class skills locked out otherwise.
-- Crisis modal fires with correct triggers; desperation events appear at low HP; fear → Terrified.
+- ✅ Choosing Warrior/Ranger/etc. changes combat feel (passive + signature active).
+- ✅ Skill trees show only your class; class skills locked out otherwise.
+- ✅ Crisis modal fires with correct triggers (Desperate Gambit <25% HP, Boss's Wrath <50%, Revelation first weakness, Critical Moment 3+ momentum, Fate's Edge round ≥5); All-In death roll wired; resilience via `resolveCrisis(optionId)`.
+- ✅ Fear gauge (hidden) → Terrified −20% acc / −10% dmg when >50; Bravery actions in Skill menu (`resolveBravery`).
+- ✅ Desperation roll at low HP (<35%) on player turn start; events fire once each (`checkDesperation`).
+
+### Notes
+- Crisis/Fear/Desperation state lives in `CombatEngine` (fields `crisisSeen`, `pendingCrisisId`, `fear`, `desperationFired`, `firstWeaknessRevealed`). Snapshot exposes `pendingCrisis` + `fear`; `CombatPhase` includes `'crisis'`.
+- Headless `smoketest.ts` drive loops auto-resolve a pending crisis via `resolveCrisis(options[0].id)` so fights terminate deterministically.
 
 ---
 

@@ -1,18 +1,19 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
-import { SKILL_TREES, type SkillTreeNode, type SkillTreeDef } from '@data/skillTree';
+import { skillTreeForClass, type SkillTreeNode, type SkillTreeDef } from '@data/skillTree';
 import { NAMED_SKILLS } from '@data/skills';
+import { CLASSES } from '@data/classes';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
-const COL_COUNT = 5;
+const COL_COUNT = 1;
 const COL_WIDTH = 140;
 const START_X = Math.round((GAME_WIDTH - COL_COUNT * COL_WIDTH) / 2 + COL_WIDTH / 2);
 const TIER_1_Y = 165;
-const TIER_GAP = 104;
-const NODE_SIZE = 92;
+const TIER_GAP = 88;
+const NODE_SIZE = 78;
 
 export class SkillTreeScene extends Phaser.Scene {
   private tooltip?: Phaser.GameObjects.Container;
@@ -27,10 +28,16 @@ export class SkillTreeScene extends Phaser.Scene {
     const { player } = useGameStore.getState();
     if (!player) { fadeToScene(this, 'Menu'); return; }
 
-    this.add.text(GAME_WIDTH / 2, 30, 'Skill Trees', {
+    const classDef = CLASSES.find((c) => c.id === player.classId);
+    this.add.text(GAME_WIDTH / 2, 30, `${classDef?.name ?? 'Class'} Skill Tree`, {
       fontFamily: FONT_SERIF, fontSize: '32px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5);
-    const pointText = this.add.text(GAME_WIDTH / 2, 70, '', {
+    if (classDef) {
+      this.add.text(GAME_WIDTH / 2, 66, classDef.archetype, {
+        fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+      }).setOrigin(0.5);
+    }
+    const pointText = this.add.text(GAME_WIDTH / 2, 96, '', {
       fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.goldBright,
     }).setOrigin(0.5);
 
@@ -40,9 +47,8 @@ export class SkillTreeScene extends Phaser.Scene {
     };
     refreshPointText();
 
-    SKILL_TREES.forEach((tree, col) => {
-      this.drawTreeColumn(tree, col, refreshPointText);
-    });
+    const tree = skillTreeForClass(player.classId);
+    if (tree) this.drawTreeColumn(tree, 0, refreshPointText);
 
     createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 45, 'Back', () => fadeToScene(this, 'Board'), { width: 180, height: 38 });
   }

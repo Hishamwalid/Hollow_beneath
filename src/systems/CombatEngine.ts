@@ -9,6 +9,7 @@ import type {
   EnemyTurnContext,
   IntentDef,
   PlayerState,
+  SkillDef,
   StatusId,
   StatusInstance,
 } from '@data/types';
@@ -23,12 +24,17 @@ import {
   getStatus,
   hasStatus,
   removeAllBuffs,
+  removeAllDebuffs,
+  removeDebuffs,
   setBarrier,
   statMultiplier,
   tickDots,
   tickDurations,
 } from './StatusEffectSystem';
 import { fatiguePenalty, clampFatigue } from './combat/FatigueSystem';
+import { pickCrisis, markCrisisSeen, CRISES, type CrisisId, type CrisisOption } from './combat/CrisisSystem';
+import { clampFear, FEAR_MASSIVE_GAIN, FEAR_MASSIVE_PCT, FEAR_CRIT_GAIN, FEAR_ULTIMATE_GAIN, fearModifiers, BRAVERY_ACTIONS, type BraveryActionDef } from './combat/FearSystem';
+import { DESPERATIONS, pickDesperation, rollDesperation, DESPERATION_HP_PCT, type DesperationId } from './combat/DesperationSystem';
 import {
   confidenceFor,
   intentLine,
@@ -63,7 +69,7 @@ import {
 
 const ALL_ENEMY_DEFS = { ...ENEMIES, ...SUMMON_ENEMIES };
 
-export type CombatPhase = 'player' | 'momentum_choice' | 'victory' | 'defeat' | 'fled';
+export type CombatPhase = 'player' | 'momentum_choice' | 'crisis' | 'victory' | 'defeat' | 'fled';
 
 export interface CombatSetup {
   player: PlayerState;
@@ -128,6 +134,10 @@ export interface CombatSnapshot {
   /** Banners queued by reactions/combos since the last snapshot (now consumed by the caller read). */
   banners: string[];
   comboStacks: number;
+  /** Phase 4d: crisis waiting for the player to pick from a modal (null if none). */
+  pendingCrisis?: { id: CrisisId; title: string; flavor: string; options: CrisisOption[] };
+  /** Phase 4e: hidden fear gauge 0-100 (HUD may show a shiver when >50). */
+  fear: number;
 }
 
 interface InternalEnemy extends CombatState_Enemy {
@@ -215,6 +225,55 @@ export class CombatEngine {
   private momentumMultTurns = 0;
   /** Phase 3c: Expose Truth — original affinities per enemy while resistances are collapsed (2 turns). */
   private exposeTruth = new Map<string, { turns: number; original: AffinityMap }>();
+
+  // ---- Phase 4b: class identity state (passives + signatures + progression) ----
+  /** Warrior Rage: +1 per 10% HP lost (intsect), +5% dmg each, max 5. */
+  private rageStacks = 0;
+  /** Ranger Precision: +15% crit per dodge, max 3. */
+  private precisionStacks = 0;
+  /** Guardian Resolve: +1 per guard turn; spend 3 to nullify a hit. */
+  private resolveStacks = 0;
+  /** Scholar Knowledge: +5% damage per Analyze (max 3). */
+  private knowledgeStacks = 0;
+  /** Balanced Adaptation: +10% damage per unique ActionId used this combat (max 5). */
+  private adaptationActions = new Set<string>();
+  /** Next single attack amplified (signatures). */
+  private nextAttackMult = 1;
+  private nextAttackGuaranteed = false;
+  /** Shadow stealth — untargetable until the next attack. */
+  private stealthActive = false;
+  /** Warrior Last Stand: +dmg% & +guard% for N turns. */
+  private lastStandTurns = 0;
+  /** Guardian Aegis: +guard% for N turns. */
+  private aegisTurns = 0;
+  private aegisGuard = 0;
+  /** Scholar Arcane Thesis: override spell damage type for N turns + pierce resist. */
+  private thesisType: DamageType | null = null;
+  private thesisTurns = 0;
+  /** Balanced Mirror Adapt: +15% all stats for N turns. */
+  private mirrorTurns = 0;
+  /** Per-enemy Death's Mark: +50% incoming damage for N turns (key -> turns). */
+  private marked = new Map<string, number>();
+  /** Ranger/Shadow next-attack-cannot-miss / crit conditions set by signatures. */
+  private eagleAccuracyTurns = 0;
+  /** Guardian Counter: reflect 100% of the next physical hit. */
+  private reflectPhysical = false;
+  /** Forced criticals remaining (signature/progression hooks). */
+  private forcedCrits = 0;
+  /** Unity's Blade: this skill's damage ignores 30% defense. */
+  private unityBlade = false;
+  /** Crisis All-In: the player gambles a 30% death chance on their next damaging attack. */
+  private allInPending = false;
+
+  // ---- Phase 4d/e/f: Crisis, Fear, Desperation ----
+  private crisisSeen: CrisisId[] = [];
+  /** Snapshot-exposed pending crisis the scene must present as a modal. */
+  private pendingCrisisId: CrisisId | null = null;
+  /** Hidden 0-100 fear gauge. */
+  private fear = 0;
+  private desperationFired: DesperationId[] = [];
+  /** First weakness ever revealed (drives the Revelation crisis). */
+  private firstWeaknessRevealed = false;
 
   private readonly BOSS_TENDENCY: Record<string, EnemyTendency> = {
     sentinel: 'sage',
@@ -340,6 +399,11 @@ export class CombatEngine {
     this.guarding = false;
     this.lastActionRepeated = false;
     this.veilStepGuaranteed = false;
+    this.nextAttackMult = 1;
+    this.nextAttackGuaranteed = false;
+    this.allInPending = false;
+    this.stealthActive = false;
+    this.unityBlade = false;
     this.fossilLastLawEnforced = false;
     this.desperateStrike = false;
     this.actionsTakenThisRound = 0;
@@ -385,6 +449,9 @@ export class CombatEngine {
       this.momentumChoicePending = false;
       this.phase = 'momentum_choice';
     }
+    // Phase 4d: check whether a crisis should interrupt the start of the player turn.
+    if (this.phase === 'player') this.checkCrisis();
+    if (this.phase === 'player') this.checkDesperation();
     return this.snapshot();
   }
 
@@ -427,6 +494,16 @@ export class CombatEngine {
       this.log.push(`Regeneration restores ${regenAmt} HP.`);
     }
     tickDurations(this.playerStatuses).forEach((m) => this.log.push(m));
+    if (this.lastStandTurns > 0) this.lastStandTurns -= 1;
+    if (this.thesisTurns > 0) { this.thesisTurns -= 1; if (this.thesisTurns === 0) this.thesisType = null; }
+    if (this.aegisTurns > 0) { this.aegisTurns -= 1; if (this.aegisTurns === 0) this.aegisGuard = 0; }
+    if (this.mirrorTurns > 0) this.mirrorTurns -= 1;
+    if (this.eagleAccuracyTurns > 0) this.eagleAccuracyTurns -= 1;
+    for (const [key, turns] of this.marked) {
+      const next = turns - 1;
+      if (next <= 0) this.marked.delete(key);
+      else this.marked.set(key, next);
+    }
 
     for (const e of this.aliveEnemies()) {
       const dot = tickDots(e.statuses);
@@ -625,6 +702,13 @@ export class CombatEngine {
       }
     }
     let dodge = this.player.derived.dodge + (this.player.skillsKnown.includes('chorus_step') ? 10 : 0);
+    if (this.player.skillsKnown.includes('risk') && this.player.currentHP / this.player.derived.maxHP < 0.25) {
+      dodge += 15;
+    }
+    if (this.stealthActive) {
+      dodge = 100;
+      this.log.push('Stealth — the blow cannot find you.');
+    }
     if (this.phaseShiftCharges > 0) {
       dodge = 100;
       this.phaseShiftCharges -= 1;
@@ -639,12 +723,19 @@ export class CombatEngine {
       this.gainMomentum(1);
       this.applyTokenDelta(1, 'Graceful dodge — +1 token.');
       this.player.fatigue = clampFatigue(this.player.fatigue + 5);
+      if (this.player.skillsKnown.includes('precision')) {
+        this.precisionStacks = Math.min(3, this.precisionStacks + 1);
+        this.log.push('Precision — you read the blow; crit chance rises.');
+      }
       return 0;
     }
 
     let dmg = amount;
     if (this.guarding && !bypassGuard) {
-      const guardMultiplier = this.player.skillsKnown.includes('iron_resolve') ? 0.35 : 0.5;
+      let guardMultiplier = this.player.skillsKnown.includes('iron_resolve') ? 0.35 : 0.5;
+      if (this.lastStandTurns > 0) guardMultiplier -= 0.3;
+      if (this.aegisGuard > 0) guardMultiplier -= this.aegisGuard;
+      guardMultiplier = Math.max(0.05, guardMultiplier);
       const braceBonus = hasStatus(this.playerStatuses, 'brace') ? 0.8 : 1;
       dmg = Math.round(dmg * guardMultiplier * braceBonus);
       if (this.player.skillsKnown.includes('retaliation')) {
@@ -656,12 +747,35 @@ export class CombatEngine {
           this.log.push(`Retaliation reflects ${reflected} damage back.`);
         }
       }
+      if (this.player.skillsKnown.includes('resolve')) {
+        this.resolveStacks = Math.min(3, this.resolveStacks + 1);
+      }
       this.gainMomentum(1);
     }
     dmg = applyBarrier(this.playerStatuses, dmg);
+    if (dmg > 0 && this.player.skillsKnown.includes('resolve') && this.resolveStacks >= 3) {
+      this.resolveStacks = 0;
+      dmg = 0;
+      this.log.push(`RESOLVE — you spend your will to nullify ${label} entirely.`);
+    }
     this.player.currentHP = Math.max(0, this.player.currentHP - dmg);
     if (dmg > 0) {
       this.player.fatigue = clampFatigue(this.player.fatigue + Math.floor(dmg / 10) * 2);
+      if (this.player.skillsKnown.includes('rage')) {
+        const lostPct = (dmg / this.player.derived.maxHP) * 100;
+        const gained = Math.max(1, Math.floor(lostPct / 10));
+        const before = this.rageStacks;
+        this.rageStacks = Math.min(5, this.rageStacks + gained);
+        if (this.rageStacks > before) this.log.push('Rage surges — damage rises.');
+      }
+      // Phase 4e: massive hits and near-death blows stoke fear.
+      const hpPct = (dmg / this.player.derived.maxHP) * 100;
+      const beforeHp = this.player.currentHP + dmg;
+      if (hpPct >= FEAR_MASSIVE_PCT) {
+        this.fear = clampFear(this.fear + FEAR_MASSIVE_GAIN);
+      } else if (beforeHp / this.player.derived.maxHP >= 0.25 && this.player.currentHP / this.player.derived.maxHP < 0.25) {
+        this.fear = clampFear(this.fear + FEAR_CRIT_GAIN);
+      }
     }
     if (dmg > 0 && this._currentAttackerKey) {
       if (!this.playerHitEnemyKeys.includes(this._currentAttackerKey)) this.playerHitEnemyKeys.push(this._currentAttackerKey);
@@ -743,6 +857,7 @@ export class CombatEngine {
       this.repeatPenaltyApplied = true;
       this.applyTokenDelta(-1, 'Repeating the same action dulls your rhythm — −1 token.');
     }
+    if (this.player.skillsKnown.includes('adaptation')) this.adaptationActions.add(id);
   }
 
   /** Combo execution hook (Phase 3 wired; +2 tokens per Ultimate Battle System Part 12). */
@@ -758,10 +873,17 @@ export class CombatEngine {
   }
 
   private rollHit(target: InternalEnemy): boolean {
-    let acc = this.player.derived.accuracy + (this.player.skillsKnown.includes('steady_hands') ? 10 : 0);
+    if (this.nextAttackGuaranteed) {
+      this.nextAttackGuaranteed = false;
+      return true;
+    }
+    let acc = this.player.derived.accuracy + (this.player.skillsKnown.includes('steady_hands') ? 10 : 0)
+      + (this.eagleAccuracyTurns > 0 ? 40 : 0);
     const fatigue = fatiguePenalty(this.player.fatigue);
     acc = acc * fatigue.accuracyMult;
     if (hasStatus(this.playerStatuses, 'blind')) acc *= 0.7;
+    // Phase 4e: terrified players are 20% less accurate.
+    acc *= fearModifiers(this.fear).accuracyMult;
     let shockMiss = 0;
     const sd = getStatus(this.playerStatuses, 'shock_dot');
     if (sd) shockMiss = 15 * sd.stacks;
@@ -771,7 +893,26 @@ export class CombatEngine {
 
   private rollCrit(): boolean {
     if (this.desperateStrike) return true;
-    return this.rng() < 0.1;
+    if (this.forcedCrits > 0) {
+      this.forcedCrits -= 1;
+      return true;
+    }
+    const precisionBonus = this.precisionStacks > 0 ? 0.15 * this.precisionStacks : 0;
+    return this.rng() < 0.1 + precisionBonus;
+  }
+
+  /** Phase 4b: combined class passive damage multipliers (Rage / Risk / Adaptation / Knowledge). */
+  private classDamageMult(): number {
+    let mult = 1;
+    if (this.player.skillsKnown.includes('rage')) mult *= 1 + 0.05 * Math.min(5, this.rageStacks);
+    const hpRatio = this.player.currentHP / this.player.derived.maxHP;
+    if (this.player.skillsKnown.includes('risk')) {
+      if (hpRatio < 0.25) mult *= 1.25;
+      else if (hpRatio < 0.5) mult *= 1.1;
+    }
+    if (this.player.skillsKnown.includes('adaptation')) mult *= 1 + 0.1 * Math.min(5, this.adaptationActions.size);
+    if (this.player.skillsKnown.includes('knowledge')) mult *= 1 + 0.05 * Math.min(3, this.knowledgeStacks);
+    return mult;
   }
 
   private computeAndApplyDamage(target: InternalEnemy, sourcePower: number, defenseStat: number, damageType: DamageType, label: string, statKey: 'def' | 'mdef' = 'def', guaranteedHit = false): { dmg: number; hit: boolean; crit: boolean; weak: boolean } {
@@ -798,6 +939,17 @@ export class CombatEngine {
       defReduction = 0.25;
       this.unravelPending = false;
     }
+    if (this.unityBlade) {
+      defReduction = Math.min(defReduction, 0.7);
+      this.unityBlade = false;
+    }
+    if (this.thesisTurns > 0 && (statKey === 'mdef' || ['shadow', 'sacred', 'shock', 'frost', 'flame'].includes(damageType))) {
+      defReduction = Math.min(defReduction, 0.7);
+    }
+    const nextMult = this.nextAttackMult;
+    this.nextAttackMult = 1;
+    if (nextMult > 1) unravelMult *= nextMult;
+    if (this.stealthActive && nextMult > 1) this.stealthActive = false;
     const lastType = this.lastHitTypes.get(target._key);
     const reaction: ReactionResult | null = weakness >= 1 && lastType && lastType !== damageType ? resolveReaction(lastType, damageType) : null;
     if (weakness >= 1) this.lastHitTypes.set(target._key, damageType);
@@ -820,6 +972,20 @@ export class CombatEngine {
     if (fatigueDmg !== 1) dmg = Math.round(dmg * fatigueDmg);
     const resonanceBonus = target._isBoss ? 1 : resonancePlayerDamageBonus(this.player.resonance);
     dmg = Math.round(dmg * resonanceBonus);
+    // Phase 4b class passives & buffs
+    dmg = Math.round(dmg * this.classDamageMult());
+    if (this.lastStandTurns > 0) dmg = Math.round(dmg * 0.5 + dmg); // +50%
+    if (hasStatus(this.playerStatuses, 'atk_up')) dmg = Math.round(dmg * 1.25);
+    if ((this.marked.get(target._key) ?? 0) > 0) dmg = Math.round(dmg * 1.5);
+    if (this.eagleAccuracyTurns > 0) {
+      // accuracy handled at hit-roll; no damage change
+    }
+    if (this.mirrorTurns > 0) dmg = Math.round(dmg * 1.15);
+    // Phase 4e: terrified players deal 10% less damage.
+    dmg = Math.round(dmg * fearModifiers(this.fear).damageMult);
+    if (this.forcedCrits > 0) {
+      // forced crit handled at crit roll — log refreshes
+    }
     if (damageType === 'sacred' && hasStatus(this.playerStatuses, 'blessing')) {
       dmg = Math.round(dmg * 1.25);
     }
@@ -850,6 +1016,17 @@ export class CombatEngine {
       this.applyTokenDelta(-lost, `The blow was fully absorbed — you lose ${lost} token(s).`);
     }
     target.hp = Math.max(0, target.hp - mitigated);
+
+    // Crisis All-In: after the gambled strike lands, a 30% chance the player collapses.
+    if (this.allInPending && mitigated > 0) {
+      this.allInPending = false;
+      if (this.rng() < 0.3) {
+        this.player.currentHP = 0;
+        this.log.push('All-In pays the final price — you collapse from the strain.');
+      } else {
+        this.log.push('All-In holds — you weather the gamble.');
+      }
+    }
 
     // Echo-Soldier Phalanx: when one is damaged, 50% is split among allies
     if (target.defId === 'echo_soldier' && mitigated > 0) {
@@ -884,6 +1061,9 @@ export class CombatEngine {
     if (crit) {
       this.gainMomentum(1);
       this.applyTokenDelta(1, 'Critical hit — +1 token.');
+      if (this.player.skillsKnown.includes('precision')) {
+        this.applyTokenDelta(1, 'Precision — the critical strike restores 1 AP.');
+      }
     }
     if (target.hp <= 0) {
       this.gainMomentum(1);
@@ -984,6 +1164,7 @@ export class CombatEngine {
           }
           s.turns = Math.max(s.turns, 2);
         }
+        this.firstWeaknessRevealed = true;
         this.log.push('COMBO Full Knowledge — every enemy is revealed and weakness windows open.');
         break;
     }
@@ -1052,45 +1233,8 @@ export class CombatEngine {
     }
     this.recordAction(`skill:${skillId}`);
     this.pushComboTags(tagsForSkill(skill), this.pickTarget(targetKey));
-    if (skill.tag === 'active_martyrs_flame') {
-      this.player.currentHP = Math.max(1, this.player.currentHP - 10);
-      const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk') * (skill.skillPower ?? 1);
-      for (const e of this.aliveEnemies()) {
-        this.computeAndApplyDamage(e, matk, e.mdef, 'sacred', "Martyr's Flame", 'mdef');
-      }
-      this.log.push("Martyr's Flame costs you 10 HP.");
-    } else if (skill.tag === 'active_sealing_strike') {
-      const target = this.pickTarget(targetKey);
-      if (target) {
-        const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk');
-        const result = this.computeAndApplyDamage(target, atk, target.def, 'sacred', 'Sealing Strike');
-        if (result.hit) this.player.resonance = Math.max(0, this.player.resonance - 2);
-      }
-    } else if (skill.tag === 'active_reckless_swing') {
-      const target = this.pickTarget(targetKey);
-      if (target) {
-        const selfCost = Math.max(1, Math.round(this.player.currentHP * 0.08));
-        this.player.currentHP = Math.max(1, this.player.currentHP - selfCost);
-        const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk') * (skill.skillPower ?? 1);
-        this.computeAndApplyDamage(target, atk, target.def, 'slash', 'Reckless Swing');
-        this.log.push(`Reckless Swing costs you ${selfCost} HP.`);
-      }
-    } else if (skill.tag === 'active_hunters_mark') {
-      const target = this.pickTarget(targetKey);
-      if (target) {
-        const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk') * (skill.skillPower ?? 1);
-        this.computeAndApplyDamage(target, atk, target.def, 'pierce', "Hunter's Mark", 'def', true);
-      }
-    } else if (skill.tag === 'active_overwritten_truth') {
-      const target = this.pickTarget(targetKey);
-      if (target) {
-        const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk') * (skill.skillPower ?? 1);
-        this.computeAndApplyDamage(target, matk, target.mdef, 'shock', 'Overwritten Truth', 'mdef');
-      }
-    } else if (skill.tag === 'active_veil_step') {
-      this.veilStepGuaranteed = true;
-      this.log.push('You go still, ready to slip the next blow entirely.');
-    }
+    this.resolveSkillEffects(skill, targetKey);
+    this.resolveClassTag(skill, targetKey);
 
     if (!this.momentumUsedSkillThisCombat) {
       this.momentumUsedSkillThisCombat = true;
@@ -1104,6 +1248,249 @@ export class CombatEngine {
     }
     this.checkOutcome();
     return this.snapshot();
+  }
+
+  /**
+   * Phase 4a: generic structured-effects resolver for active skills.
+   * Handles damage / status / buff / heal / barrier / cost / resource / evade.
+   */
+  private resolveSkillEffects(skill: SkillDef, targetKey?: string): void {
+    const effects = skill.effects ?? [];
+    let anyHit = false;
+    for (const eff of effects) {
+      switch (eff.kind) {
+        case 'damage': {
+          const effType = this.thesisTurns > 0 && eff.stat === 'magic' ? this.thesisType ?? eff.type : eff.type;
+          const power = eff.stat === 'magic'
+            ? this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk') * eff.power
+            : this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk') * eff.power;
+          if (eff.target === 'all') {
+            for (const e of this.aliveEnemies()) {
+              const result = this.computeAndApplyDamage(e, power, eff.stat === 'magic' ? e.mdef : e.def, effType, skill.name, eff.stat === 'magic' ? 'mdef' : 'def', eff.guaranteed);
+              if (result.hit) anyHit = true;
+            }
+          } else {
+            const target = this.pickTarget(targetKey);
+            if (!target) break;
+            const result = this.computeAndApplyDamage(target, power, eff.stat === 'magic' ? target.mdef : target.def, effType, skill.name, eff.stat === 'magic' ? 'mdef' : 'def', eff.guaranteed);
+            if (result.hit) anyHit = true;
+          }
+          break;
+        }
+        case 'status': {
+          const targets = eff.target === 'all' ? this.aliveEnemies() : (() => {
+            const t = this.pickTarget(targetKey);
+            return t ? [t] : [];
+          })();
+          for (const t of targets) {
+            applyStatus(t.statuses, eff.id, eff.turns, eff.stacks);
+            this.log.push(`${skill.name} — ${t.name} is afflicted with ${eff.id} for ${eff.turns} turn(s).`);
+          }
+          break;
+        }
+        case 'buff':
+          applyStatus(this.playerStatuses, eff.id, eff.turns);
+          this.log.push(`${skill.name} — you gain ${eff.id} for ${eff.turns} turn(s).`);
+          break;
+        case 'debuff':
+          applyStatus(this.playerStatuses, eff.id, eff.turns);
+          this.log.push(`${skill.name} — you are afflicted with ${eff.id} for ${eff.turns} turn(s).`);
+          break;
+        case 'next_attack_amp':
+          this.nextAttackMult = Math.max(this.nextAttackMult, eff.dmg);
+          if (eff.guaranteed) this.nextAttackGuaranteed = true;
+          this.log.push(`${skill.name} — your next attack is empowered.`);
+          break;
+        case 'heal': {
+          let amount = eff.flat ?? 0;
+          if (eff.pct) amount += Math.round(this.player.derived.maxHP * eff.pct);
+          this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + amount);
+          if (amount > 0) this.log.push(`${skill.name} restores ${amount} HP.`);
+          break;
+        }
+        case 'barrier':
+          applyStatus(this.playerStatuses, 'barrier', eff.turns, 1, { amount: Math.round(this.player.derived.maxHP * eff.pct) });
+          this.log.push(`${skill.name} — a barrier absorbs ${eff.pct * 100}% of your max HP.`);
+          break;
+        case 'cost': {
+          if (eff.onHit && !anyHit) break;
+          let hpCost = 0;
+          if (eff.hpFlat) hpCost += eff.hpFlat;
+          if (eff.hpPct) hpCost += Math.max(1, Math.round(this.player.currentHP * eff.hpPct));
+          if (hpCost > 0) {
+            this.player.currentHP = Math.max(1, this.player.currentHP - hpCost);
+            this.log.push(`${skill.name} costs you ${hpCost} HP.`);
+          }
+          if (eff.resonance) {
+            this.player.resonance = Math.max(0, this.player.resonance - eff.resonance);
+          }
+          break;
+        }
+        case 'resource':
+          if (eff.momentum) this.gainMomentum(eff.momentum);
+          if (eff.mp) this.player.currentMP = Math.min(this.player.derived.maxMP, this.player.currentMP + eff.mp);
+          break;
+        case 'evade':
+          this.veilStepGuaranteed = true;
+          this.log.push('You go still, ready to slip the next blow entirely.');
+          break;
+      }
+    }
+  }
+
+  /**
+   * Phase 4b: class signature / progression tag hooks that need bespoke engine
+   * behavior beyond the generic `effects` resolver.
+   */
+  private resolveClassTag(skill: SkillDef, targetKey?: string): void {
+    const tag = skill.tag;
+    if (!tag) return;
+    const target = this.pickTarget(targetKey);
+    switch (tag) {
+      case 'sig_last_stand':
+        this.lastStandTurns = 3;
+        this.guarding = true;
+        this.log.push('LAST STAND — +50% damage and +30% guard for 3 turns, all enemies turn to you.');
+        break;
+      case 'sig_shadow_step':
+        this.nextAttackMult = 1.5;
+        this.nextAttackGuaranteed = true;
+        this.log.push('SHADOW STEP — your next attack deals +50% and cannot miss.');
+        break;
+      case 'sig_veil_of_silence':
+        this.stealthActive = true;
+        this.nextAttackMult = Math.max(this.nextAttackMult, 1.75);
+        this.nextAttackGuaranteed = true;
+        this.log.push('VEIL OF SILENCE — you vanish into stealth; your next attack deals +75% and you cannot be targeted.');
+        break;
+      case 'sig_arcane_thesis':
+        this.thesisType = this.chooseThesisType();
+        this.thesisTurns = 3;
+        this.log.push(`ARCANE THESIS — your spells are ${this.thesisType} and pierce 30% resistance for 3 turns.`);
+        break;
+      case 'sig_aegis_protocol':
+        this.aegisTurns = 2;
+        this.aegisGuard = 0.4;
+        this.log.push('AEGIS PROTOCOL — all damage redirects to you with +40% guard for 2 turns.');
+        break;
+      case 'sig_mirror_adapt':
+        this.mirrorTurns = 3;
+        this.log.push('MIRROR ADAPT — +15% to all stats for 3 turns.');
+        break;
+      case 'prog_berserkers_cry':
+        applyStatus(this.playerStatuses, 'atk_up', 3);
+        applyStatus(this.playerStatuses, 'defense_down', 3);
+        this.log.push("BERSERKER'S CRY — +25% damage, -20% defense for 3 turns.");
+        break;
+      case 'prog_blade_of_ruin':
+        if (this.player.currentHP / this.player.derived.maxHP < 0.3 && target) {
+          const amp = Math.round(target.maxHp * 0);
+          void amp;
+          this.nextAttackMult = Math.max(this.nextAttackMult, 2.0);
+          this.log.push('BLADE OF RUIN — below 30% HP, the blade doubles.');
+        }
+        break;
+      case 'prog_pinpoint_shot':
+        if (target && target.hp / target.maxHp < 0.4) {
+          this.forcedCrits = Math.max(this.forcedCrits ?? 0, 1);
+          this.log.push(`PINPOINT SHOT — ${target.name} is below 40% HP; the shot strikes true.`);
+        }
+        break;
+      case 'prog_tangle_trap':
+        if (target) {
+          applyStatus(target.statuses, 'root', 2);
+          this.log.push(`TANGLE TRAP — ${target.name} is rooted and slowed.`);
+        }
+        break;
+      case 'prog_eagle_eye':
+        this.eagleAccuracyTurns = 3;
+        for (const e of this.aliveEnemies()) this.investigate(e._key, 4, []);
+        this.log.push('EAGLE EYE — +40% accuracy; every weakness is revealed for 3 turns.');
+        break;
+      case 'prog_deaths_mark':
+        if (target) {
+          this.marked.set(target._key, 3);
+          this.log.push(`DEATH'S MARK — ${target.name} takes +50% damage for 3 turns.`);
+        }
+        break;
+      case 'prog_force_cascade':
+        if (target && (target.affinities[skill.damageType ?? 'shock'] ?? 1) > 1) {
+          this.applyTokenDelta(1, 'FORCE CASCADE — weakness exploited, 1 AP refunded.');
+        }
+        break;
+      case 'prog_mnemonic_echo':
+        this.nextAttackMult = Math.max(this.nextAttackMult, 1.5);
+        this.log.push('MNEMONIC ECHO — the echo of the last spell lingers; your next hit is stronger.');
+        break;
+      case 'prog_forbidden_knowledge':
+        if (this.rng() < 0.2) {
+          for (const e of this.aliveEnemies()) applyStatus(e.statuses, 'confuse', 2);
+          this.log.push('FORBIDDEN KNOWLEDGE — all enemies are confused.');
+        }
+        break;
+      case 'prog_unwritten_page':
+        if (target) {
+          removeAllBuffs(target.statuses);
+          this.log.push(`THE UNWRITTEN PAGE — ${target.name}'s buffs are erased.`);
+        }
+        break;
+      case 'prog_bulwarks_awakening':
+        removeAllDebuffs(this.playerStatuses);
+        applyStatus(this.playerStatuses, 'fortify', 3);
+        this.log.push("BULWARK'S AWAKENING — all debuffs removed; +20% defense for 3 turns.");
+        break;
+      case 'prog_soul_rend':
+        if (target) {
+          const stolen = Math.round(target.atk * 0.2);
+          target.atk = Math.max(1, target.atk - stolen);
+          applyStatus(this.playerStatuses, 'atk_up', 3);
+          this.log.push(`SOUL REND — you steal ${stolen} ATK from ${target.name} for 3 turns.`);
+        }
+        break;
+      case 'prog_echoing_void':
+        if (target) {
+          applyStatus(target.statuses, 'silence', 2);
+          this.log.push(`ECHOING VOID — ${target.name} is silenced for 2 turns.`);
+        }
+        break;
+      case 'prog_unravel_existence':
+        if (target && target.hp / target.maxHp < 0.5) {
+          this.unravelPending = true;
+          this.log.push('UNRAVEL EXISTENCE — the foe is below half; defenses unravel.');
+        }
+        break;
+      case 'prog_balanced_mind':
+        removeDebuffs(this.playerStatuses);
+        this.player.currentMP = Math.min(this.player.derived.maxMP, this.player.currentMP + 20);
+        this.log.push('BALANCED MIND — one debuff removed; 20 MP restored.');
+        break;
+      case 'prog_harmonic_resonance':
+        for (const e of this.aliveEnemies()) this.gainMomentum(1);
+        this.log.push('HARMONIC RESONANCE — momentum surges with every foe struck.');
+        break;
+      case 'prog_unitys_blade':
+        if (target) {
+          this.unityBlade = true;
+          this.log.push("UNITY'S BLADE — a strike of body and mind, ignoring 30% of defenses.");
+        }
+        break;
+      case 'sig_low_hp_boost':
+        // handled via atk_up effect in data; nothing extra
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** Arcane Thesis: pick the player's strongest-revealed weakness, else a useful elemental type. */
+  private chooseThesisType(): DamageType {
+    const preferred: DamageType[] = ['shock', 'flame', 'frost', 'shadow', 'sacred'];
+    for (const e of this.aliveEnemies()) {
+      for (const t of preferred) {
+        if ((e.affinities[t] ?? 1) > 1) return t;
+      }
+    }
+    return 'shock';
   }
 
   resonanceAbility(targetKey?: string): CombatSnapshot {
@@ -1242,6 +1629,10 @@ export class CombatEngine {
     }
     this.gainMomentum(1);
     this.player.insight = Math.min(3, this.player.insight + 1);
+    if (this.player.skillsKnown.includes('knowledge')) {
+      this.knowledgeStacks = Math.min(3, this.knowledgeStacks + 1);
+      this.log.push(`Knowledge — study sharpens your strikes (+${this.knowledgeStacks * 5}%).`);
+    }
     this.applyTokenDelta(1, 'Analysis sharpens the moment — +1 token refunded.');
     this.lastActionId = 'analyze';
     this.lastActionType = null;
@@ -1419,6 +1810,7 @@ export class CombatEngine {
         }
         s.turns = Math.max(s.turns, 2);
       }
+      this.firstWeaknessRevealed = true;
       this.log.push('INSIGHT — you open a Weakness Window on every enemy for 2 rounds.');
     }
     return this.snapshot();
@@ -1518,6 +1910,132 @@ export class CombatEngine {
     return this.snapshot();
   }
 
+  // ---- Phase 4d/e/f: Crisis, Fear, Desperation --------------------------------
+
+  /** Returns the set of currently-stocked crisis options; the scene scans snapshot.pendingCrisis for the modal. */
+  checkCrisis(): CombatSnapshot {
+    if (this.phase === 'victory' || this.phase === 'defeat' || this.phase === 'fled') return this.snapshot();
+    const boss = this.enemies.find((e) => e._isBoss && e.hp > 0);
+    const found = pickCrisis(
+      {
+        hpPct: this.player.currentHP / this.player.derived.maxHP,
+        bossPct: boss ? boss.hp / boss.maxHp : null,
+        firstWeaknessSeen: this.firstWeaknessRevealed,
+        momentum: this.player.momentum,
+        round: this.round,
+        anyEnemyAlive: this.aliveEnemies().length > 0,
+      },
+      { seen: this.crisisSeen },
+    );
+    if (found && this.phase === 'player') {
+      this.pendingCrisisId = found.id;
+      this.phase = 'crisis';
+    }
+    return this.snapshot();
+  }
+
+  /** Apply the chosen crisis option and resume the player phase. */
+  resolveCrisis(optionId: string): CombatSnapshot {
+    const crisisIds = Object.keys(CRISES) as CrisisId[];
+    let crisisInternal: CrisisId | null = this.pendingCrisisId;
+    if (this.phase !== 'crisis' || !crisisInternal) return this.snapshot();
+    // Validate that optionId belongs to the pending crisis.
+    const def = CRISES[crisisInternal];
+    if (!def.options.some((o) => o.id === optionId)) return this.snapshot();
+    this.pendingCrisisId = null;
+    markCrisisSeen(this.crisisState(), crisisInternal);
+    const boss = this.enemies.find((e) => e._isBoss && e.hp > 0);
+    this.applyCrisisOption(optionId, boss);
+    this.phase = 'player';
+    return this.snapshot();
+  }
+
+  /** Bravery: spend AP to lower the fear gauge and gain a boon. */
+  resolveBravery(actionId: string): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    const def = BRAVERY_ACTIONS.find((a) => a.id === actionId);
+    if (!def) return this.snapshot();
+    if (this.playerAP < def.apCost && this.freeActionCharges < 1) return this.snapshot();
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : def.apCost;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
+    this.fear = clampFear(this.fear + def.fearDelta);
+    this.log.push(`Bravery: ${def.label} — your grip loosens.`);
+    if (def.fearDelta < 0) applyStatus(this.playerStatuses, 'atk_up', 2);
+    return this.snapshot();
+  }
+
+  checkDesperation(): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    const hpPct = this.player.currentHP / this.player.derived.maxHP;
+    if (hpPct > DESPERATION_HP_PCT) return this.snapshot();
+    if (!rollDesperation(this.rng)) return this.snapshot();
+    const def = pickDesperation(this.desperationFired, this.rng);
+    if (!def) return this.snapshot();
+    this.desperationFired.push(def.id);
+    this.log.push(`DESPERATION — ${def.title}: ${def.detail}`);
+    return this.snapshot();
+  }
+
+  /** Bonus AP/buff surfaced by desperation so the scene can show it without editing the engine’s data. */
+  getFear(): number {
+    return this.fear;
+  }
+
+  getDesperationIds(): DesperationId[] {
+    return [...this.desperationFired];
+  }
+
+  private crisisState(): { seen: CrisisId[] } {
+    return { seen: this.crisisSeen };
+  }
+
+  private applyCrisisOption(optionId: string, boss?: InternalEnemy): void {
+    switch (optionId) {
+      case 'all_in':
+        this.allInPending = true;
+        this.pendingComboMult = Math.max(this.pendingComboMult, 2.5);
+        this.log.push('Crisis: All-In — your next attack hits for 2.5x, but you gamble your life.');
+        break;
+      case 'retreat': {
+        const heal = Math.round(this.player.derived.maxHP * 0.2);
+        this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
+        this.guarding = true;
+        this.log.push(`Crisis: Retreat — you restore ${heal} HP and brace (Guard) for 2 turns.`);
+        break;
+      }
+      case 'last_prayer':
+        this.player.currentMP = Math.min(this.player.derived.maxMP, this.player.currentMP + Math.round(this.player.derived.maxMP * 0.4));
+        this.momentumMultTurns = Math.max(this.momentumMultTurns, 3);
+        this.log.push('Crisis: Last Prayer — MP restored 40%; +30% damage for 3 turns.');
+        break;
+      case 'defy':
+        this.nextAttackMult = Math.max(this.nextAttackMult, 1.5);
+        this.lastStandTurns = Math.max(this.lastStandTurns, 2);
+        this.log.push('Crisis: Defy — +50% damage for 2 turns while you draw the boss’s attention.');
+        break;
+      case 'evade':
+        this.phaseShiftCharges += 2;
+        this.log.push('Crisis: Evade — you will dodge the next 2 attacks.');
+        break;
+      case 'sacrifice': {
+        const cost = Math.round(this.player.currentHP * 0.5);
+        this.player.currentHP = Math.max(1, this.player.currentHP - cost);
+        if (boss) {
+          const dmg = Math.round(boss.hp * 0.3);
+          boss.hp = Math.max(0, boss.hp - dmg);
+          this.log.push(`Crisis: Sacrifice — you pay ${cost} HP to crush the boss for ${dmg} (30% of its max).`);
+        } else {
+          this.log.push(`Crisis: Sacrifice — you pay ${cost} HP for nothing; no boss remains.`);
+        }
+        break;
+      }
+      default:
+        this.log.push('Crisis: the moment passes.');
+    }
+  }
+
   private _prevActionId: string | null = null;
 
   // ---- Rewards / teardown -----------------------------------------------------
@@ -1608,6 +2126,13 @@ export class CombatEngine {
       bossPhaseLabel: bossAlive && this.bossDef ? this.bossDef.getPhase(bossAlive.hp / bossAlive.maxHp).label : undefined,
       banners: [...this.pendingBanners],
       comboStacks: this.comboCount,
+      pendingCrisis: this.pendingCrisisId
+        ? (() => {
+            const def = CRISES[this.pendingCrisisId];
+            return { id: def.id, title: def.title, flavor: def.flavor, options: def.options };
+          })()
+        : undefined,
+      fear: this.fear,
     };
   }
 }

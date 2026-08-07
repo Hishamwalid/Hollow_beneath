@@ -80,10 +80,15 @@ ROOT/
                               Also exports TOTAL_MAJOR_BOSSES, MINOR_BOSSES, bossesForPage()
       items.ts                30 item definitions: 15 consumables, 15 equipment.
                               Exports: ITEMS, STARTING_INVENTORY, getItem()
-      skills.ts               25 named skills (NAMED_SKILLS), action AP costs,
+      skills.ts               61 named skills (NAMED_SKILLS) = 25 legacy + 36 class skills
+                              (CLASS_SKILLS merged via Object.assign), action AP costs,
                               discoverable skills, preset starting skills
-      skillTree.ts            6 skill tree definitions (warrior/ranger/scholar/guardian/shadow/universal).
-                              Exports: SKILL_TREES
+      classes.ts              6 class definitions (CLASSES): Warrior/Ranger/Scholar/Guardian/
+                              Shadow/Balanced — each with passive (class_passive_*), signature
+                              (sig_*), and 4 progression (prog_*) skills (36 total)
+      skillTree.ts            6 class-locked skill trees (6 nodes: free passive tier0 +
+                              signature t1 + 4 progression tiers). Exports: SKILL_TREES,
+                              skillTreeForClass()
       stats.ts                Stat formulas. Exports: computeDerivedStats(), getEquipmentBonuses(),
                               POINT_BUY_TOTAL (30), PRESET_BUILDS, STAT_MAX (10),
                               isValidBuild(), STARTING_EQUIPMENT_BONUSES
@@ -109,8 +114,10 @@ ROOT/
                               CAPTURE_INDICES, NODE_TYPE_WEIGHTS
       CombatEngine.ts         Core turn-based combat. Class: CombatEngine.
                               Methods: beginRound(), attack(), useSkill(), guard(), useItem(),
-                              analyze(), sunder(), withdraw(), endPlayerPhase(), resolveMomentum()
-                              Types: CombatSetup, CombatSnapshot, CombatPhase, CombatAction
+                              analyze(), sunder(), withdraw(), endPlayerPhase(), resolveMomentum(),
+                              checkCrisis(), resolveCrisis(), resolveBravery(), checkDesperation()
+                              Types: CombatSetup, CombatSnapshot, CombatPhase ('player'|
+                              'momentum_choice'|'crisis'|'victory'|'defeat'|'fled'), CombatAction
       EventEngine.ts          Event resolution. Exports: buildEventCtx(), resolveEventChoice(),
                               pickEvent(), resolveTrap(). Types: EventApplyCtx
       ResonanceSystem.ts      Resonance tier math. Exports: resonanceTier(), TIER_LABELS,
@@ -123,7 +130,16 @@ ROOT/
       WhisperSystem.ts        Ambient whispers. Exports: maybePickWhisper()
       StatusEffectSystem.ts   Status manipulation. Exports: applyStatus(), removeStatus(),
                               hasStatus(), getStatus(), tickDots(), tickDurations(),
-                              statMultiplier(), applyBarrier(), setBarrier(), removeAllBuffs()
+                              statMultiplier(), applyBarrier(), setBarrier(), removeAllBuffs(),
+                              removeAllDebuffs(), removeDebuffs()
+      combat/CrisisSystem.ts  Phase 4d: 5 crises (Desperate Gambit, Boss's Wrath, Revelation,
+                              Critical Moment, Fate's Edge) + triggers. Exports: CRISES,
+                              pickCrisis(), markCrisisSeen(). CrisisState, CrisisDef, CrisisId
+      combat/FearSystem.ts    Phase 4e: hidden fear gauge + Terrified threshold (>50 → −20% acc /
+                              −10% dmg). Exports: clampFear(), isTerrified(), fearModifiers(),
+                              BRAVERY_ACTIONS, braveryById(). FEAR_* constants
+      combat/DesperationSystem.ts Phase 4f: low-HP gambles. Exports: DESPERATIONS,
+                              rollDesperation(), pickDesperation(). DesperationId
       LevelSystem.ts          XP/level formulas. Exports: xpForLevel(), computeLevelUp(),
                               MAX_LEVEL (15)
       checks.ts               Dice/stats checking. Exports: statCheck(d20+stat*2 vs DC+10),
@@ -373,7 +389,7 @@ The smoke test is a headless integration test that:
 - Verifies ending evaluation logic
 - Tests minor landmarks + lore fragment completeness
 - Verifies event coverage per page/resonance tier
-- Validates content roster counts (12 enemies, 25 skills, 30 items, 50 whispers)
+- Validates content roster counts (12 enemies, 61 skills, 30 items, 50 whispers)
 - Tests skill distribution paths, whisper tier coverage, level-up thresholds
 - Tests MP costs in combat, equipment stat bonuses, settings persistence
 - Tests event chain flag filtering

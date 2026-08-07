@@ -11,12 +11,16 @@ import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } fr
 import { applyUnlocksToNewRun, deathRefund, shardsForEnding } from '@systems/EchoShardSystem';
 import { computeLevelUp, MAX_LEVEL } from '@systems/LevelSystem';
 import { SKILL_TREES } from '@data/skillTree';
+import { CLASSES } from '@data/classes';
 import { TOTAL_MAJOR_BOSSES } from '@data/bosses';
 import { getLoreFragment, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { resonanceTier, TIER_LABELS } from '@systems/ResonanceSystem';
 
 export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0, classId: ClassId = 'balanced'): PlayerState {
   const derived = computeDerivedStats(stats, STARTING_EQUIPMENT_BONUSES as EquipmentBonuses);
+  const classDef = CLASSES.find((c) => c.id === classId);
+  const skillsKnown = classDef ? [classDef.passive.id, classDef.signature.id] : [];
+  const skillTreePurchases = classDef ? { [classId]: 2 } : {};
   const player: PlayerState = {
     stats,
     derived,
@@ -25,8 +29,8 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     level: 1,
     xp: 0,
     skillPoints: 0,
-    skillTreePurchases: {},
-    skillsKnown: [],
+    skillTreePurchases,
+    skillsKnown,
     resonance: 0,
     resonancePeak: 0,
     faction: { ...STARTING_FACTIONS },
