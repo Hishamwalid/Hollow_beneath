@@ -1,3 +1,46 @@
+@font-face {
+  font-family: 'HollowCinzel';
+  src: url('/assets/fonts/Cinzel-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'HollowCinzel';
+  src: url('/assets/fonts/Cinzel-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'HollowFell';
+  src: url('/assets/fonts/IMFELL-English.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'HollowFell';
+  src: url('/assets/fonts/IMFELL-Italic.woff2') format('woff2');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'HollowMono';
+  src: url('/assets/fonts/CourierPrime.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'HollowMono';
+  src: url('/assets/fonts/CourierPrime-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -5,7 +48,7 @@ html, body {
   height: 100%;
   background: #0b0d10;
   overflow: hidden;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'HollowFell', Georgia, 'Times New Roman', serif;
   -webkit-user-select: none;
   user-select: none;
 }

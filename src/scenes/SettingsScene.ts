@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { settingsManager, type GameSettings } from '@systems/SettingsManager';
 import { CREDITS } from '@data/credits';
-import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
@@ -81,7 +81,7 @@ export class SettingsScene extends Phaser.Scene {
     const y = 140;
     this.addSettingsLabel(cx - 300, y, 'Master Volume');
     const valueLabel = this.add.text(cx + 180, y, `${settings.masterVolume}%`, {
-      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
+      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5);
 
     createSlider(this, cx - 80, y, 240, settings.masterVolume, (v) => {
@@ -96,14 +96,14 @@ export class SettingsScene extends Phaser.Scene {
     const y = 210;
     this.addSettingsLabel(cx - 300, y, 'Text Speed');
     const valueLabel = this.add.text(cx + 180, y, `${settings.textSpeed}%`, {
-      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
+      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5);
 
-    this.add.text(cx - 100, y + 16, 'Slower', {
-      fontFamily: FONT_MONO, fontSize: '10px', color: '#555555',
+    this.add.text(cx - 100, y + 18, 'Slower', {
+      fontFamily: FONT_MONO, fontSize: '12px', color: '#555555',
     }).setOrigin(0, 0.5);
-    this.add.text(cx + 140, y + 16, 'Faster', {
-      fontFamily: FONT_MONO, fontSize: '10px', color: '#555555',
+    this.add.text(cx + 140, y + 18, 'Faster', {
+      fontFamily: FONT_MONO, fontSize: '12px', color: '#555555',
     }).setOrigin(0, 0.5);
 
     createSlider(this, cx - 80, y, 240, settings.textSpeed, (v) => {
@@ -142,16 +142,16 @@ export class SettingsScene extends Phaser.Scene {
       const isTitle = line === 'THE HOLLOW BENEATH';
       const isEmpty = line === '';
       const t = this.add.text(cx, y, line, {
-        fontFamily: isTitle ? FONT_SERIF : FONT_SERIF,
-        fontSize: isTitle ? '15px' : '12px',
+        fontFamily: isTitle ? FONT_SERIF : FONT_BODY,
+        fontSize: isTitle ? '16px' : '13px',
         color: isTitle ? PALETTE_HEX.gold : (isEmpty ? 'transparent' : PALETTE_HEX.boneMuted),
         fontStyle: isTitle ? 'normal' : 'normal',
       }).setOrigin(0.5);
-      y += isEmpty ? 10 : (isTitle ? 22 : 18);
+      y += isEmpty ? 10 : (isTitle ? 24 : 20);
     });
     if (CREDITS.length > maxLines) {
       this.add.text(cx, y, `... ${CREDITS.length - maxLines} more lines`, {
-        fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+        fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
       }).setOrigin(0.5);
     }
   }
@@ -174,8 +174,8 @@ export class SettingsScene extends Phaser.Scene {
     const box = this.add.rectangle(cx, cy, 480, 200, 0x16191d).setStrokeStyle(1, 0xc9a24b, 0.6).setDepth(depth + 1);
 
     const text = this.add.text(cx, cy - 50, 'This will delete all Echo Shards,\nunlocks, lore, and progress.\n\nThis cannot be undone.', {
-      fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.bone,
-      align: 'center', lineSpacing: 4,
+      fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.bone,
+      align: 'center', lineSpacing: 5,
     }).setOrigin(0.5).setDepth(depth + 2);
 
     const confirm = createButton(this, cx - 100, cy + 65, 'Clear Everything', () => {
@@ -195,6 +195,6 @@ export class SettingsScene extends Phaser.Scene {
   }
 
   private addSettingsLabel(x: number, y: number, label: string) {
-    this.add.text(x, y, label, { fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5);
+    this.add.text(x, y, label, { fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5);
   }
 }

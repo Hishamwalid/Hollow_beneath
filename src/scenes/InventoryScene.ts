@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { ITEMS } from '@data/items';
 import type { ItemDef, Equipment } from '@data/types';
-import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -63,7 +63,7 @@ export class InventoryScene extends Phaser.Scene {
     addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT, { nodePulse: false, shake: false, shimmer: false, textGlitch: false });
 
     this.add.text(cx, 50, 'Inventory', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
-    this.add.text(cx, 85, `Gold: ${player.gold}`, { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.goldBright }).setOrigin(0.5);
+    this.add.text(cx, 85, `Gold: ${player.gold}`, { fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.goldBright }).setOrigin(0.5);
 
     const panelX = cx - 380;
     this.addSection(panelX, 120, 'Equipped');
@@ -95,23 +95,23 @@ export class InventoryScene extends Phaser.Scene {
         .on('pointerdown', () => this.openPicker(slot));
 
       const slotLabel = this.add.text(panelX + 20, y, SLOT_LABELS[slot], {
-        fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.boneMuted,
+        fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.boneMuted,
       }).setOrigin(0, 0.5);
 
       if (currentId) {
         const def = ITEMS[currentId];
         if (def) {
-          const nameText = this.add.text(panelX + 130, y, def.name, {
-            fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone,
+          const nameText = this.add.text(panelX + 140, y, def.name, {
+            fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.bone,
           }).setOrigin(0, 0.5);
-          const bonusText = this.add.text(panelX + 350, y, statBonusText(def.effect), {
-            fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.gold,
+          const bonusText = this.add.text(panelX + 380, y, statBonusText(def.effect), {
+            fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
           }).setOrigin(0, 0.5);
           container.add([bg, slotLabel, nameText, bonusText]);
         }
       } else {
-        const emptyText = this.add.text(panelX + 130, y, '— empty —', {
-          fontFamily: FONT_SERIF, fontSize: '13px', color: '#555555', fontStyle: 'italic',
+        const emptyText = this.add.text(panelX + 140, y, '— empty —', {
+          fontFamily: FONT_SERIF, fontSize: '15px', color: '#555555', fontStyle: 'italic',
         }).setOrigin(0, 0.5);
         container.add([bg, slotLabel, emptyText]);
       }
@@ -123,24 +123,24 @@ export class InventoryScene extends Phaser.Scene {
   private renderInventory(panelX: number, player: ReturnType<typeof useGameStore.getState>['player']) {
     const items = player!.inventory.filter((e) => e.qty > 0);
     if (items.length === 0) {
-      this.add.text(panelX + 20, 440, 'Nothing carried.', { fontFamily: FONT_SERIF, fontSize: '13px', color: '#555555', fontStyle: 'italic' });
+      this.add.text(panelX + 20, 440, 'Nothing carried.', { fontFamily: FONT_SERIF, fontSize: '15px', color: '#555555', fontStyle: 'italic' });
     } else {
-      const maxVisible = Math.min(items.length, 10);
+      const maxVisible = Math.min(items.length, 8);
       for (let i = 0; i < maxVisible; i++) {
         const entry = items[i];
-        const y = 440 + i * 34;
+        const y = 444 + i * 36;
         const def = ITEMS[entry.id];
         const itemName = def?.name ?? entry.id;
         const desc = def?.description ?? '';
         const kind = def?.kind ?? '';
-        this.add.text(panelX + 20, y, `×${entry.qty}`, { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold });
-        this.add.text(panelX + 55, y, itemName, { fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.bone, wordWrap: { width: 200 } });
-        this.add.text(panelX + 270, y, desc, { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted, wordWrap: { width: 300 } });
-        this.add.text(panelX + 600, y, kind, { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted });
+        this.add.text(panelX + 20, y, `×${entry.qty}`, { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold });
+        this.add.text(panelX + 60, y, itemName, { fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.bone, wordWrap: { width: 200 } });
+        this.add.text(panelX + 280, y, desc, { fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.boneMuted, wordWrap: { width: 280 } });
+        this.add.text(panelX + 600, y, kind, { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted });
       }
-      if (items.length > 10) {
-        this.add.text(panelX + 20, 440 + 10 * 34, `... and ${items.length - 10} more items`, {
-          fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+      if (items.length > 8) {
+        this.add.text(panelX + 20, 444 + 8 * 36, `... and ${items.length - 8} more items`, {
+          fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
         });
       }
     }
@@ -191,7 +191,7 @@ export class InventoryScene extends Phaser.Scene {
     const currentDef = currentId ? ITEMS[currentId] : null;
     const currentBonus = currentDef?.effect?.statBonus;
 
-    const cancelBtn = createButton(this, cx + panelW / 2 - 140, panelY + panelH / 2 - 22, 'Cancel', () => this.closePicker(), { width: 100, height: 28, fontSize: '11px' });
+    const cancelBtn = createButton(this, cx + panelW / 2 - 140, panelY + panelH / 2 - 22, 'Cancel', () => this.closePicker(), { width: 100, height: 30, fontSize: '13px' });
     cancelBtn.container.setDepth(depth + 3);
     container.add(cancelBtn.container);
 
@@ -209,14 +209,14 @@ export class InventoryScene extends Phaser.Scene {
       const rowBg = scene.add.rectangle(cx + 20, y, panelW - 60, rowH, isCurrent ? 0x1a1d22 : 0x111316).setStrokeStyle(1, isCurrent ? 0x555555 : 0x2a2e33).setDepth(depth + 2);
       const elements: Phaser.GameObjects.GameObject[] = [rowBg];
 
-      const nameText = scene.add.text(cx - panelW / 2 + 30, y, label, {
-        fontFamily: FONT_SERIF, fontSize: '13px', color: isCurrent ? PALETTE_HEX.boneMuted : PALETTE_HEX.bone,
+const nameText = scene.add.text(cx - panelW / 2 + 30, y, label, {
+        fontFamily: FONT_SERIF, fontSize: '15px', color: isCurrent ? PALETTE_HEX.boneMuted : PALETTE_HEX.bone,
       }).setOrigin(0, 0.5).setDepth(depth + 3);
       elements.push(nameText);
 
       if (bonusStr) {
         const bonusT = scene.add.text(cx - 40, y, bonusStr, {
-          fontFamily: FONT_MONO, fontSize: '11px', color: isCurrent ? PALETTE_HEX.boneMuted : PALETTE_HEX.gold,
+          fontFamily: FONT_MONO, fontSize: '13px', color: isCurrent ? PALETTE_HEX.boneMuted : PALETTE_HEX.gold,
         }).setOrigin(0, 0.5).setDepth(depth + 3);
         elements.push(bonusT);
       }
@@ -224,14 +224,14 @@ export class InventoryScene extends Phaser.Scene {
       if (deltaStr) {
         const isPositive = deltaStr.startsWith('+');
         const deltaT = scene.add.text(cx + 100, y, deltaStr, {
-          fontFamily: FONT_MONO, fontSize: '11px', color: isPositive ? PALETTE_HEX.ok : PALETTE_HEX.danger,
+          fontFamily: FONT_MONO, fontSize: '13px', color: isPositive ? PALETTE_HEX.ok : PALETTE_HEX.danger,
         }).setOrigin(0, 0.5).setDepth(depth + 3);
         elements.push(deltaT);
       }
 
       if (isCurrent) {
         const eqLabel = scene.add.text(cx + panelW / 2 - 120, y, 'Equipped', {
-          fontFamily: FONT_MONO, fontSize: '10px', color: '#555555',
+          fontFamily: FONT_MONO, fontSize: '12px', color: '#555555',
         }).setOrigin(0, 0.5).setDepth(depth + 3);
         elements.push(eqLabel);
       } else if (!isRemove) {
@@ -239,7 +239,7 @@ export class InventoryScene extends Phaser.Scene {
           if (selectId) store.equipItem(slot, selectId);
           scene.closePicker();
           scene.refreshScene();
-        }, { width: 70, height: 26, fontSize: '10px' });
+        }, { width: 70, height: 28, fontSize: '12px' });
         eqBtn.container.setDepth(depth + 3);
         elements.push(eqBtn.container);
       } else {
@@ -247,7 +247,7 @@ export class InventoryScene extends Phaser.Scene {
           store.equipItem(slot, null);
           scene.closePicker();
           scene.refreshScene();
-        }, { width: 70, height: 26, fontSize: '10px' });
+        }, { width: 70, height: 28, fontSize: '12px' });
         rmBtn.container.setDepth(depth + 3);
         elements.push(rmBtn.container);
       }

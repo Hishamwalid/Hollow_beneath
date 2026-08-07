@@ -18,7 +18,7 @@ import { createNodePreview } from '@ui/NodePreview';
 import { createButton } from '@ui/Button';
 import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
 import { addResonanceEffects } from '@systems/ResonanceFX';
-import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { influenceStatus } from '@data/factions';
@@ -48,7 +48,7 @@ function mapKeyForChapter(chapter: number): string {
 
 const COLS = 10;
 const ORIGIN_X = 90;
-const ORIGIN_Y = 210;
+const ORIGIN_Y = 236;
 const COL_SPACING = 108;
 const ROW_SPACING = 54;
 const VISIBILITY_RANGE = 4;
@@ -120,25 +120,25 @@ export class BoardScene extends Phaser.Scene {
     if (game.currentNodeIndex > 0) this.preview.show(game.nodes[game.currentNodeIndex - 1]);
 
     const rightX = GAME_WIDTH - 120;
-    createButton(this, rightX, 150, 'Bag', () => fadeToScene(this, 'Inventory'), { width: 64, height: 30, fontSize: '11px' });
+    createButton(this, rightX, 150, 'Bag', () => fadeToScene(this, 'Inventory'), { width: 80, height: 32, fontSize: '14px' });
 
-    this.add.text(rightX, 184, `Skills (${player.skillPoints})`, {
-      fontFamily: FONT_MONO, fontSize: '11px', color: player.skillPoints > 0 ? PALETTE_HEX.gold : '#555555',
+    this.add.text(rightX, 190, `Skills (${player.skillPoints})`, {
+      fontFamily: FONT_MONO, fontSize: '13px', color: player.skillPoints > 0 ? PALETTE_HEX.gold : '#555555',
     }).setOrigin(0.5).setDepth(5);
-    createButton(this, rightX, 204, 'Skills', () => fadeToScene(this, 'SkillTree'), { width: 64, height: 25, fontSize: '10px' });
+    createButton(this, rightX, 212, 'Skills', () => fadeToScene(this, 'SkillTree'), { width: 80, height: 30, fontSize: '12px' });
 
-    this.pageLabel = this.add.text(GAME_WIDTH / 2, 16, `Page ${game.currentPage} / 20`, {
-      fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.gold,
+    this.pageLabel = this.add.text(GAME_WIDTH / 2, 18, `Page ${game.currentPage} / 20`, {
+      fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5, 0).setDepth(5);
 
     this.buildDepthLadder(game.currentPage);
 
-    const logY = GAME_HEIGHT - 34;
-    this.logBg = this.add.rectangle(GAME_WIDTH / 2, logY, GAME_WIDTH - 40, 32, 0x16191d, 0.7)
+    const logY = GAME_HEIGHT - 40;
+    this.logBg = this.add.rectangle(GAME_WIDTH / 2, logY, GAME_WIDTH - 40, 44, 0x16191d, 0.7)
       .setStrokeStyle(1, 0xc9a24b, 0.3).setDepth(5);
-    this.logText = this.add.text(GAME_WIDTH / 2, logY, this.pageFlavor(game.currentPage), {
-      fontFamily: FONT_SERIF,
-      fontSize: '12px',
+    this.logText = this.add.text(GAME_WIDTH / 2, logY + 2, this.pageFlavor(game.currentPage), {
+      fontFamily: FONT_BODY,
+      fontSize: '15px',
       color: PALETTE_HEX.boneMuted,
       align: 'center',
       wordWrap: { width: GAME_WIDTH - 60 },
@@ -182,8 +182,8 @@ export class BoardScene extends Phaser.Scene {
       const isCurrent = i + 1 === currentPage;
       const dot = this.add.circle(lx, y, isCurrent ? 6 : 4, isCurrent ? 0xc9a24b : 0x2a2e33)
         .setStrokeStyle(1, isCurrent ? 0xe9c876 : 0x9a9488, isCurrent ? 1 : 0.4);
-      const label = this.add.text(lx - 14, y, `${i + 1}`, {
-        fontFamily: `"Courier New", monospace`, fontSize: '9px', color: isCurrent ? '#c9a24b' : '#555555',
+      const label = this.add.text(lx - 16, y, `${i + 1}`, {
+        fontFamily: FONT_MONO, fontSize: '11px', color: isCurrent ? '#c9a24b' : '#555555',
       }).setOrigin(1, 0.5);
       ladder.push(dot, label);
     }
@@ -304,12 +304,12 @@ export class BoardScene extends Phaser.Scene {
     container.add(bg);
 
     const chapterText = this.add.text(cx, cy - 30, `CHAPTER ${num}`, {
-      fontFamily: FONT_SERIF, fontSize: '28px', color: PALETTE_HEX.gold,
+      fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
     container.add(chapterText);
 
-    const nameText = this.add.text(cx, cy + 20, name, {
-      fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.bone, fontStyle: 'italic',
+    const nameText = this.add.text(cx, cy + 24, name, {
+      fontFamily: FONT_BODY, fontSize: '20px', color: PALETTE_HEX.bone, fontStyle: 'italic',
     }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
     container.add(nameText);
 
@@ -471,8 +471,8 @@ export class BoardScene extends Phaser.Scene {
 
   private showNodeTooltip(text: string) {
     const tx = this.add.text(GAME_WIDTH / 2, 200, text, {
-      fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.gold,
-      align: 'center', wordWrap: { width: 500 },
+      fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.gold,
+      align: 'center', wordWrap: { width: 520 },
     }).setOrigin(0.5).setDepth(100).setAlpha(0);
     this.tweens.add({
       targets: tx, alpha: 1, duration: 300, ease: 'Sine.easeOut',
@@ -675,7 +675,7 @@ export class BoardScene extends Phaser.Scene {
     if (CHECKPOINTS.includes(game.currentNodeIndex)) {
       audio.checkpoint();
       const tx = this.add.text(GAME_WIDTH / 2, 300, '✦ Checkpoint Reached — Progress Saved ✦', {
-        fontFamily: FONT_MONO, fontSize: '14px', color: '#c9a24b',
+        fontFamily: FONT_MONO, fontSize: '16px', color: '#c9a24b',
       }).setOrigin(0.5).setDepth(100).setAlpha(1);
       this.tweens.add({
         targets: tx, alpha: 0, y: 280, duration: 3000, ease: 'Power2', onComplete: () => tx.destroy(),
@@ -711,32 +711,32 @@ export class BoardScene extends Phaser.Scene {
 
     this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(d).setInteractive();
     this.add.text(cx, cy - 90, 'You fell. But the Loom remembers.', {
-      fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold,
+      fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5).setDepth(d);
 
     this.add.text(cx, cy - 40, `Fallen at Page ${game.currentPage}.`, {
-      fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.bone,
+      fontFamily: FONT_BODY, fontSize: '20px', color: PALETTE_HEX.bone,
     }).setOrigin(0.5).setDepth(d);
 
-    this.add.text(cx, cy - 10, `Return to checkpoint at Page ${game.checkpointPage}.`, {
-      fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.boneMuted,
+    this.add.text(cx, cy - 8, `Return to checkpoint at Page ${game.checkpointPage}.`, {
+      fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0.5).setDepth(d);
 
-    this.add.text(cx, cy + 20, 'HP and MP restored to 50%.', {
-      fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.gold,
+    this.add.text(cx, cy + 24, 'HP and MP restored to 50%.', {
+      fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5).setDepth(d);
 
-    createButton(this, cx - 110, cy + 80, 'Continue', () => {
+    createButton(this, cx - 110, cy + 84, 'Continue', () => {
       store.handleDeath();
       fadeToScene(this, 'Board');
-    }, { width: 180, height: 44, fontSize: '15px' }).container.setDepth(d);
+    }, { width: 200, height: 46, fontSize: '17px' }).container.setDepth(d);
 
-    createButton(this, cx + 110, cy + 80, 'Return to Menu', () => {
+    createButton(this, cx + 110, cy + 84, 'Return to Menu', () => {
       const { meta } = useGameStore.getState();
       const newMeta = { ...meta, deathCount: meta.deathCount + 1 };
       useGameStore.setState({ meta: newMeta, player: null, game: null });
       audio.click();
       fadeToScene(this, 'Menu');
-    }, { width: 180, height: 44, fontSize: '15px' }).container.setDepth(d);
+    }, { width: 200, height: 46, fontSize: '17px' }).container.setDepth(d);
   }
 }

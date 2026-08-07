@@ -35,7 +35,7 @@ export function createButton(
   const text = scene.add
     .text(0, opts.subtitle ? -8 : 0, label, {
       fontFamily: FONT_SERIF,
-      fontSize: opts.fontSize ?? '17px',
+      fontSize: opts.fontSize ?? '20px',
       color: PALETTE_HEX.bone,
       align: 'center',
       wordWrap: { width: width - 20 },
@@ -44,7 +44,7 @@ export function createButton(
   const items: Phaser.GameObjects.GameObject[] = [bg, text];
   if (opts.subtitle) {
     const sub = scene.add
-      .text(0, 14, opts.subtitle, { fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.boneMuted })
+      .text(0, 15, opts.subtitle, { fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5);
     items.push(sub);
   }

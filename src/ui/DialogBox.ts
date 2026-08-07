@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FONT_SERIF, PALETTE_HEX } from './uiTheme';
+import { FONT_BODY, PALETTE_HEX } from './uiTheme';
 import { settingsManager } from '@systems/SettingsManager';
 
 export interface DialogBox {
@@ -11,15 +11,15 @@ export interface DialogBox {
 
 export function createDialogBox(scene: Phaser.Scene, x: number, y: number, width = 760, height = 200): DialogBox {
   const bg = scene.add.image(0, 0, 'panel_dialog').setDisplaySize(width, height);
-  const text = scene.add.text(-width / 2 + 28, -height / 2 + 24, '', {
-    fontFamily: FONT_SERIF,
-    fontSize: '17px',
+  const text = scene.add.text(-width / 2 + 28, -height / 2 + 20, '', {
+    fontFamily: FONT_BODY,
+    fontSize: '19px',
     color: PALETTE_HEX.bone,
     wordWrap: { width: width - 56 },
-    lineSpacing: 6,
+    lineSpacing: 7,
   });
   const prompt = scene.add
-    .text(width / 2 - 20, height / 2 - 20, '▾', { fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.gold })
+    .text(width / 2 - 20, height / 2 - 20, '▾', { fontFamily: FONT_BODY, fontSize: '18px', color: PALETTE_HEX.gold })
     .setOrigin(1)
     .setVisible(false);
 

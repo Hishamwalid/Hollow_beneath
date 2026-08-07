@@ -10,9 +10,9 @@ import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 const COL_COUNT = 5;
 const COL_WIDTH = 140;
 const START_X = Math.round((GAME_WIDTH - COL_COUNT * COL_WIDTH) / 2 + COL_WIDTH / 2);
-const TIER_1_Y = 175;
-const TIER_GAP = 100;
-const NODE_SIZE = 80;
+const TIER_1_Y = 165;
+const TIER_GAP = 104;
+const NODE_SIZE = 92;
 
 export class SkillTreeScene extends Phaser.Scene {
   private tooltip?: Phaser.GameObjects.Container;
@@ -50,8 +50,8 @@ export class SkillTreeScene extends Phaser.Scene {
   private drawTreeColumn(tree: SkillTreeDef, col: number, refreshPointText: () => void) {
     const cx = START_X + col * COL_WIDTH;
 
-    const header = this.add.text(cx, 110, tree.name, {
-      fontFamily: FONT_SERIF, fontSize: '17px', color: PALETTE_HEX.gold,
+    const header = this.add.text(cx, 105, tree.name, {
+      fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5);
     header.setAlpha(0.8);
 
@@ -120,15 +120,15 @@ export class SkillTreeScene extends Phaser.Scene {
     }
 
     const skillDef = NAMED_SKILLS[node.id];
-    const nameText = this.add.text(x, y - 18, skillDef?.name ?? node.id, {
-      fontFamily: FONT_MONO, fontSize: '11px', color: textColor, align: 'center', wordWrap: { width: NODE_SIZE - 8 },
+    const nameText = this.add.text(x, y - 20, skillDef?.name ?? node.id, {
+      fontFamily: FONT_MONO, fontSize: '12px', color: textColor, align: 'center', wordWrap: { width: NODE_SIZE - 12 },
     }).setOrigin(0.5).setDepth(2);
     const costText = this.add.text(x, y + 20, label, {
-      fontFamily: FONT_MONO, fontSize: '10px', color: textColor, align: 'center',
+      fontFamily: FONT_MONO, fontSize: '11px', color: textColor, align: 'center',
     }).setOrigin(0.5).setDepth(2);
 
     const tierLabel = this.add.text(x, y + NODE_SIZE / 2 + 10, `Tier ${node.tier}`, {
-      fontFamily: FONT_MONO, fontSize: '9px', color: '#555555',
+      fontFamily: FONT_MONO, fontSize: '10px', color: '#555555',
     }).setOrigin(0.5).setDepth(2);
 
     if (isAvailable) {
@@ -165,8 +165,8 @@ export class SkillTreeScene extends Phaser.Scene {
       skillDef.description,
     ];
     const text = this.add.text(0, 0, lines.join('\n'), {
-      fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.bone,
-      wordWrap: { width: 180 }, lineSpacing: 2,
+      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone,
+      wordWrap: { width: 200 }, lineSpacing: 3,
     }).setOrigin(0, 0);
 
     const pad = 8;
@@ -188,7 +188,7 @@ export class SkillTreeScene extends Phaser.Scene {
 
     const skillDef = NAMED_SKILLS[node.id];
     const text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50, `Buy "${skillDef?.name ?? node.id}" for ${node.cost} point${node.cost > 1 ? 's' : ''}?`, {
-      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.bone, align: 'center', wordWrap: { width: 360 },
+      fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.bone, align: 'center', wordWrap: { width: 360 },
     }).setOrigin(0.5).setDepth(32);
 
     const confirmBtn = createButton(this, GAME_WIDTH / 2 - 80, GAME_HEIGHT / 2 + 40, 'Confirm', () => {

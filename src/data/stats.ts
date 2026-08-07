@@ -1,4 +1,4 @@
-import type { DerivedStats, Equipment, StatBlock } from './types';
+import type { ClassId, DerivedStats, Equipment, StatBlock } from './types';
 import { ITEMS } from './items';
 
 export const POINT_BUY_TOTAL = 30;
@@ -53,6 +53,33 @@ export const PRESET_BUILDS: Record<string, StatBlock> = {
   Guardian: { str: 6, dex: 4, con: 10, int: 3, will: 7 },
   Shadow: { str: 4, dex: 7, con: 5, int: 6, will: 8 },
 };
+
+/** Class-locked identity per preset (Ultimate Battle System Part 8). */
+export const CLASS_OF_PRESET: Record<string, ClassId> = {
+  Balanced: 'balanced',
+  Warrior: 'warrior',
+  Scholar: 'scholar',
+  Ranger: 'ranger',
+  Guardian: 'guardian',
+  Shadow: 'shadow',
+};
+
+const STAT_KEYS: Array<keyof StatBlock> = ['str', 'dex', 'con', 'int', 'will'];
+
+/** Which preset archetype a final stat spread most resembles, even if hand-tuned after a preset click. */
+export function closestPresetName(stats: StatBlock): string {
+  let best = 'Balanced';
+  let bestDist = Infinity;
+  for (const name of Object.keys(PRESET_BUILDS)) {
+    const preset = PRESET_BUILDS[name];
+    const dist = STAT_KEYS.reduce((sum, k) => sum + (stats[k] - preset[k]) ** 2, 0);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = name;
+    }
+  }
+  return best;
+}
 
 export function getEquipmentBonuses(equipment: Equipment): EquipmentBonuses {
   const slots = ['weapon', 'armour', 'focus', 'accessory'] as const;

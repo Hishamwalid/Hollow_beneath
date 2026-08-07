@@ -10,7 +10,7 @@ export interface DiceRoller {
 export function createDiceRoller(scene: Phaser.Scene, x: number, y: number): DiceRoller {
   const box = scene.add.rectangle(0, 0, 72, 72, 0x22262c).setStrokeStyle(2, 0xc9a24b, 1);
   const text = scene.add
-    .text(0, 0, '?', { fontFamily: FONT_SERIF, fontSize: '32px', color: PALETTE_HEX.gold })
+    .text(0, 0, '?', { fontFamily: FONT_SERIF, fontSize: '40px', color: PALETTE_HEX.gold })
     .setOrigin(0.5);
   const container = scene.add.container(x, y, [box, text]);
   let activeTimer: Phaser.Time.TimerEvent | null = null;

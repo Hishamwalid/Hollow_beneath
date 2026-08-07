@@ -1,5 +1,19 @@
-export const FONT_SERIF = 'Georgia, "Times New Roman", serif';
-export const FONT_MONO = '"Courier New", monospace';
+// Fantasy display font (Cinzel) - titles, headers
+export const FONT_SERIF = '"HollowCinzel", Georgia, "Times New Roman", serif';
+// Parchment / ancient-book body font (IM Fell English)
+export const FONT_BODY = '"HollowFell", Georgia, "Times New Roman", serif';
+// Numeric readouts (HP / AP / stats) - Courier Prime
+export const FONT_MONO = '"HollowMono", "Courier New", monospace';
+
+// Readable size scale for a 1280x800 canvas. Body text never drops below 14px.
+export const SZ = {
+  xs: '14px',   // dense labels / readouts
+  sm: '16px',   // body, buttons, form text
+  md: '18px',   // emphasized body / sub-titles
+  lg: '24px',   // panel titles
+  xl: '30px',   // screen titles
+  xxl: '38px',  // main menu title
+} as const;
 
 export const PALETTE_HEX = {
   void: '#0b0d10',

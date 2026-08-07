@@ -131,13 +131,15 @@ function crownIcon(scene: Phaser.Scene, key: string, color: number, size = 40): 
 }
 
 /** Solid rounded panel background, used for dialog/HUD chrome. */
-function panelTexture(scene: Phaser.Scene, key: string, w: number, h: number, fill: number, stroke: number, radius = 12): void {
+function panelTexture(scene: Phaser.Scene, key: string, w: number, h: number, fill: number, stroke: number, radius = 12, strokeWidth = 2): void {
   if (scene.textures.exists(key)) return;
   const g = scene.add.graphics();
   g.fillStyle(fill, 0.94);
   g.fillRoundedRect(0, 0, w, h, radius);
-  g.lineStyle(2, stroke, 1);
-  g.strokeRoundedRect(1, 1, w - 2, h - 2, radius);
+  if (strokeWidth > 0) {
+    g.lineStyle(strokeWidth, stroke, 1);
+    g.strokeRoundedRect(1, 1, w - 2, h - 2, radius);
+  }
   g.generateTexture(key, w, h);
   g.destroy();
 }
@@ -203,6 +205,6 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   panelTexture(scene, 'panel_preset', 120, 38, PALETTE.stoneLight, PALETTE.gold, 6);
   panelTexture(scene, 'panel_preset_hover', 120, 38, PALETTE.gold, PALETTE.goldBright, 6);
   panelTexture(scene, 'panel_combat_hud', 780, 160, PALETTE.stone, PALETTE.gold);
-  panelTexture(scene, 'panel_enemy', 110, 130, PALETTE.stone, PALETTE.boneMuted, 6);
+  panelTexture(scene, 'panel_enemy', 150, 220, PALETTE.stone, PALETTE.boneMuted, 6, 0);
   shapeTexture(scene, 'particle', 8, (g) => { g.fillStyle(0xffffff, 1); g.fillCircle(4, 4, 3); });
 }

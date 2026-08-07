@@ -11,7 +11,7 @@ import { createButton } from '@ui/Button';
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { spawnCelebrationParticles } from '@systems/particles';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
-import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
@@ -77,12 +77,12 @@ export class LandmarkScene extends Phaser.Scene {
 
   private showSubtitleElements(boss: typeof BOSSES[string], cx: number, depth: number, overlay: Phaser.GameObjects.Rectangle, nameText: Phaser.GameObjects.Text, bossId: string) {
     const vennText = this.add.text(cx, GAME_HEIGHT / 2, `"${boss.vennName}"`, {
-      fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+      fontFamily: FONT_BODY, fontSize: '22px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
     }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
     this.tweens.add({ targets: vennText, alpha: 1, duration: 500, delay: 200, ease: 'Sine.easeOut' });
 
-    const themeText = this.add.text(cx, GAME_HEIGHT / 2 + 40, boss.theme, {
-      fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.bone, fontStyle: 'italic',
+    const themeText = this.add.text(cx, GAME_HEIGHT / 2 + 42, boss.theme, {
+      fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.bone, fontStyle: 'italic',
     }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
     this.tweens.add({ targets: themeText, alpha: 1, duration: 500, delay: 600, ease: 'Sine.easeOut' });
 
@@ -105,8 +105,8 @@ export class LandmarkScene extends Phaser.Scene {
 
   private showApproach(bossId: string) {
     const boss = BOSSES[bossId];
-    this.add.text(GAME_WIDTH / 2, 60, boss.name, { fontFamily: FONT_SERIF, fontSize: '32px', color: PALETTE_HEX.gold }).setOrigin(0.5);
-    this.add.text(GAME_WIDTH / 2, 96, boss.theme, { fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' }).setOrigin(0.5);
+    this.add.text(GAME_WIDTH / 2, 60, boss.name, { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    this.add.text(GAME_WIDTH / 2, 100, boss.theme, { fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' }).setOrigin(0.5);
     this.add.image(GAME_WIDTH / 2, 230, `tok_${bossId}`).setDisplaySize(140, 140);
 
     this.dialog?.destroy();
@@ -221,7 +221,7 @@ export class LandmarkScene extends Phaser.Scene {
 
     spawnCelebrationParticles(this, GAME_WIDTH / 2, 100);
 
-    this.add.text(GAME_WIDTH / 2, 70, `${boss.name} — Aftermath`, { fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    this.add.text(GAME_WIDTH / 2, 70, `${boss.name} — Aftermath`, { fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold }).setOrigin(0.5);
     this.dialog?.destroy();
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 280, 860, 220);
     this.dialog = dialog;
@@ -261,7 +261,7 @@ export class LandmarkScene extends Phaser.Scene {
       }
       const rewardY = 440 + index * 24;
       const t = this.add.text(GAME_WIDTH / 2, rewardY, `✦ ${notes[index]}`, {
-        fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.goldBright,
+        fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.goldBright,
       }).setOrigin(0.5).setAlpha(0);
       rewardTexts.push(t);
       audio.shardGain();

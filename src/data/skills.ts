@@ -3,7 +3,7 @@ import type { ActionId, SkillDef } from './types';
 /** AP cost for the combat actions (Battle Plan Part 2). 'skill' cost comes from the SkillDef chosen. */
 export const ACTION_AP_COST: Record<ActionId, number> = {
   attack: 1,
-  skill: 1,
+  skill: 2,
   resonance_ability: 3,
   guard: 1,
   use_item: 1,

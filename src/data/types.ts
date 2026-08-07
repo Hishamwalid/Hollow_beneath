@@ -45,7 +45,7 @@ export type AffinityMap = Partial<Record<DamageType, number>>;
 export type DotId = 'poison' | 'burn' | 'bleed' | 'curse' | 'frostbite' | 'shock_dot';
 export type ControlId = 'sleep' | 'fear' | 'silence' | 'blind' | 'confuse' | 'stun' | 'root';
 export type BuffId = 'focus' | 'barrier' | 'regeneration' | 'fortify' | 'blessing' | 'haste' | 'reflection' | 'brace' | 'echo_surge';
-export type DebuffId = 'weakness' | 'defense_down' | 'slow' | 'armour_break' | 'seal_mind' | 'fragile_perception';
+export type DebuffId = 'weakness' | 'defense_down' | 'slow' | 'armour_break' | 'seal_mind' | 'fragile_perception' | 'exhausted';
 export type StatusId = DotId | ControlId | BuffId | DebuffId;
 
 export interface StatusInstance {
@@ -82,7 +82,15 @@ export interface SkillDef {
   tag?: string;
   /** organizational grouping only (Warrior/Ranger/Scholar/Guardian/Shadow/Universal); no separate spend-points system */
   tree?: 'warrior' | 'ranger' | 'scholar' | 'guardian' | 'shadow' | 'universal';
+  /** Combo tags (Phase 3): Strike/Break/Analyze/Guard + Physical/Elemental + damage-type + specials (Mark, Counter). */
+  tags?: ActionTag[];
 }
+
+export type ActionTag =
+  | 'Strike' | 'Break' | 'Analyze' | 'Guard'
+  | 'Physical' | 'Elemental'
+  | 'Slash' | 'Pierce' | 'Blunt' | 'Flame' | 'Frost' | 'Shock' | 'Sacred' | 'Shadow'
+  | 'Mark' | 'Counter' | 'Knowledge' | 'Mental' | 'Defense' | 'Stance';
 
 // ---- Combatants ----------------------------------------------------------------
 
@@ -120,7 +128,11 @@ export interface EnemyDef {
   echoVariant?: boolean; // true if this is a Resonance-tier "Echo" reskin
   minResonance?: number; // only spawns if resonance >= this (e.g. Memory Wraith)
   description: string;
-  /** Called on this enemy's turn. Mutates ctx and returns a log line. */
+  /** Personality archetype, used for the HUD tendency glyph and investigation flavor. */
+  tendency?: EnemyTendency;
+  /** Pre-declared move pool. Engine picks one at round start and resolves it when the enemy acts. */
+  intents?: IntentDef[];
+  /** Called on this enemy's turn. Mutates ctx and returns a log line. Legacy fallback when `intents` is absent. */
   act(ctx: EnemyTurnContext): string;
 }
 
@@ -149,6 +161,31 @@ export interface CombatState_Enemy extends CombatantBase {
 
 export interface CombatState_Player extends CombatantBase {
   guarding: boolean;
+}
+
+// ---- Enemy tendency & intent system (Phase 2) --------------------------------
+
+/** The 10 behavioral archetypes from the battle system doc, Part 5. */
+export type EnemyTendency =
+  | 'aggressor' | 'tactician' | 'berserker' | 'guardian' | 'caster'
+  | 'hunter' | 'sage' | 'coward' | 'fanatic' | 'manipulator';
+
+export interface IntentDef {
+  id: string;
+  label: string;
+  weight?: number; // default 1 (higher = picked more often among eligible intents)
+  description: string;
+  condition?: (ctx: EnemyTurnContext) => boolean;
+  resolve: (ctx: EnemyTurnContext) => string;
+}
+
+export interface BossIntentDef {
+  id: string;
+  label: string;
+  weight?: number; // default 1
+  description: string;
+  condition?: (ctx: BossTurnContext) => boolean;
+  resolve: (ctx: BossTurnContext) => void;
 }
 
 // ---- Bosses --------------------------------------------------------------------
@@ -197,7 +234,9 @@ export interface BossDef {
   approachText: string;
   preCombatChoices?: BossPreCombatChoice[];
   getPhase(hpPercent: number): BossPhaseInfo;
-  /** Executed once per boss turn. May call ctx.endCombat() for scripted phase transitions. */
+  /** Pre-declared move pool (intent system). Engine picks one at round start and resolves it when the boss acts. */
+  intents?: BossIntentDef[];
+  /** Executed once per boss turn. May call ctx.endCombat() for scripted phase transitions. Legacy fallback when `intents` is absent. */
   takeTurn(ctx: BossTurnContext): void;
   aftermathText(flags: Record<string, number>): string;
   getRewards(flags: Record<string, number>): BossRewards;
@@ -232,6 +271,12 @@ export interface FactionState {
 }
 
 export type ResonanceTier = 'stable' | 'awakened' | 'unmoored' | 'transcendent';
+
+/** Class-locked identity (Ultimate Battle System Part 8). */
+export type ClassId = 'warrior' | 'ranger' | 'scholar' | 'guardian' | 'shadow' | 'balanced';
+
+/** Battlefield row (Ultimate Battle System Part 7). */
+export type Position = 'front' | 'middle' | 'back';
 
 // ---- Items ------------------------------------------------------------------------
 
@@ -377,6 +422,17 @@ export interface PlayerState {
   resonancePeak: number;
   faction: FactionState;
 
+  /** Class-locked identity: which preset the character descended as. */
+  classId: ClassId;
+  /** Combat fatigue gauge 0-100 (Ultimate Battle System Part 13). */
+  fatigue: number;
+  /** Tactical Insight resource, max 3 (Part 3). */
+  insight: number;
+  /** Hidden fear gauge 0-100 (Part 11). */
+  fearGauge: number;
+  /** Battlefield row (Part 7). */
+  position: Position;
+
   equipment: Equipment;
   inventory: InventoryEntry[];
 
@@ -386,7 +442,7 @@ export interface PlayerState {
   enemiesKilled: number;
   bossesDefeated: string[];
 
-  momentum: number; // persists between battles, 0-3
+  momentum: number; // persists between battles, 0-5
 
   echoShards: number;
   unlocks: string[]; // purchased shard-shop unlock ids

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FONT_SERIF, PALETTE_HEX } from './uiTheme';
+import { FONT_BODY, PALETTE_HEX } from './uiTheme';
 import { resonanceTier } from '@systems/ResonanceSystem';
 
 /**
@@ -43,8 +43,8 @@ export function applyResonanceTint(scene: Phaser.Scene, resonance: number, width
 export function showWhisper(scene: Phaser.Scene, x: number, y: number, text: string, maxWidth = 620): void {
   const t = scene.add
     .text(x, y, text, {
-      fontFamily: FONT_SERIF,
-      fontSize: '13px',
+      fontFamily: FONT_BODY,
+      fontSize: '16px',
       fontStyle: 'italic',
       color: PALETTE_HEX.boneMuted,
       align: 'center',

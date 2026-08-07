@@ -13,7 +13,7 @@ import { createStatPanel } from '@ui/StatPanel';
 import { createEnemyDisplay, createApPips, createActionBar, createSpeedBar, type EnemyDisplay, type ActionBarItem } from '@ui/CombatHUD';
 import { createChoiceMenu, type ChoiceMenu, type ChoiceMenuItem } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
-import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX, DAMAGE_TYPE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { settingsManager } from '@systems/SettingsManager';
 import { spawnHitParticles, spawnHealParticles, spawnMomentumParticles } from '@systems/particles';
@@ -32,14 +32,15 @@ interface CombatSceneData {
 }
 
 const MOMENTUM_LABELS: Record<MomentumChoice, { label: string; subtitle: string }> = {
-  extra_turn: { label: 'Extra Turn', subtitle: 'Act again immediately' },
-  chorus_heal: { label: 'Chorus Heal', subtitle: '+25% Max HP now' },
-  clarity: { label: 'Clarity', subtitle: '+40% Max MP now' },
+  flow: { label: 'Flow', subtitle: 'Act again now; start next round exhausted (-1 AP)' },
+  harmony: { label: 'Harmony', subtitle: '+25% Max HP now; boss enrages (+30% dmg)' },
+  archive: { label: 'Archive', subtitle: 'Recall the current boss phase' },
   forgotten_technique: { label: 'Forgotten Technique', subtitle: 'Next action costs 0 AP' },
   unravel: { label: 'Unravel', subtitle: 'Next hit: 2.5x dmg, ignore 75% Def' },
   echo_surge: { label: 'Echo Surge', subtitle: 'All damage +20% for 2 turns' },
   phase_shift: { label: 'Phase Shift', subtitle: 'Dodge the next 2 attacks' },
   desperate_strike: { label: 'Desperate Strike', subtitle: 'All attacks crit this turn' },
+  overclock: { label: 'Overclock', subtitle: '+70% damage; lose 20% max HP (this fight)' },
 };
 
 export class CombatScene extends Phaser.Scene {
@@ -51,6 +52,8 @@ export class CombatScene extends Phaser.Scene {
   private lastPlayerHP = 0;
   private statPanel?: ReturnType<typeof createStatPanel>;
   private apPips?: ReturnType<typeof createApPips>;
+  private insightText?: Phaser.GameObjects.Text;
+  private insightBtn?: ReturnType<typeof createButton>;
   private playerSprite?: Phaser.GameObjects.Image;
   private actionBarContainer?: Phaser.GameObjects.Container;
   private actionBarTooltip?: Phaser.GameObjects.Text;
@@ -98,43 +101,50 @@ export class CombatScene extends Phaser.Scene {
     });
 
     this.add
-      .text(GAME_WIDTH / 2, 24, bossDef ? bossDef.name : 'Combat', { fontFamily: FONT_SERIF, fontSize: '24px', color: PALETTE_HEX.gold })
+      .text(GAME_WIDTH / 2, 24, bossDef ? bossDef.name : 'Combat', { fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold })
       .setOrigin(0.5, 0);
     this.phaseLabelText = this.add
-      .text(GAME_WIDTH / 2, 54, '', { fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' })
+      .text(GAME_WIDTH / 2, 58, '', { fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' })
       .setOrigin(0.5, 0);
 
     const initialSnap = this.engine.beginRound();
     this.buildEnemyDisplays(initialSnap);
 
-    this.statPanel = createStatPanel(this, 16, GAME_HEIGHT - 200, 240);
-    this.apPips = createApPips(this, GAME_WIDTH - 80, GAME_HEIGHT - 200);
+    this.statPanel = createStatPanel(this, 16, 585, 320);
+    this.apPips = createApPips(this, 1150, 565);
+    this.insightText = this.add
+      .text(1150, 606, '', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold })
+      .setOrigin(0.5, 0);
+    this.insightBtn = createButton(this, 1150, 632, 'Study (3 INS)', () => this.showInsightModal(), {
+      width: 130, height: 28, fontSize: '13px', depth: 11,
+    });
 
-    this.playerSprite = this.add.image(190, GAME_HEIGHT - 330, 'player_idle');
-    this.playerSprite.setDisplaySize(150, 190).setDepth(6);
+    this.playerSprite = this.add.image(150, 470, 'player_idle');
+    this.playerSprite.setDisplaySize(150, 128).setDepth(6);
 
     this.speedBar = createSpeedBar(
       this,
-      GAME_WIDTH / 2 - 120,
-      GAME_HEIGHT - 300,
+      GAME_WIDTH / 2,
+      120,
       initialSnap.initiativeOrder,
       initialSnap.phase === 'player' ? 'player' : undefined,
       new Map(initialSnap.enemies.map((e) => [e.key, e])),
       initialSnap.playerSpd,
     );
 
-    this.logText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 270, '', {
+    this.logText = this.add.text(GAME_WIDTH / 2, 582, '', {
       fontFamily: FONT_MONO,
-      fontSize: '12px',
+      fontSize: '14px',
       color: PALETTE_HEX.boneMuted,
       align: 'center',
-      wordWrap: { width: 500 },
-    }).setOrigin(0.5, 0);
+      wordWrap: { width: 600 },
+      lineSpacing: 4,
+    }).setOrigin(0.5, 0).setAlpha(0.85);
 
-    this.endTurnBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'End Turn', () => this.onEndTurn(), { width: 180, height: 40 });
+    this.endTurnBtn = createButton(this, 1214, GAME_HEIGHT - 150, 'End Turn', () => this.onEndTurn(), { width: 120, height: 56 });
 
     const whisper = maybePickWhisper(player.resonance, 'combat', Math.random);
-    if (whisper) showWhisper(this, GAME_WIDTH / 2, 100, whisper.text, 520);
+    if (whisper) showWhisper(this, GAME_WIDTH / 2, 96, whisper.text, 600);
 
     this.refresh(initialSnap);
     if (data.mode === 'boss') this.showBossEntry();
@@ -165,11 +175,11 @@ export class CombatScene extends Phaser.Scene {
     this.enemyDisplays = [];
     this.enemyKeyMap.clear();
     const n = snap.enemies.length;
-    const spacing = Math.min(220, (GAME_WIDTH - 200) / Math.max(1, n));
-    const rowCenter = GAME_WIDTH * 0.62;
+    const spacing = Math.max(185, Math.min(250, (GAME_WIDTH - 200) / Math.max(1, n)));
+    const rowCenter = GAME_WIDTH / 2;
     const startX = rowCenter - ((n - 1) * spacing) / 2;
     snap.enemies.forEach((e, i) => {
-      const disp = createEnemyDisplay(this, startX + i * spacing, 210, `tok_${e.key}`, () => {
+      const disp = createEnemyDisplay(this, startX + i * spacing, 230, `tok_${e.key}`, () => {
         this.selectedTarget = e.key;
         this.updateTargetHighlight(this.engine.snapshot());
       });
@@ -186,7 +196,7 @@ export class CombatScene extends Phaser.Scene {
 
   private log(lines: string[]) {
     if (!this.logText) return;
-    const recent = lines.slice(-4);
+    const recent = lines.slice(-2);
     this.logText.setText(recent.join('\n'));
   }
 
@@ -194,6 +204,8 @@ export class CombatScene extends Phaser.Scene {
     const { player } = useGameStore.getState();
     if (player)     this.statPanel?.update(player);
     this.apPips?.update(snap.playerAP, snap.bankedAP);
+    this.insightText?.setText(`INSIGHT ${snap.insight}/3`);
+    this.insightBtn?.setEnabled(snap.phase === 'player' && snap.insight >= 3);
     this.phaseLabelText?.setText(snap.bossPhaseLabel ?? '');
     if (this.selectedTarget && !snap.enemies.some((e) => e.key === this.selectedTarget)) {
       this.selectedTarget = snap.enemies[0]?.key ?? null;
@@ -227,21 +239,17 @@ export class CombatScene extends Phaser.Scene {
     const canAct = snap.phase === 'player';
     const hasFree = snap.freeActionCharges > 0;
     const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
-    const analyzeOn = snap.enemies.length > 0 && snap.enemies.every((e) => e.revealed);
 
     const items: ActionBarItem[] = [
       { id: 'attack', label: 'Attack', apCost: 1, description: 'Basic melee attack (Slash damage).', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
-      { id: 'guard', label: 'Defend', apCost: 1, description: 'Raise your guard. Take 50% less damage until your next turn.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },
+      { id: 'guard', label: 'Defend', apCost: 1, description: 'Raise your guard. Take 50% less damage until your next turn. Eases fatigue.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },
       {
-        id: 'analyze',
-        label: analyzeOn ? 'Analyze: ON' : 'Analyze',
-        apCost: 0,
-        description: 'Toggle enemy weaknesses and stats display (free, no AP).',
-        disabled: !canAct,
-        onClick: () => {
-          const snapNow = this.engine.toggleAnalyze();
-          this.refresh(snapNow);
-        },
+        id: 'scan',
+        label: 'Scan',
+        apCost: 1,
+        description: 'Scan the target (1 AP): reveals weaknesses, tendency, and a sense of what it intends.',
+        disabled: !canAct || !canAfford(1),
+        onClick: () => this.doAction('scan', () => this.engine.analyze(this.selectedTarget ?? undefined)),
       },
       {
         id: 'item',
@@ -261,14 +269,14 @@ export class CombatScene extends Phaser.Scene {
       },
     ];
 
-    const sharedTooltip = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 200, '', {
-      fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.boneMuted,
-      align: 'center', wordWrap: { width: 500 },
-    }).setOrigin(0.5, 1).setAlpha(0).setDepth(100);
+    const sharedTooltip = this.add.text(GAME_WIDTH / 2, 520, '', {
+      fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.boneMuted,
+      align: 'center', wordWrap: { width: 560 },
+    }).setOrigin(0.5, 0).setAlpha(0).setDepth(100);
     this.actionBarTooltip = sharedTooltip;
 
-    const totalWidth = items.length * 126 - 6;
-    const wrapper = this.add.container(GAME_WIDTH / 2 - totalWidth / 2 + 60, GAME_HEIGHT - 150);
+    const totalWidth = items.length * 156 - 8;
+    const wrapper = this.add.container(444, GAME_HEIGHT - 150);
     const { container: row1 } = createActionBar(this, 0, 0, items, sharedTooltip);
     wrapper.add(row1);
     this.actionBarContainer = wrapper;
@@ -283,6 +291,9 @@ export class CombatScene extends Phaser.Scene {
     const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
     const resonanceCost = player.skillsKnown.includes('resonant_study') ? 1 : 3;
     const activeSkills = player.skillsKnown.filter((id) => (NAMED_SKILLS[id]?.apCost ?? 0) > 0);
+    const targetView = snap.enemies.find((e) => e.key === this.selectedTarget);
+    const targetLayer = targetView?.investigationLayer ?? 0;
+    const targetProbes = targetView?.investigationProbes.length ?? 0;
 
     const menuItems: ChoiceMenuItem[] = [
       ...activeSkills.map((id): ChoiceMenuItem => {
@@ -304,6 +315,8 @@ export class CombatScene extends Phaser.Scene {
         onSelect: () => { this.closeOverlay(); this.doAction('resonance', () => this.engine.resonanceAbility(this.selectedTarget ?? undefined)); },
       },
       { label: 'Sunder (2 AP)', subtitle: 'Sunder an enemy: reduce its Defense by 50% for 2 turns.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)); } },
+      { label: 'Probe (1 AP)', subtitle: 'Focused intel: Observe Body / Mind / Weapon / Memory / Resonance / Behavior. Requires a Scan.', disabled: !canAfford(1) || targetLayer < 1, onSelect: () => { this.closeOverlay(); this.openProbeMenu(); } },
+      { label: 'Deep Analysis (2 AP)', subtitle: 'Full move pool, exact rules, hidden notes. Requires at least one Probe.', disabled: !canAfford(2) || targetProbes < 1, onSelect: () => { this.closeOverlay(); this.doAction('deep_analyze', () => this.engine.deepAnalyze(this.selectedTarget ?? undefined)); } },
       { label: 'Focus (1 AP)', subtitle: 'Regain 15 MP and gain +1 Momentum.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('focus', () => this.engine.focus()); } },
       { label: 'Brace (1 AP)', subtitle: 'Guard blocks 20% more damage for 2 turns.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('brace', () => this.engine.brace()); } },
       { label: 'Withdraw (2 AP)', subtitle: 'Attempt to flee. Speed-based success chance.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('withdraw', () => this.engine.withdraw()); } },
@@ -346,7 +359,8 @@ export class CombatScene extends Phaser.Scene {
         const ed = this.enemyKeyMap.get(e.key);
         if (!ed) continue;
         if (e.hp < before) {
-          this.floatingText(ed.container.x, ed.container.y - 55, `-${before - e.hp}`, PALETTE_HEX.danger);
+          const dmgColor = e.lastHitType ? (DAMAGE_TYPE_HEX[e.lastHitType] ?? PALETTE_HEX.danger) : PALETTE_HEX.danger;
+          this.floatingText(ed.container.x, ed.container.y - 55, `-${before - e.hp}`, dmgColor);
           this.setEnemyPose(ed, 'hit');
           this.shakeTarget(ed.container);
           spawnHitParticles(this, ed.container.x, ed.container.y, 0xb0453f);
@@ -355,6 +369,7 @@ export class CombatScene extends Phaser.Scene {
         }
       }
     };
+    this.showBanners(snap);
     const playerHealed = snap.playerHP > prevPlayerHP;
     if (playerHealed && this.statPanel) {
       spawnHealParticles(this, this.statPanel.container.x + 40, this.statPanel.container.y + 10);
@@ -381,25 +396,28 @@ export class CombatScene extends Phaser.Scene {
       case 'guard': {
         this.setPlayerPose('idle', false);
         if (this.statPanel) this.flashTarget(this.statPanel.container, 0x4a6fa5);
-        this.floatingText(280, 620, 'GUARD', PALETTE_HEX.player);
+        this.floatingText(250, 560, 'GUARD', PALETTE_HEX.player);
         break;
       }
       case 'item': {
         this.setPlayerPose('idle', false);
         if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
         const healed = snap.playerHP - prevPlayerHP;
-        if (healed > 0) this.floatingText(280, 640, `+${healed} HP`, PALETTE_HEX.ok);
+        if (healed > 0) this.floatingText(250, 560, `+${healed} HP`, PALETTE_HEX.ok);
         break;
       }
-      case 'analyze': {
+      case 'analyze':
+      case 'scan':
+      case 'probe':
+      case 'deep_analyze': {
         this.setPlayerPose('idle', false);
         if (display) { this.flashTarget(display.container, 0xc9a24b); }
-        if (targetKey) this.floatingText(280, 260, 'WEAKNESSES READ', PALETTE_HEX.gold);
+        if (targetKey) this.floatingText(250, 430, type === 'probe' ? 'INTEL GATHERED' : type === 'deep_analyze' ? 'LINES DECODED' : 'WEAKNESSES READ', PALETTE_HEX.gold);
         break;
       }
       case 'sunder': {
         this.setPlayerPose('attack');
-        if (targetKey) this.floatingText(280, 260, 'ARMOR BROKEN', '#e67e22');
+        if (targetKey) this.floatingText(250, 430, 'ARMOR BROKEN', '#e67e22');
         showAllEnemyDamage();
         break;
       }
@@ -420,7 +438,7 @@ export class CombatScene extends Phaser.Scene {
       this.setPlayerPose('hit');
       if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
       const dmg = prevPlayerHP - snap.playerHP;
-      this.floatingText(280, 600, `-${dmg}`, PALETTE_HEX.danger);
+      this.floatingText(250, 560, `-${dmg}`, PALETTE_HEX.danger);
     }
     this.lastPlayerHP = snap.playerHP;
   }
@@ -481,6 +499,33 @@ export class CombatScene extends Phaser.Scene {
     });
   }
 
+  private showBanners(snap: CombatSnapshot) {
+    for (const banner of snap.banners) {
+      const isCombo = banner.startsWith('COMBO');
+      const isWindow = banner.startsWith('WEAKNESS WINDOW');
+      const color = isWindow ? '#e9c876' : isCombo ? '#9b59b6' : '#5dade2';
+      const label = banner.replace(/^(COMBO |REACTION |WEAKNESS WINDOW — )/, '');
+      const title = isWindow ? 'WEAKNESS WINDOW' : isCombo ? 'COMBO' : 'REACTION';
+      const t = this.add.text(GAME_WIDTH / 2, 210, `${title}: ${label}`, {
+        fontFamily: FONT_SERIF,
+        fontSize: '24px',
+        color,
+        fontStyle: 'bold',
+        align: 'center',
+        wordWrap: { width: 700 },
+      }).setOrigin(0.5).setDepth(30).setAlpha(0);
+      this.tweens.add({
+        targets: t,
+        alpha: 1,
+        duration: 200,
+        yoyo: true,
+        hold: 1400,
+        onComplete: () => t.destroy(),
+      });
+    }
+    this.engine.drainBanners();
+  }
+
   private floatingText(x: number, y: number, text: string, color: string): void {
     const t = this.add.text(x, y, text, {
       fontFamily: FONT_MONO, fontSize: '14px', color, fontStyle: 'bold',
@@ -525,13 +570,76 @@ export class CombatScene extends Phaser.Scene {
     this.overlayMenu = undefined;
   }
 
+  private openProbeMenu() {
+    const snap = this.engine.snapshot();
+    if (snap.phase !== 'player' || !this.selectedTarget) return;
+    const target = this.selectedTarget;
+    this.overlayBg?.destroy();
+    this.overlayMenu?.destroy();
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive().setDepth(35);
+    this.overlayBg.on('pointerdown', () => this.closeOverlay());
+    const probes: Array<{ id: string; label: string; subtitle: string }> = [
+      { id: 'observe_body', label: 'Observe Body', subtitle: 'Exact stats and every damage multiplier.' },
+      { id: 'observe_mind', label: 'Observe Mind', subtitle: 'Pattern, tendency triggers, phase timing.' },
+      { id: 'observe_weapon', label: 'Observe Weapon', subtitle: 'Attack type and next move in detail.' },
+      { id: 'observe_memory', label: 'Observe Memory', subtitle: 'Lore and weakness hints.' },
+      { id: 'observe_resonance', label: 'Observe Resonance', subtitle: 'Boss phase thresholds.' },
+      { id: 'observe_behavior', label: 'Observe Behavior', subtitle: 'Full action pool and tells.' },
+    ];
+    this.overlayMenu = createChoiceMenu(
+      this,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2,
+      probes.map((p) => ({
+        label: p.label,
+        subtitle: p.subtitle,
+        onSelect: () => {
+          this.closeOverlay();
+          this.doAction('probe', () => this.engine.probe(target, p.id));
+        },
+      })),
+      { width: 460, spacing: 56 },
+    );
+  }
+
+  private showInsightModal() {
+    const snap = this.engine.snapshot();
+    if (snap.phase !== 'player' || snap.insight < 3) return;
+    this.overlayBg?.destroy();
+    this.overlayMenu?.destroy();
+    audio.momentumFull();
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75).setDepth(35);
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 150, 'INSIGHT — 3 SPENT', { fontFamily: FONT_SERIF, fontSize: '24px', color: PALETTE_HEX.gold }).setOrigin(0.5).setDepth(36);
+    const options: Array<{ id: 'full_ai' | 'perfect_prediction' | 'focused_study' | 'weakness_window'; label: string; subtitle: string }> = [
+      { id: 'full_ai', label: 'Reveal Full Patterns', subtitle: 'Deep Analysis of every enemy on the field.' },
+      { id: 'perfect_prediction', label: 'Perfect Prediction', subtitle: 'Every intent becomes certain.' },
+      { id: 'focused_study', label: 'Focused Study', subtitle: 'Studied enemies take +15% damage for the fight.' },
+      { id: 'weakness_window', label: 'Immediate Weakness Window', subtitle: 'All enemies take +50% weakness damage for 2 rounds.' },
+    ];
+    this.overlayMenu = createChoiceMenu(
+      this,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2 - 60,
+      options.map((o) => ({
+        label: o.label,
+        subtitle: o.subtitle,
+        onSelect: () => {
+          this.closeOverlay();
+          const snap2 = this.engine.spendInsight(o.id);
+          this.refresh(snap2);
+        },
+      })),
+      { width: 480, spacing: 58 },
+    );
+  }
+
   private showMomentumModal() {
     if (this.overlayBg && this.overlayMenu) return;
     this.closeOverlay();
     audio.momentumFull();
     this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75).setDepth(35);
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 170, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold }).setOrigin(0.5).setDepth(36);
-    const choices: MomentumChoice[] = ['extra_turn', 'chorus_heal', 'clarity', 'forgotten_technique', 'unravel', 'echo_surge', 'phase_shift', 'desperate_strike'];
+    const choices: MomentumChoice[] = ['flow', 'harmony', 'archive', 'forgotten_technique', 'unravel', 'echo_surge', 'phase_shift', 'desperate_strike', 'overclock'];
     this.overlayMenu = createChoiceMenu(
       this,
       GAME_WIDTH / 2,
@@ -547,7 +655,7 @@ export class CombatScene extends Phaser.Scene {
           const healed = snap.playerHP - prevHP;
           if (healed > 0) {
             if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
-            this.floatingText(280, 640, `+${healed} HP`, PALETTE_HEX.ok);
+            this.floatingText(250, 560, `+${healed} HP`, PALETTE_HEX.ok);
           }
           this.lastPlayerHP = snap.playerHP;
         },
@@ -568,7 +676,7 @@ export class CombatScene extends Phaser.Scene {
       this.animateEnemyAttack(snap.playerHitEnemyKeys);
       this.flashPlayerHit();
       const dmg = prevHP - snap.playerHP;
-      this.floatingText(280, 600, `-${dmg}`, PALETTE_HEX.danger);
+      this.floatingText(250, 560, `-${dmg}`, PALETTE_HEX.danger);
     }
     this.lastPlayerHP = snap.playerHP;
     if (snap.phase === 'player' || (snap.phase !== 'victory' && snap.phase !== 'defeat' && snap.phase !== 'fled' && snap.phase !== 'momentum_choice')) {
@@ -581,7 +689,7 @@ export class CombatScene extends Phaser.Scene {
           this.animateEnemyAttack(next.playerHitEnemyKeys);
           this.flashPlayerHit();
           const dmg2 = this.lastPlayerHP - next.playerHP;
-          this.floatingText(280, 600, `-${dmg2}`, PALETTE_HEX.danger);
+          this.floatingText(250, 560, `-${dmg2}`, PALETTE_HEX.danger);
         }
         this.lastPlayerHP = next.playerHP;
       });

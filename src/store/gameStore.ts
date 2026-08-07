@@ -4,7 +4,7 @@ import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES, getEquipmentBonuses } 
 import { STARTING_FACTIONS } from '@data/factions';
 import { STARTING_INVENTORY } from '@data/items';
 import { STAT_MAX } from '@data/stats';
-import type { GameState, PlayerState, StatBlock, BestRunStats, RunStats, Equipment } from '@data/types';
+import type { GameState, PlayerState, StatBlock, BestRunStats, RunStats, Equipment, ClassId } from '@data/types';
 import { generateBoard } from '@systems/BoardGenerator';
 import { mulberry32, randomSeed } from '@systems/rng';
 import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } from '@systems/SaveManager';
@@ -15,7 +15,7 @@ import { TOTAL_MAJOR_BOSSES } from '@data/bosses';
 import { getLoreFragment, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { resonanceTier, TIER_LABELS } from '@systems/ResonanceSystem';
 
-export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0): PlayerState {
+export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0, classId: ClassId = 'balanced'): PlayerState {
   const derived = computeDerivedStats(stats, STARTING_EQUIPMENT_BONUSES as EquipmentBonuses);
   const player: PlayerState = {
     stats,
@@ -38,6 +38,11 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     enemiesKilled: 0,
     bossesDefeated: [],
     momentum: 0,
+    classId,
+    fatigue: 0,
+    insight: 0,
+    fearGauge: 0,
+    position: 'middle',
     echoShards: 0,
     unlocks: [...purchasedUnlocks],
     gold: 50,
@@ -89,7 +94,7 @@ interface GameStore {
   game: GameState | null;
 
   initFromDisk: () => void;
-  startNewRun: (stats: StatBlock) => void;
+  startNewRun: (stats: StatBlock, classId?: ClassId) => void;
   loadActiveRun: () => boolean;
   persist: () => void;
   recordCheckpoint: () => void;
@@ -116,11 +121,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ meta, player: activeRun?.player ?? null, game: activeRun?.game ?? null });
   },
 
-  startNewRun: (stats: StatBlock) => {
+  startNewRun: (stats: StatBlock, classId?: ClassId) => {
     const { meta } = get();
     const seed = randomSeed();
     const rng = mulberry32(seed);
-    const player = createStartingPlayer(stats, meta.purchasedUnlocks, meta.totalRuns);
+    const player = createStartingPlayer(stats, meta.purchasedUnlocks, meta.totalRuns, classId);
     const nodes = generateBoard(rng);
     const game: GameState = {
       currentNodeIndex: 0,

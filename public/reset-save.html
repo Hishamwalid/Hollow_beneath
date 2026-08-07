@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reset Save — The Hollow Beneath</title>
+    <style>
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0b0d10;
+        color: #e8e2d4;
+        font-family: Georgia, 'Times New Roman', serif;
+      }
+      .card {
+        text-align: center;
+        padding: 40px 48px;
+        border: 1px solid #c9a24b;
+        background: #16191d;
+      }
+      button {
+        margin-top: 20px;
+        padding: 12px 28px;
+        font-size: 18px;
+        background: #c9a24b;
+        color: #0b0d10;
+        border: none;
+        cursor: pointer;
+        font-family: Georgia, 'Times New Roman', serif;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Reset Save</h1>
+      <p>This wipes all progress stored in this browser:<br />active run, echo shards, unlocks, lore, and stats.</p>
+      <button id="reset">Wipe Everything &amp; Restart</button>
+    </div>
+    <script>
+      document.getElementById('reset').addEventListener('click', () => {
+        localStorage.removeItem('hollow_beneath_save_v1');
+        location.href = '/';
+      });
+    </script>
+  </body>
+</html>

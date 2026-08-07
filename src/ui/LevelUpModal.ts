@@ -27,21 +27,21 @@ export function showLevelUpModal(
   container.add(title);
 
   const subtitle = scene.add.text(0, GAME_HEIGHT / 2 - 90, 'The Loom\'s attention sharpens...', {
-    fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.bone,
+    fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.bone,
   }).setOrigin(0.5).setDepth(101);
   container.add(subtitle);
 
   const label = scene.add.text(0, GAME_HEIGHT / 2 - 50, 'Choose your reward:', {
-    fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted,
+    fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.boneMuted,
   }).setOrigin(0.5).setDepth(101);
   container.add(label);
 
-  const btnSpacing = 60;
+  const btnSpacing = 64;
   const btnY = GAME_HEIGHT / 2;
 
-  const statBtnBg = scene.add.rectangle(0, btnY, 280, 48, 0x2a2e33).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(101);
+  const statBtnBg = scene.add.rectangle(0, btnY, 300, 52, 0x2a2e33).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(101);
   const statBtnText = scene.add.text(0, btnY, '  Stat Point  (+1 to any stat)', {
-    fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone,
+    fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.bone,
   }).setOrigin(0.5).setDepth(102);
   statBtnBg.setInteractive({ useHandCursor: true })
     .on('pointerover', () => statBtnBg.setFillStyle(0x3a3e44))
@@ -49,9 +49,9 @@ export function showLevelUpModal(
     .on('pointerdown', () => { onStatPoint(); });
   container.add([statBtnBg, statBtnText]);
 
-  const skillBtnBg = scene.add.rectangle(0, btnY + btnSpacing, 280, 48, 0x2a2e33).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(101);
+  const skillBtnBg = scene.add.rectangle(0, btnY + btnSpacing, 300, 52, 0x2a2e33).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(101);
   const skillBtnText = scene.add.text(0, btnY + btnSpacing, '  Skill Point  (unlock a skill)', {
-    fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone,
+    fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.bone,
   }).setOrigin(0.5).setDepth(102);
   skillBtnBg.setInteractive({ useHandCursor: true })
     .on('pointerover', () => skillBtnBg.setFillStyle(0x3a3e44))
@@ -59,8 +59,8 @@ export function showLevelUpModal(
     .on('pointerdown', () => { onSkillPoint(); });
   container.add([skillBtnBg, skillBtnText]);
 
-  const subtext = scene.add.text(0, GAME_HEIGHT / 2 + 140, 'You can also spend skill points in the Skills menu later.', {
-    fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
+  const subtext = scene.add.text(0, GAME_HEIGHT / 2 + 150, 'You can also spend skill points in the Skills menu later.', {
+    fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted,
   }).setOrigin(0.5).setDepth(101);
   container.add(subtext);
 
@@ -82,7 +82,7 @@ export function showStatChoiceModal(
   container.add(panelBg);
 
   const title = scene.add.text(0, GAME_HEIGHT / 2 - 130, 'Choose a Stat', {
-    fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.gold,
+    fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold,
   }).setOrigin(0.5).setDepth(111);
   container.add(title);
 
@@ -99,10 +99,10 @@ export function showStatChoiceModal(
     const y = startY + i * 42;
     const rowBg = scene.add.rectangle(0, y, 320, 36, 0x2a2e33).setStrokeStyle(1, 0x555555, 0.4).setDepth(111);
     const nameText = scene.add.text(-140, y, `+1 ${s.label}`, {
-      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
+      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5).setDepth(112);
     const descText = scene.add.text(40, y, s.desc, {
-      fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
+      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5).setDepth(112);
     rowBg.setInteractive({ useHandCursor: true })
       .on('pointerover', () => rowBg.setFillStyle(0x3a3e44))

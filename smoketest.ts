@@ -16,6 +16,17 @@ import { TOTAL_WHISPERS, WHISPERS } from '@data/whispers';
 import type { PlayerState, StatBlock, Equipment } from '@data/types';
 import { xpForLevel, computeLevelUp, MAX_LEVEL } from '@systems/LevelSystem';
 import { settingsManager } from '@systems/SettingsManager';
+import {
+  freshWindowState,
+  recordWeakHit,
+  resetWeakStreak,
+  tickWeakWindow,
+  windowActive,
+  windowDamageMult,
+  windowCritBonus,
+} from '@systems/combat/WeaknessWindowSystem';
+import { resolveReaction } from '@systems/combat/ElementalReactionSystem';
+import { matchCombo } from '@systems/combat/ComboSystem';
 
 let failures = 0;
 function assert(cond: boolean, msg: string) {
@@ -49,6 +60,11 @@ function makeTestPlayer(stats: StatBlock): PlayerState {
     enemiesKilled: 0,
     bossesDefeated: [],
     momentum: 0,
+    classId: 'balanced',
+    fatigue: 0,
+    insight: 0,
+    fearGauge: 0,
+    position: 'middle',
     echoShards: 0,
     unlocks: [],
     gold: 50,
@@ -111,7 +127,7 @@ for (const bossId of BOSS_ORDER) {
         const target = snap.enemies.find((e) => e.alive)?.key;
         snap = engine.attack(target);
         guard++;
-        if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('extra_turn');
+        if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
       }
       if (snap.phase === 'player') snap = engine.endPlayerPhase();
       if (snap.phase !== 'victory' && snap.phase !== 'defeat') snap = engine.beginRound();
@@ -309,6 +325,119 @@ ok('all documented events/choices exercised');
   const hasGhostNow = poolWith.some(e => e.id === 'ghosts_question');
   assert(hasGhostNow, 'ghosts_question eligible when ate_venn_bread flag is set');
   ok('event chain flag filtering via requiresAnyFlag works');
+}
+
+// ---- 16. Phase 3: weakness windows, elemental reactions, combo tags ---------
+{
+  // Pure subsystem checks
+  {
+    const s = freshWindowState();
+    assert(recordWeakHit(s) === 'progress', 'first weak hit = progress');
+    assert(recordWeakHit(s) === 'progress', 'second weak hit = progress');
+    assert(recordWeakHit(s) === 'opened', 'third weak hit opens the window');
+    assert(windowActive(s) && windowDamageMult(s) === 1.5, 'window active with 1.5x damage');
+    assert(windowCritBonus(s) === 0.25, 'window grants +25% crit chance');
+    tickWeakWindow(s);
+    tickWeakWindow(s);
+    assert(!windowActive(s), 'window expires after 2 turns');
+    const s2 = freshWindowState();
+    recordWeakHit(s2);
+    resetWeakStreak(s2);
+    assert(s2.streak === 0, 'resetting the streak keeps the window ticking');
+    ok('weakness window streak/opening/expiry verified');
+  }
+  {
+    assert(resolveReaction('flame', 'frost')?.id === 'thermal_shock', 'flame->frost = Thermal Shock');
+    assert(resolveReaction('frost', 'shock')?.id === 'conductive_freeze', 'frost->shock = Conductive Freeze');
+    assert(resolveReaction('shock', 'flame')?.id === 'plasma_burst', 'shock->flame = Plasma Burst');
+    assert(resolveReaction('sacred', 'shadow')?.id === 'void_collapse', 'sacred->shadow = Void Collapse');
+    assert(resolveReaction('shadow', 'sacred')?.id === 'crimson_eclipse', 'shadow->sacred = Crimson Eclipse');
+    assert(resolveReaction('pierce', 'slash')?.id === 'rending_wounds', 'pierce->slash = Rending Wounds');
+    assert(resolveReaction('slash', 'blunt')?.id === 'shattered_guard', 'slash->blunt = Shattered Guard');
+    assert(resolveReaction('blunt', 'pierce')?.id === 'crushing_point', 'blunt->pierce = Crushing Point');
+    assert(resolveReaction('flame', 'sacred') === null, 'unlisted pairs produce no reaction');
+    assert(resolveReaction('slash', 'slash') === null, 'same-type hits produce no reaction');
+    ok('all 8 elemental reactions resolve correctly');
+  }
+  {
+    assert(matchCombo([['Strike'], ['Break'], ['Sacred']])?.effect === 'expose_truth', 'expose_truth combo detected');
+    assert(matchCombo([['Analyze'], ['Shock'], ['Shadow']])?.effect === 'memory_collapse', 'memory_collapse combo detected');
+    assert(matchCombo([['Strike'], ['Pierce'], ['Slash']])?.effect === 'rending_wounds', 'rending_wounds combo detected');
+    assert(matchCombo([['Mark'], ['Pierce'], ['Strike']])?.effect === 'hunters_kill', 'hunters_kill combo detected');
+    assert(matchCombo([['Break'], ['Physical'], ['Elemental']])?.effect === 'shattered_reality', 'shattered_reality combo detected');
+    assert(matchCombo([['Sacred'], ['Shadow'], ['Sacred']])?.effect === 'eclipse', 'eclipse combo detected');
+    assert(matchCombo([['Guard'], ['Counter'], ['Strike']])?.effect === 'perfect_riposte', 'perfect_riposte combo detected');
+    assert(matchCombo([['Analyze'], ['Analyze'], ['Break']])?.effect === 'full_knowledge', 'full_knowledge combo detected');
+    assert(matchCombo([['Strike'], ['Strike'], ['Strike']]) === null, 'unlisted sequences produce no combo');
+    assert(matchCombo([['Strike'], ['Break']]) === null, 'combos need 3 action tag-sets');
+    ok('all 8 combo sequences detected');
+  }
+
+  // Engine integration: weakness streak opens window + banner; combo fires from tag history
+  {
+    // echo_skeleton is weak to sacred (2.0): three consecutive sacred hits across rounds open the window.
+    // Low STR so the 35hp skeleton survives long enough for a 3-hit streak.
+    const player = makeTestPlayer({ str: 4, dex: 6, con: 12, int: 10, will: 10 });
+    player.skillsKnown = ['sealing_strike'];
+    player.currentMP = player.derived.maxMP;
+    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set() });
+    let snap = engine.beginRound();
+    const sawWindow = { on: false };
+    let rounds = 0;
+    while (!sawWindow.on && rounds < 12) {
+      const t = snap.enemies.find((e) => e.alive)?.key;
+      if (snap.phase === 'player' && snap.playerAP >= 2 && t) snap = engine.useSkill('sealing_strike', t);
+      for (const b of snap.banners) if (b.startsWith('WEAKNESS WINDOW')) sawWindow.on = true;
+      if (snap.phase === 'player') snap = engine.endPlayerPhase();
+      if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
+      if (snap.phase !== 'victory' && snap.phase !== 'defeat') {
+        snap = engine.beginRound();
+        player.currentHP = player.derived.maxHP;
+      }
+      rounds++;
+    }
+    const windowWasOn = snap.enemies.some((e) => e.weakWindowTurns > 0);
+    assert(sawWindow.on, `weakness window banner emitted after 3 streak hits (rounds=${rounds}, banners=${JSON.stringify(snap.banners)})`);
+    assert(windowWasOn, 'weakness window is live on an enemy (weakWindowTurns > 0)');
+    ok(`engine weakness window: rounds=${rounds}, windowTurns=${snap.enemies.map((e) => `${e.key}:${e.weakWindowTurns}`).join(',')}`);
+  }
+  {
+    // Combo: Attack (Strike) -> Sunder (Break) -> Sealing Strike (Sacred) = Expose Truth, across rounds.
+    const player = makeTestPlayer({ str: 12, dex: 6, con: 12, int: 10, will: 10 });
+    player.skillsKnown = ['sealing_strike'];
+    player.currentHP = player.derived.maxHP;
+    const engine = new CombatEngine({ player, enemyIds: ['venn_custodian'], page: 1, rng: Math.random, playerHistory: new Set() });
+    let snap = engine.beginRound();
+    const actions = ['attack', 'sunder', 'skill'] as const;
+    let next = 0;
+    let fired = false;
+    let rounds = 0;
+    while (!fired && rounds < 30) {
+      const t = snap.enemies.find((e) => e.alive)?.key;
+      const want = actions[next];
+      const need = want === 'attack' ? 1 : 2;
+      if (snap.phase === 'player' && snap.playerAP >= need && t) {
+        snap = want === 'attack' ? engine.attack(t) : want === 'sunder' ? engine.sunder(t) : engine.useSkill('sealing_strike', t);
+        next++;
+      }
+      if (snap.banners.some((b) => b.startsWith('COMBO'))) fired = true;
+      if (next >= actions.length) {
+        assert(fired || snap.log.some((l) => l.includes('COMBO Expose Truth')), `combo fires from [Strike,Break,Sacred] across rounds (banners=${JSON.stringify(snap.banners)}, log=${JSON.stringify(snap.log.slice(-4))})`);
+        fired = true;
+      }
+      if (snap.phase === 'player') snap = engine.endPlayerPhase();
+      if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
+      if (snap.phase !== 'victory' && snap.phase !== 'defeat') {
+        snap = engine.beginRound();
+        player.currentHP = player.derived.maxHP;
+      }
+      rounds++;
+    }
+    const comboBanner = snap.banners.some((b) => b.startsWith('COMBO'));
+    const inLog = snap.log.some((l) => l.includes('COMBO Expose Truth'));
+    assert(comboBanner || inLog, `combo fires from [Strike,Break,Sacred] across rounds (banners=${JSON.stringify(snap.banners)}, log=${JSON.stringify(snap.log.slice(-4))})`);
+    ok(`engine combo: banners=${JSON.stringify(snap.banners)}, log has Expose Truth=${inLog}`);
+  }
 }
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} SMOKE TEST(S) FAILED`);

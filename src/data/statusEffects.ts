@@ -45,6 +45,7 @@ export const DEBUFF_LABELS: Record<DebuffId, string> = {
   armour_break: 'Armour Break — Defense -50%',
   seal_mind: 'Seal Mind — cannot gain Momentum',
   fragile_perception: 'Fragile Perception — Doubles Momentum gain; Resonance abilities cost 2 Resonance',
+  exhausted: 'Exhausted — next round starts with 1 less AP',
 };
 
 export function statusLabel(id: StatusId): string {

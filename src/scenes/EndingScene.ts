@@ -5,7 +5,7 @@ import { showRunStatsScreen } from '@ui/RunStatsScreen';
 import { createDialogBox } from '@ui/DialogBox';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { spawnHealParticles } from '@systems/particles';
-import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
@@ -33,20 +33,20 @@ export class EndingScene extends Phaser.Scene {
       },
     });
 
-    this.add.text(GAME_WIDTH / 2, 70, 'PAGE 100', { fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5);
+    this.add.text(GAME_WIDTH / 2, 70, 'PAGE 100', { fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5);
     this.add.text(GAME_WIDTH / 2, 110, ending.name, { fontFamily: FONT_SERIF, fontSize: '40px', color: PALETTE_HEX.gold }).setOrigin(0.5);
     this.add
-      .text(GAME_WIDTH / 2, 156, ending.tone, {
-        fontFamily: FONT_SERIF,
-        fontSize: '15px',
+      .text(GAME_WIDTH / 2, 160, ending.tone, {
+        fontFamily: FONT_BODY,
+        fontSize: '17px',
         color: PALETTE_HEX.boneMuted,
         fontStyle: 'italic',
-        wordWrap: { width: 700 },
+        wordWrap: { width: 720 },
         align: 'center',
       })
       .setOrigin(0.5);
 
-    this.add.text(GAME_WIDTH / 2, 195, `— ${ending.unlock} —`, { fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.gold, fontStyle: 'italic' }).setOrigin(0.5);
+    this.add.text(GAME_WIDTH / 2, 205, `— ${ending.unlock} —`, { fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.gold, fontStyle: 'italic' }).setOrigin(0.5);
 
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 380, 880, 260);
     dialog.setText(ending.epilogue, () => {

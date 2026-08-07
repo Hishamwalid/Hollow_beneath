@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { useGameStore } from '@store/gameStore';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
-import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
@@ -35,15 +35,15 @@ export class LoreCodexScene extends Phaser.Scene {
 
     this.add.text(cx, 50, 'Lore Codex', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
     this.add
-      .text(cx, 84, `${this.discovered.length} / ${TOTAL_LORE_FRAGMENTS} fragments discovered`, {
+      .text(cx, 86, `${this.discovered.length} / ${TOTAL_LORE_FRAGMENTS} fragments discovered`, {
         fontFamily: FONT_MONO,
-        fontSize: '14px',
+        fontSize: '15px',
         color: PALETTE_HEX.boneMuted,
       })
       .setOrigin(0.5);
 
     this.pageLabel = this.add
-      .text(cx, GAME_HEIGHT - 110, '', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted })
+      .text(cx, GAME_HEIGHT - 110, '', { fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5);
 
     createButton(this, cx - 200, GAME_HEIGHT - 50, '< Prev', () => this.changePage(-1), { width: 160, height: 42 });
@@ -83,16 +83,16 @@ export class LoreCodexScene extends Phaser.Scene {
       const bg = this.add.rectangle(cx, rowY, 960, ROW_H - 14, 0x16191d).setStrokeStyle(1, known ? 0x3a3226 : 0x2a2e33);
       const title = this.add.text(cx - 440, rowY - ROW_H / 2 + 18, known ? frag.title : '??? — Undiscovered', {
         fontFamily: FONT_SERIF,
-        fontSize: '16px',
+        fontSize: '17px',
         color: known ? PALETTE_HEX.gold : PALETTE_HEX.boneMuted,
       });
       const body = this.add.text(
         cx - 440,
-        rowY - ROW_H / 2 + 44,
+        rowY - ROW_H / 2 + 46,
         known ? frag.text : 'Somewhere in the descent, this fragment is still waiting to be found.',
         {
-          fontFamily: FONT_SERIF,
-          fontSize: '12px',
+          fontFamily: FONT_BODY,
+          fontSize: '14px',
           fontStyle: known ? 'italic' : 'normal',
           color: known ? PALETTE_HEX.bone : '#555555',
           wordWrap: { width: 860 },
@@ -103,7 +103,7 @@ export class LoreCodexScene extends Phaser.Scene {
     });
 
     if (slice.length === 0) {
-      this.add.text(cx, LIST_TOP + 40, 'No fragments to show.', { fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5);
+      this.add.text(cx, LIST_TOP + 40, 'No fragments to show.', { fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5);
     }
   }
 }

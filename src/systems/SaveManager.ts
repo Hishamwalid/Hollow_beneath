@@ -1,7 +1,8 @@
 import type { GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
+import { CLASS_OF_PRESET, closestPresetName } from '@data/stats';
 
 const STORAGE_KEY = 'hollow_beneath_save_v1';
-const VERSION = 2;
+const VERSION = 3;
 
 function simpleChecksum(payload: string): string {
   let hash = 0;
@@ -39,18 +40,35 @@ export function saveGame(meta: MetaState, activeRun: SaveBlob['activeRun']): voi
   }
 }
 
+/** Upgrades older save blobs to the current VERSION by injecting defaults for new player fields. */
+function migrateBlob(blob: SaveBlob): SaveBlob {
+  if (blob.version >= VERSION) return blob;
+  const player = blob.activeRun?.player as (PlayerState & Record<string, unknown>) | null | undefined;
+  if (player) {
+    if (!player.classId) player.classId = CLASS_OF_PRESET[closestPresetName(player.stats)] ?? 'balanced';
+    if (typeof player.fatigue !== 'number') player.fatigue = 0;
+    if (typeof player.insight !== 'number') player.insight = 0;
+    if (typeof player.fearGauge !== 'number') player.fearGauge = 0;
+    if (!player.position) player.position = 'middle';
+  }
+  blob.version = VERSION;
+  return blob;
+}
+
 export function loadGame(): { meta: MetaState; activeRun: SaveBlob['activeRun'] } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { meta: defaultMeta(), activeRun: null };
     const blob: SaveBlob = JSON.parse(raw);
+    // Checksum is verified against the *stored* payload (pre-migration), so old saves aren't flagged corrupt.
     const payload = payloadOf(blob.meta, blob.activeRun);
     if (simpleChecksum(payload) !== blob.checksum) {
       console.warn('Save checksum mismatch — save may be corrupted. Loading fresh meta.');
       return { meta: defaultMeta(), activeRun: null };
     }
-    if (!blob.meta) return { meta: defaultMeta(), activeRun: null };
-    return { meta: blob.meta, activeRun: blob.activeRun ?? null };
+    const migrated = migrateBlob(blob);
+    if (!migrated.meta) return { meta: defaultMeta(), activeRun: null };
+    return { meta: migrated.meta, activeRun: migrated.activeRun ?? null };
   } catch (e) {
     console.error('Load failed', e);
     return { meta: defaultMeta(), activeRun: null };

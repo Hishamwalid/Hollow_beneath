@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
-import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from './uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from './uiTheme';
 import { createButton } from './Button';
 import type { RunStats } from '@data/types';
 
@@ -32,12 +32,12 @@ export function showRunStatsScreen(
 
   const titleText = isDeath ? 'THE HOLLOW KEEPS YOU' : 'PAGE 100';
   const title = scene.add.text(cx, 48, titleText, {
-    fontFamily: FONT_SERIF, fontSize: '28px', color: isDeath ? PALETTE_HEX.danger : PALETTE_HEX.gold,
+    fontFamily: FONT_SERIF, fontSize: '30px', color: isDeath ? PALETTE_HEX.danger : PALETTE_HEX.gold,
   }).setOrigin(0.5).setDepth(depth + 1);
   container.add(title);
 
-  const subtitle = scene.add.text(cx, 80, isDeath ? 'Your run is over. The Loom notes your passage.' : stats.endingUnlocked ? `Ending: ${stats.endingUnlocked}` : 'Run Complete', {
-    fontFamily: FONT_SERIF, fontSize: '13px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+  const subtitle = scene.add.text(cx, 82, isDeath ? 'Your run is over. The Loom notes your passage.' : stats.endingUnlocked ? `Ending: ${stats.endingUnlocked}` : 'Run Complete', {
+    fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
   }).setOrigin(0.5).setDepth(depth + 1);
   container.add(subtitle);
 
@@ -59,17 +59,17 @@ export function showRunStatsScreen(
   const col3X = cx + 120;
 
   const headerLabel = scene.add.text(col1X, statStartY, 'STAT', {
-    fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold,
+    fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold,
   }).setOrigin(0, 0.5).setDepth(depth + 1);
   container.add(headerLabel);
 
   const headerThis = scene.add.text(col2X, statStartY, 'This Run', {
-    fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold,
+    fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold,
   }).setOrigin(0, 0.5).setDepth(depth + 1);
   container.add(headerThis);
 
   const headerBest = scene.add.text(col3X, statStartY, 'Best', {
-    fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold,
+    fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold,
   }).setOrigin(0, 0.5).setDepth(depth + 1);
   container.add(headerBest);
 
@@ -77,12 +77,12 @@ export function showRunStatsScreen(
     const y = statStartY + 10 + (i + 1) * rowH;
 
     const labelText = scene.add.text(col1X, y, stat.label, {
-      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
+      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5).setDepth(depth + 1);
     container.add(labelText);
 
     const valueText = scene.add.text(col2X, y, stat.value, {
-      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.bone,
+      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone,
     }).setOrigin(0, 0.5).setDepth(depth + 1);
     container.add(valueText);
   });
@@ -101,14 +101,14 @@ export function showRunStatsScreen(
   bestValues.forEach((val, i) => {
     const y = statStartY + 10 + (i + 1) * rowH;
     const text = scene.add.text(col3X, y, val, {
-      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
+      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5).setDepth(depth + 1);
     container.add(text);
   });
 
   if (stats.isNewBest) {
     const newBest = scene.add.text(cx, statStartY + 10 + 9 * rowH + 6, '★ NEW BEST RUN!', {
-      fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.goldBright,
+      fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.goldBright,
     }).setOrigin(0.5).setDepth(depth + 1);
     container.add(newBest);
   }
@@ -121,13 +121,13 @@ export function showRunStatsScreen(
 
   if (stats.newLoreTitles.length > 0) {
     const loreHeader = scene.add.text(cx - 200, currentY, '★ New Lore Fragments:', {
-      fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.gold,
+      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5).setDepth(depth + 1);
     container.add(loreHeader);
     currentY += 18;
     stats.newLoreTitles.forEach((title) => {
       const t = scene.add.text(cx - 180, currentY, `"${title}"`, {
-        fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.bone, fontStyle: 'italic',
+        fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.bone, fontStyle: 'italic',
       }).setOrigin(0, 0.5).setDepth(depth + 1);
       container.add(t);
       currentY += 16;
@@ -137,22 +137,22 @@ export function showRunStatsScreen(
 
   const shardsSectionY = currentY;
   const earnedText = scene.add.text(cx - 200, shardsSectionY, `Echo Shards earned this run:  +${stats.echoShardsEarned}`, {
-    fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold,
+    fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
   }).setOrigin(0, 0.5).setDepth(depth + 1);
   container.add(earnedText);
 
-  const totalShardsText = scene.add.text(cx - 200, shardsSectionY + 18, `Total Echo Shards:  ${stats.totalEchoShards}`, {
-    fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.bone,
+  const totalShardsText = scene.add.text(cx - 200, shardsSectionY + 20, `Total Echo Shards:  ${stats.totalEchoShards}`, {
+    fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.bone,
   }).setOrigin(0, 0.5).setDepth(depth + 1);
   container.add(totalShardsText);
 
-  const flavorY = shardsSectionY + 50;
+  const flavorY = shardsSectionY + 52;
   const flavorPhrases = isDeath
     ? ['The stone remembers your footsteps.', 'The Loom adds your voice to its collection.']
     : ['The story settles into the bedrock.', 'The Loom turns the page.'];
   const flavorText = scene.add.text(cx, flavorY, flavorPhrases.join(' '), {
-    fontFamily: FONT_SERIF, fontSize: '12px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
-    wordWrap: { width: 500 }, align: 'center',
+    fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+    wordWrap: { width: 560 }, align: 'center',
   }).setOrigin(0.5).setDepth(depth + 1);
   container.add(flavorText);
 

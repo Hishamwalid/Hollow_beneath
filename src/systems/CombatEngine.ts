@@ -1,10 +1,13 @@
 import type {
   AffinityMap,
   BossDef,
+  BossIntentDef,
   BossTurnContext,
   CombatState_Enemy,
   DamageType,
+  EnemyTendency,
   EnemyTurnContext,
+  IntentDef,
   PlayerState,
   StatusId,
   StatusInstance,
@@ -25,6 +28,38 @@ import {
   tickDots,
   tickDurations,
 } from './StatusEffectSystem';
+import { fatiguePenalty, clampFatigue } from './combat/FatigueSystem';
+import {
+  confidenceFor,
+  intentLine,
+  pickBossIntent,
+  pickEnemyIntent,
+  tendencyGlyph,
+  tendencyHint,
+  tendencyName,
+  type IntentConfidence,
+} from './combat/IntentSystem';
+import {
+  freshWindowState,
+  recordWeakHit,
+  resetWeakStreak,
+  tickWeakWindow,
+  windowActive,
+  windowCritBonus,
+  windowDamageMult,
+  windowMomentumMult,
+  type WeaknessWindowState,
+} from './combat/WeaknessWindowSystem';
+import { resolveReaction, type ReactionResult } from './combat/ElementalReactionSystem';
+import {
+  matchCombo,
+  TAGS_ANALYZE,
+  TAGS_ATTACK,
+  TAGS_SUNDER,
+  tagsForGuard,
+  tagsForSkill,
+  type ComboDef,
+} from './combat/ComboSystem';
 
 const ALL_ENEMY_DEFS = { ...ENEMIES, ...SUMMON_ENEMIES };
 
@@ -53,6 +88,20 @@ export interface EnemyView {
   atk: number;
   def: number;
   spd: number;
+  tendency: string;
+  investigationLayer: number;
+  investigationProbes: string[];
+  pendingIntent: { id: string; label: string; confidence: IntentConfidence } | null;
+  /** Turns remaining on an opened weakness window (Phase 3). */
+  weakWindowTurns: number;
+  /** Consecutive weakness hits landed (Phase 3). */
+  weakHitStreak: number;
+  /** Last damage type to land on this enemy's body (for reaction pairing / HUD color). */
+  lastHitType?: DamageType;
+  /** Combo banner text (from the most recent activation) — engine-accumulated, cleared per snapshot pick. */
+  comboBanner?: string;
+  /** Reaction banner text — engine-accumulated, cleared per snapshot pick. */
+  reactionBanner?: string;
 }
 
 export interface CombatSnapshot {
@@ -69,11 +118,16 @@ export interface CombatSnapshot {
   playerStatuses: StatusInstance[];
   momentum: number;
   guarding: boolean;
+  fatigue: number;
+  insight: number;
   enemies: EnemyView[];
   initiativeOrder: string[];
   playerHitEnemyKeys: string[];
   log: string[];
   bossPhaseLabel?: string;
+  /** Banners queued by reactions/combos since the last snapshot (now consumed by the caller read). */
+  banners: string[];
+  comboStacks: number;
 }
 
 interface InternalEnemy extends CombatState_Enemy {
@@ -82,7 +136,7 @@ interface InternalEnemy extends CombatState_Enemy {
   _isBoss: boolean;
 }
 
-const MOMENTUM_CHOICES = ['extra_turn', 'chorus_heal', 'clarity', 'forgotten_technique', 'unravel', 'echo_surge', 'phase_shift', 'desperate_strike'] as const;
+const MOMENTUM_CHOICES = ['flow', 'harmony', 'archive', 'forgotten_technique', 'unravel', 'echo_surge', 'phase_shift', 'desperate_strike', 'overclock'] as const;
 export type MomentumChoice = (typeof MOMENTUM_CHOICES)[number];
 
 const MOMENTUM_CAP = 5;
@@ -128,6 +182,47 @@ export class CombatEngine {
   private _playerUsedMagicLastTurn = false;
   /** Whether fossilLastLaw was enforced this combat; reset per round. */
   private fossilLastLawEnforced = false;
+  /** Per-action cumulative use counters this combat (token penalty at 3+ repeats). */
+  private actionRepeatCounts: Record<string, number> = {};
+  /** Token penalty for repeating the same action fires once per combat. */
+  private repeatPenaltyApplied = false;
+  /** Overclock (momentum): +70% damage while active this turn; max HP already reduced. */
+  private overclockActive = false;
+  /** Original max HP before Overclock's reduction; restored at combat end. */
+  private overclockMaxHpReduced: number | null = null;
+  /** Harmony (momentum): boss deals +30% damage for the remaining turns of this counter. */
+  private bossEnrageTurns = 0;
+  /** Declared intent per enemy key for the current round (cleared as each enemy acts). */
+  private pendingIntents = new Map<string, string>();
+  /** Combat-local investigation state per enemy key. */
+  private investigations = new Map<string, { layer: number; probes: string[] }>();
+  private insightDamageBonus = false;
+  /** Phase 3a: per-enemy weakness-window state (streak + window turns). Insight weakness_window sets turns too. */
+  private windowStates = new Map<string, WeaknessWindowState>();
+  /** Phase 3b: last landed damage type per enemy key for reaction pairing (skips absorbed/resisted). */
+  private lastHitTypes = new Map<string, DamageType>();
+  /** Phase 3c: last 3 action tag-sets for combo matching. */
+  private tagHistory: string[][] = [];
+  /** Phase 3c: combo chains executed this combat-count. */
+  private comboCount = 0;
+  /** Phase 3c: pending combo damage multiplier for the next hit (Perfect Riposte / Hunter's Kill / Eclipse). */
+  private pendingComboMult = 1;
+  /** Phase 3c: pending defense-pierce fraction for the next hit (Eclipse ignores 50%). */
+  private pendingComboDefPierce = 1;
+  /** Banners queued by reactions/combos since the last snapshot (surfaced as snapshot.banners). */
+  private pendingBanners: string[] = [];
+  /** Momentum multiplier stacking (memory_collapse combo: x2 for 3 turns). */
+  private momentumMultTurns = 0;
+  /** Phase 3c: Expose Truth — original affinities per enemy while resistances are collapsed (2 turns). */
+  private exposeTruth = new Map<string, { turns: number; original: AffinityMap }>();
+
+  private readonly BOSS_TENDENCY: Record<string, EnemyTendency> = {
+    sentinel: 'sage',
+    patriarch: 'fanatic',
+    chorus: 'manipulator',
+    fossil_king: 'aggressor',
+    reflection: 'tactician',
+  };
 
   constructor(setup: CombatSetup) {
     this.player = setup.player;
@@ -245,6 +340,25 @@ export class CombatEngine {
     this.desperateStrike = false;
     this.actionsTakenThisRound = 0;
     this.flags.fossilLastLaw = 0;
+    this.overclockActive = false;
+    if (this.bossEnrageTurns > 0) this.bossEnrageTurns -= 1;
+
+    // Exhaustion (from the "Flow" momentum trigger)
+    if (hasStatus(this.playerStatuses, 'exhausted')) {
+      this.playerAP = Math.max(0, this.playerAP - 1);
+      this.log.push('Exhaustion weighs on you — you start the round with 1 less AP.');
+    }
+    if (this.momentumMultTurns > 0) this.momentumMultTurns -= 1;
+    // Fatigue penalties
+    const fatigue = fatiguePenalty(this.player.fatigue);
+    if (fatigue.apPenalty > 0 && this.playerAP > 0) {
+      this.playerAP = Math.max(0, this.playerAP - fatigue.apPenalty);
+      this.log.push(`Fatigue leaves you short — ${fatigue.apPenalty} AP lost.`);
+    }
+    if (fatigue.skipChance > 0 && this.rng() < fatigue.skipChance) {
+      this.log.push('You are too exhausted to act this round.');
+      this.playerAP = 0;
+    }
 
     const alive = this.aliveEnemies();
     for (const e of alive) {
@@ -253,6 +367,7 @@ export class CombatEngine {
       }
     }
     this._playerUsedMagicLastTurn = false;
+    this.pickIntents();
     const playerSpd = this.effectivePlayerSpeed();
     const faster = alive.filter((e) => e.spd > playerSpd).sort((a, b) => b.spd - a.spd);
     this.resolvingEnemyTurns = true;
@@ -275,6 +390,10 @@ export class CombatEngine {
     this._prevActionId = this.lastActionId;
 
     // AP banking: leftover AP banks 1 (max 1 stored); idling the whole turn banks up to 2.
+    if (this.actionsTakenThisRound === 0) {
+      this.player.fatigue = clampFatigue(this.player.fatigue - 15);
+      this.log.push('You hold still for a beat — fatigue eases.');
+    }
     if (this.playerAP > 0) {
       const cap = this.actionsTakenThisRound === 0 ? 2 : 1;
       this.bankedAP = Math.max(this.bankedAP, Math.min(cap, this.playerAP));
@@ -313,6 +432,18 @@ export class CombatEngine {
       }
       tickDurations(e.statuses);
     }
+    for (const [k, state] of this.windowStates) {
+      tickWeakWindow(state);
+      if (state.turns <= 0 && state.streak <= 0) this.windowStates.delete(k);
+    }
+    for (const [k, truth] of this.exposeTruth) {
+      truth.turns -= 1;
+      if (truth.turns <= 0) {
+        const e = this.enemies.find((en) => en._key === k);
+        if (e) e.affinities = { ...truth.original };
+        this.exposeTruth.delete(k);
+      }
+    }
 
     this.checkOutcome();
     return this.snapshot();
@@ -326,11 +457,21 @@ export class CombatEngine {
         this.log.push('Unfinished Sentence: the killing blow leaves you at 1 HP instead.');
       } else {
         this.phase = 'defeat';
+        this.restoreOverclockedMaxHp();
         return;
       }
     }
     if (this.aliveEnemies().length === 0) {
       this.phase = 'victory';
+    }
+    if (this.phase === 'victory') this.restoreOverclockedMaxHp();
+  }
+
+  /** Overclock's max-HP cost is scoped to a single combat — restore it when the fight concludes. */
+  private restoreOverclockedMaxHp(): void {
+    if (this.overclockMaxHpReduced !== null) {
+      this.player.derived.maxHP = this.overclockMaxHpReduced;
+      this.overclockMaxHpReduced = null;
     }
   }
 
@@ -358,43 +499,52 @@ export class CombatEngine {
       const hpPercent = enemy.hp / enemy.maxHp;
       const phaseInfo = this.bossDef.getPhase(hpPercent);
       enemy.affinities = { ...phaseInfo.affinities };
-      const ctx: BossTurnContext = {
-        self: enemy,
-        player: this.playerCombatView(),
-        turn: this.bossOwnTurnCounter,
-        phaseKey: phaseInfo.key,
-        rng: this.rng,
-        log: this.log,
-        flags: this.flags,
-        applyDamageToPlayer: (amount, type, label, bypassGuard) => this.dealDamageToPlayer(amount, type, label, bypassGuard),
-        applyStatusToPlayer: (id, turns, stacks, meta) => this.applyStatusToPlayerChecked(id, turns, stacks, meta),
-        applyStatusToSelf: (id, turns, stacks, meta) => applyStatus(enemy.statuses, id, turns, stacks, meta),
-        healSelf: (amount) => { enemy.hp = Math.min(enemy.maxHp, enemy.hp + amount); },
-        damageSelf: (amount) => { enemy.hp = Math.max(0, enemy.hp - amount); },
-        buffSelf: (statKey, percent) => { (enemy as any)[statKey] = Math.round((enemy as any)[statKey] * (1 + percent / 100)); },
-        spawnAlly: (enemyId, hpOverride) => this.spawnAdd(enemyId, hpOverride),
-        removePlayerBuffs: () => removeAllBuffs(this.playerStatuses),
-        clearBarrier: () => { const i = enemy.statuses.findIndex((s) => s.id === 'barrier'); if (i >= 0) enemy.statuses.splice(i, 1); },
-        setBarrier: (amount) => setBarrier(enemy.statuses, amount),
-        endCombat: (victory) => { this.phase = victory ? 'victory' : 'defeat'; },
-        playerHistory: this.playerHistorySet,
-        playerBuild: this.player.stats,
-        playerFaction: this.player.faction,
-        playerResonance: this.player.resonance,
-        playerLastActionType: this.lastActionType,
-        playerRepeatedLastAction: this.lastActionRepeated,
-      };
-      this.bossDef.takeTurn(ctx);
+      const ctx = this.makeBossTurnCtx(enemy, this.bossOwnTurnCounter, phaseInfo.key);
+      const intentId = this.pendingIntents.get(enemy._key);
+      const intent = this.bossDef.intents?.find((i) => i.id === intentId);
+      this.pendingIntents.delete(enemy._key);
+      if (intent) intent.resolve(ctx);
+      else this.bossDef.takeTurn(ctx);
       this.checkOutcome();
       return;
     }
 
     const def = ALL_ENEMY_DEFS[enemy.defId];
-    const ctx: EnemyTurnContext = {
+    const ctx = this.makeRegularTurnCtx(enemy, this.round);
+    const intentId = this.pendingIntents.get(enemy._key);
+    const intent = def.intents?.find((i) => i.id === intentId);
+    this.pendingIntents.delete(enemy._key);
+    const line = intent ? intent.resolve(ctx) : def.act ? def.act(ctx) : '';
+    if (line) this.log.push(line);
+    this.checkOutcome();
+  }
+
+  /** Picks each enemy's declared intent for the round (shown to the player, executed when it acts). */
+  private pickIntents(): void {
+    this.pendingIntents.clear();
+    for (const e of this.aliveEnemies()) {
+      if (e._isBoss && this.bossDef?.intents?.length) {
+        const phaseInfo = this.bossDef.getPhase(e.hp / e.maxHp);
+        const ctx = this.makeBossTurnCtx(e, this.bossOwnTurnCounter + 1, phaseInfo.key);
+        const picked = pickBossIntent(this.bossDef.intents, ctx, this.rng);
+        if (picked) this.pendingIntents.set(e._key, picked.id);
+      } else {
+        const def = ALL_ENEMY_DEFS[e.defId];
+        if (def?.intents?.length) {
+          const ctx = this.makeRegularTurnCtx(e, this.round);
+          const picked = pickEnemyIntent(def.intents, ctx, this.rng);
+          if (picked) this.pendingIntents.set(e._key, picked.id);
+        }
+      }
+    }
+  }
+
+  private makeRegularTurnCtx(enemy: InternalEnemy, turn: number): EnemyTurnContext {
+    return {
       self: enemy,
       player: this.playerCombatView(),
       allies: this.aliveEnemies().filter((e) => e !== enemy),
-      turn: this.round,
+      turn,
       rng: this.rng,
       applyDamageToPlayer: (amount, type, label) => this.dealDamageToPlayer(amount, type, label, false),
       applyStatusToPlayer: (id, turns, stacks, meta) => this.applyStatusToPlayerChecked(id, turns, stacks, meta),
@@ -403,9 +553,35 @@ export class CombatEngine {
       spawnAlly: (enemyId, hpOverride) => this.spawnAdd(enemyId, hpOverride),
       removePlayerBuffs: () => removeAllBuffs(this.playerStatuses),
     };
-    const line = def.act(ctx);
-    this.log.push(line);
-    this.checkOutcome();
+  }
+
+  private makeBossTurnCtx(enemy: InternalEnemy, turn: number, phaseKey: string): BossTurnContext {
+    return {
+      self: enemy,
+      player: this.playerCombatView(),
+      turn,
+      phaseKey,
+      rng: this.rng,
+      log: this.log,
+      flags: this.flags,
+      applyDamageToPlayer: (amount, type, label, bypassGuard) => this.dealDamageToPlayer(amount, type, label, bypassGuard),
+      applyStatusToPlayer: (id, turns, stacks, meta) => this.applyStatusToPlayerChecked(id, turns, stacks, meta),
+      applyStatusToSelf: (id, turns, stacks, meta) => applyStatus(enemy.statuses, id, turns, stacks, meta),
+      healSelf: (amount) => { enemy.hp = Math.min(enemy.maxHp, enemy.hp + amount); },
+      damageSelf: (amount) => { enemy.hp = Math.max(0, enemy.hp - amount); },
+      buffSelf: (statKey, percent) => { (enemy as any)[statKey] = Math.round((enemy as any)[statKey] * (1 + percent / 100)); },
+      spawnAlly: (enemyId, hpOverride) => this.spawnAdd(enemyId, hpOverride),
+      removePlayerBuffs: () => removeAllBuffs(this.playerStatuses),
+      clearBarrier: () => { const i = enemy.statuses.findIndex((s) => s.id === 'barrier'); if (i >= 0) enemy.statuses.splice(i, 1); },
+      setBarrier: (amount) => setBarrier(enemy.statuses, amount),
+      endCombat: (victory) => { this.phase = victory ? 'victory' : 'defeat'; },
+      playerHistory: this.playerHistorySet,
+      playerBuild: this.player.stats,
+      playerFaction: this.player.faction,
+      playerResonance: this.player.resonance,
+      playerLastActionType: this.lastActionType,
+      playerRepeatedLastAction: this.lastActionRepeated,
+    };
   }
 
   private spawnAdd(enemyId: string, hpOverride?: number): void {
@@ -437,6 +613,13 @@ export class CombatEngine {
 
   /** Applies incoming damage to the player, honoring Dodge / Guard / Barrier / Reflection. */
   private dealDamageToPlayer(amount: number, type: DamageType, label: string, bypassGuard = false, attackerKey?: string): number {
+    if (this.bossEnrageTurns > 0 && this.bossDef) {
+      const enragedAmount = Math.round(amount * 1.3);
+      if (enragedAmount !== amount) {
+        this.log.push('The boss is enraged — damage +30%.');
+        amount = enragedAmount;
+      }
+    }
     let dodge = this.player.derived.dodge + (this.player.skillsKnown.includes('chorus_step') ? 10 : 0);
     if (this.phaseShiftCharges > 0) {
       dodge = 100;
@@ -450,6 +633,8 @@ export class CombatEngine {
     if (this.rng() * 100 < dodge) {
       this.log.push(`You dodge ${label}.`);
       this.gainMomentum(1);
+      this.applyTokenDelta(1, 'Graceful dodge — +1 token.');
+      this.player.fatigue = clampFatigue(this.player.fatigue + 5);
       return 0;
     }
 
@@ -471,6 +656,9 @@ export class CombatEngine {
     }
     dmg = applyBarrier(this.playerStatuses, dmg);
     this.player.currentHP = Math.max(0, this.player.currentHP - dmg);
+    if (dmg > 0) {
+      this.player.fatigue = clampFatigue(this.player.fatigue + Math.floor(dmg / 10) * 2);
+    }
     if (dmg > 0 && this._currentAttackerKey) {
       if (!this.playerHitEnemyKeys.includes(this._currentAttackerKey)) this.playerHitEnemyKeys.push(this._currentAttackerKey);
     }
@@ -521,6 +709,7 @@ export class CombatEngine {
       return;
     }
     if (hasStatus(this.playerStatuses, 'fragile_perception')) n *= 2;
+    if (this.momentumMultTurns > 0) n *= 2;
     this.player.momentum = Math.min(MOMENTUM_CAP, this.player.momentum + n);
     if (this.player.momentum >= MOMENTUM_CAP) {
       if (this.resolvingEnemyTurns) {
@@ -534,6 +723,30 @@ export class CombatEngine {
   private momentumChoicePending = false;
   private resolvingEnemyTurns = false;
 
+  /** Dynamic action-economy (Part 2): token flow from fight events. */
+  private applyTokenDelta(n: number, reason: string): void {
+    if (n === 0) return;
+    this.playerAP = Math.max(0, Math.min(5, this.playerAP + n));
+    this.log.push(reason);
+  }
+
+  private recordAction(id: string): void {
+    this.actionRepeatCounts[id] = (this.actionRepeatCounts[id] ?? 0) + 1;
+    if (this.actionRepeatCounts[id] >= 3) {
+      this.player.fatigue = clampFatigue(this.player.fatigue + 10);
+    }
+    if (this.actionRepeatCounts[id] === 3 && !this.repeatPenaltyApplied) {
+      this.repeatPenaltyApplied = true;
+      this.applyTokenDelta(-1, 'Repeating the same action dulls your rhythm — −1 token.');
+    }
+  }
+
+  /** Combo execution hook (Phase 3 wired; +2 tokens per Ultimate Battle System Part 12). */
+  private executeCombo(label: string): void {
+    this.applyTokenDelta(2, `${label} — the flow of battle rewards you: +2 tokens.`);
+    this.gainMomentum(2);
+  }
+
   private pickTarget(targetKey?: string): InternalEnemy | undefined {
     const alive = this.aliveEnemies();
     if (targetKey) return alive.find((e) => e._key === targetKey);
@@ -542,6 +755,8 @@ export class CombatEngine {
 
   private rollHit(target: InternalEnemy): boolean {
     let acc = this.player.derived.accuracy + (this.player.skillsKnown.includes('steady_hands') ? 10 : 0);
+    const fatigue = fatiguePenalty(this.player.fatigue);
+    acc = acc * fatigue.accuracyMult;
     if (hasStatus(this.playerStatuses, 'blind')) acc *= 0.7;
     let shockMiss = 0;
     const sd = getStatus(this.playerStatuses, 'shock_dot');
@@ -558,10 +773,19 @@ export class CombatEngine {
   private computeAndApplyDamage(target: InternalEnemy, sourcePower: number, defenseStat: number, damageType: DamageType, label: string, statKey: 'def' | 'mdef' = 'def', guaranteedHit = false): { dmg: number; hit: boolean; crit: boolean; weak: boolean } {
     if (!guaranteedHit && !this.rollHit(target)) {
       this.log.push(`${label} misses ${target.name}.`);
+      this.playerAP = 0;
+      this.log.push('The miss unbalances you — all tokens lost.');
+      const missState = this.windowStates.get(target._key);
+      if (missState) resetWeakStreak(missState);
       return { dmg: 0, hit: false, crit: false, weak: false };
     }
     const weakness = target.affinities[damageType] ?? 1.0;
-    const crit = this.rollCrit();
+    let state = this.windowStates.get(target._key);
+    if (!state) {
+      state = freshWindowState();
+      this.windowStates.set(target._key, state);
+    }
+    const crit = this.rollCrit() || this.rng() < windowCritBonus(state);
     const variance = 0.9 + this.rng() * 0.2;
     let unravelMult = 1;
     let defReduction = 1;
@@ -570,10 +794,26 @@ export class CombatEngine {
       defReduction = 0.25;
       this.unravelPending = false;
     }
-    const effDef = Math.round(defenseStat * defReduction * statMultiplier(target.statuses, statKey));
-    let dmg = Math.max(3, Math.round((sourcePower - effDef / 2) * weakness * variance * unravelMult));
+    const lastType = this.lastHitTypes.get(target._key);
+    const reaction: ReactionResult | null = weakness >= 1 && lastType && lastType !== damageType ? resolveReaction(lastType, damageType) : null;
+    if (weakness >= 1) this.lastHitTypes.set(target._key, damageType);
+    if (reaction?.damageMult) unravelMult *= reaction.damageMult;
+    const reactionArmorPierce = reaction?.armorPierce ? 1 - reaction.armorPierce : 1;
+    const comboMult = this.pendingComboMult;
+    this.pendingComboMult = 1;
+    const comboDefPierce = this.pendingComboDefPierce;
+    this.pendingComboDefPierce = 1;
+    if (comboDefPierce < 1) defReduction = Math.min(defReduction, comboDefPierce);
+    const effDef = Math.round(defenseStat * defReduction * reactionArmorPierce * statMultiplier(target.statuses, statKey));
+    let dmg = Math.max(3, Math.round((sourcePower - effDef / 2) * weakness * variance * unravelMult * comboMult));
+    dmg = Math.round(dmg * windowDamageMult(state));
     if (crit) dmg = Math.round(dmg * 1.5);
     if (hasStatus(this.playerStatuses, 'echo_surge')) dmg = Math.round(dmg * 1.2);
+    if (this.overclockActive) dmg = Math.round(dmg * 1.7);
+    const investigated = (this.investigations.get(target._key)?.layer ?? 0) >= 1;
+    if (this.insightDamageBonus && investigated) dmg = Math.round(dmg * 1.15);
+    const fatigueDmg = fatiguePenalty(this.player.fatigue).damageMult;
+    if (fatigueDmg !== 1) dmg = Math.round(dmg * fatigueDmg);
     const resonanceBonus = target._isBoss ? 1 : resonancePlayerDamageBonus(this.player.resonance);
     dmg = Math.round(dmg * resonanceBonus);
     if (damageType === 'sacred' && hasStatus(this.playerStatuses, 'blessing')) {
@@ -599,6 +839,10 @@ export class CombatEngine {
     }
     const mitigated = applyBarrier(target.statuses, dmg);
     if (mitigated < dmg) this.log.push(`${target.name}'s Barrier absorbs part of the blow.`);
+    if (dmg > 0 && mitigated === 0) {
+      const lost = Math.floor(this.playerAP / 2);
+      this.applyTokenDelta(-lost, `The blow was fully absorbed — you lose ${lost} token(s).`);
+    }
     target.hp = Math.max(0, target.hp - mitigated);
 
     // Echo-Soldier Phalanx: when one is damaged, 50% is split among allies
@@ -615,10 +859,124 @@ export class CombatEngine {
 
     const weak = weakness > 1;
     this.log.push(`${label} hits ${target.name} for ${mitigated} damage${crit ? ' (Critical!)' : ''}${weak ? ' — weakness exploited!' : ''}.`);
-    if (weak) this.gainMomentum(2);
-    if (crit) this.gainMomentum(1);
-    if (target.hp <= 0) this.gainMomentum(1);
+    if (weak) {
+      const windowNote = recordWeakHit(state);
+      const wMult = windowMomentumMult(state);
+      this.gainMomentum(2 * wMult);
+      this.applyTokenDelta(1, `Weakness hit — +1 token${wMult > 1 ? ' (window doubles momentum)' : ''}.`);
+      if (windowNote === 'opened') {
+        this.pendingBanners.push('WEAKNESS WINDOW — resistances melt; damage +50% for 2 turns');
+        this.log.push(`WINDOW — ${target.name}'s weakness is laid bare: +50% damage for ${windowActive(state) ? '2 turns' : ''}.`);
+      }
+    } else {
+      resetWeakStreak(state);
+    }
+    if (reaction) {
+      this.applyReactionEffect(target, reaction, mitigated);
+      this.pendingBanners.push(`REACTION ${reaction.label}`);
+    }
+    if (crit) {
+      this.gainMomentum(1);
+      this.applyTokenDelta(1, 'Critical hit — +1 token.');
+    }
+    if (target.hp <= 0) {
+      this.gainMomentum(1);
+      this.applyTokenDelta(1, 'Enemy slain — +1 token.');
+    }
+    if (investigated && this.pendingIntents.has(target._key)) {
+      this.applyTokenDelta(1, 'You read its intent and struck true — +1 token.');
+    }
     return { dmg: mitigated, hit: true, crit, weak };
+  }
+
+  /** Applies an elemental reaction's status/splash/strip effects after the triggering hit resolves. */
+  private applyReactionEffect(target: InternalEnemy, reaction: ReactionResult, hitDamage: number): void {
+    if (reaction.status) {
+      applyStatus(target.statuses, reaction.status.id, reaction.status.turns);
+    }
+    if (reaction.stripBuffs) {
+      removeAllBuffs(target.statuses);
+      this.log.push(`REACTION ${reaction.label} — ${target.name}'s buffs are stripped.`);
+    }
+    if (reaction.splashPct && hitDamage > 0) {
+      const splash = Math.round((hitDamage * reaction.splashPct) / 100);
+      for (const other of this.aliveEnemies()) {
+        if (other._key === target._key) continue;
+        const before = other.hp;
+        other.hp = Math.max(0, other.hp - splash);
+        if (before !== other.hp) this.log.push(`REACTION splash — ${other.name} takes ${before - other.hp} residual damage.`);
+      }
+    }
+  }
+
+  /** Phase 3c: push an action's tag-set into the combo history and return the matched combo, if any. */
+  private pushComboTags(tags: readonly string[], target?: InternalEnemy): ComboDef | null {
+    this.tagHistory.push([...tags]);
+    if (this.tagHistory.length > 3) this.tagHistory.shift();
+    const combo = matchCombo(this.tagHistory as never);
+    if (!combo) return null;
+    this.tagHistory = [];
+    this.comboCount += 1;
+    this.executeCombo(combo.label);
+    this.pendingBanners.push(`COMBO ${combo.label}`);
+    this.applyComboEffect(combo, target);
+    return combo;
+  }
+
+  /** Phase 3c: resolve a combo's combat effect. */
+  private applyComboEffect(combo: ComboDef, target?: InternalEnemy): void {
+    switch (combo.effect) {
+      case 'expose_truth': {
+        for (const e of this.aliveEnemies()) {
+          if (!this.exposeTruth.has(e._key)) this.exposeTruth.set(e._key, { turns: 2, original: { ...e.affinities } });
+          for (const t of Object.keys(e.affinities) as DamageType[]) {
+            e.affinities[t] = Math.max(e.affinities[t] ?? 0, 1);
+          }
+        }
+        this.log.push('COMBO Expose Truth — every resistance collapses to neutral for 2 turns.');
+        break;
+      }
+      case 'memory_collapse':
+        this.momentumMultTurns = 3;
+        this.log.push('COMBO Memory Collapse — momentum gains are doubled for 3 turns.');
+        break;
+      case 'rending_wounds':
+        if (target) {
+          applyStatus(target.statuses, 'bleed', 4, 3);
+          this.log.push(`COMBO Rending Wounds — ${target.name} bleeds 15 per turn for 4 turns.`);
+        }
+        break;
+      case 'hunters_kill':
+        this.pendingComboMult = 3;
+        this.log.push('COMBO Hunter\'s Kill — your next strike deals 3.0x damage.');
+        break;
+      case 'shattered_reality':
+        for (const e of this.aliveEnemies()) removeAllBuffs(e.statuses);
+        this.log.push('COMBO Shattered Reality — every enemy buff is stripped.');
+        break;
+      case 'eclipse':
+        this.pendingComboMult = 2.5;
+        this.pendingComboDefPierce = 0.5;
+        this.log.push('COMBO Eclipse — your next strike deals 2.5x damage and ignores 50% defense.');
+        break;
+      case 'perfect_riposte':
+        this.freeActionCharges += 1;
+        this.pendingComboMult = 1.5;
+        this.log.push('COMBO Perfect Riposte — a free counter-strike lands immediately at +50% damage.');
+        break;
+      case 'full_knowledge':
+        for (const e of this.aliveEnemies()) this.investigate(e._key, 4, []);
+        for (const e of this.aliveEnemies()) {
+          let s = this.windowStates.get(e._key);
+          if (!s) {
+            s = freshWindowState();
+            this.windowStates.set(e._key, s);
+          }
+          s.turns = Math.max(s.turns, 2);
+        }
+        this.log.push('COMBO Full Knowledge — every enemy is revealed and weakness windows open.');
+        break;
+    }
   }
 
   attack(targetKey?: string): CombatSnapshot {
@@ -629,12 +987,15 @@ export class CombatEngine {
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.attack;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('attack');
     let atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk');
     if (!this.firstAttackUsed && this.player.skillsKnown.includes('opening_strike')) {
       atk = Math.round(atk * 1.2);
     }
+    const combo = this.pushComboTags(TAGS_ATTACK, target);
     const result = this.computeAndApplyDamage(target, atk, target.def, 'slash', 'Your attack');
     if (result.hit) this.firstAttackUsed = true;
+    void combo;
     this.lastActionId = 'attack';
     this.lastActionType = 'slash';
     this.checkOutcome();
@@ -675,8 +1036,12 @@ export class CombatEngine {
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
-    if (mpCost > 0) this.player.currentMP = Math.max(0, this.player.currentMP - mpCost);
-
+    if (mpCost > 0) {
+      this.player.currentMP = Math.max(0, this.player.currentMP - mpCost);
+      this.player.fatigue = clampFatigue(this.player.fatigue + Math.floor(mpCost / 10) * 5);
+    }
+    this.recordAction(`skill:${skillId}`);
+    this.pushComboTags(tagsForSkill(skill), this.pickTarget(targetKey));
     if (skill.tag === 'active_martyrs_flame') {
       this.player.currentHP = Math.max(1, this.player.currentHP - 10);
       const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk') * (skill.skillPower ?? 1);
@@ -746,8 +1111,10 @@ export class CombatEngine {
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('resonance_ability');
     const target = this.pickTarget(targetKey);
     if (target) {
+      this.pushComboTags(['Elemental', 'Shadow'] as const, target);
       const matk = this.player.derived.magicAttack * statMultiplier(this.playerStatuses, 'matk');
       const effMdef = Math.round(target.mdef * 0.8);
       this.computeAndApplyDamage(target, matk, effMdef, 'shadow', 'Resonance Surge', 'mdef');
@@ -767,8 +1134,11 @@ export class CombatEngine {
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.guard;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('guard');
+    this.pushComboTags(tagsForGuard(this.player.skillsKnown.includes('retaliation')));
     this.guarding = true;
-    this.log.push('You raise your guard.');
+    this.player.fatigue = clampFatigue(this.player.fatigue - 10);
+    this.log.push('You raise your guard. Fatigue eases.');
     this.lastActionId = 'guard';
     this.lastActionType = null;
     return this.snapshot();
@@ -780,6 +1150,7 @@ export class CombatEngine {
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.focus;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('focus');
     const mpRestore = Math.min(this.player.derived.maxMP, this.player.currentMP + 15);
     this.player.currentMP = mpRestore;
     this.log.push('You focus your will, restoring 15 MP.');
@@ -795,6 +1166,7 @@ export class CombatEngine {
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.brace;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('brace');
     applyStatus(this.playerStatuses, 'brace', 2);
     this.log.push('You brace yourself — Guard blocks 20% more damage for 2 turns.');
     this.lastActionId = 'brace';
@@ -811,8 +1183,10 @@ export class CombatEngine {
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.use_item;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('use_item');
     entry.qty -= 1;
     this.player.inventory = this.player.inventory.filter((i) => i.qty > 0);
+    this.player.fatigue = clampFatigue(this.player.fatigue - 20);
 
     if (item.effect?.healPercent) {
       const heal = Math.round(this.player.derived.maxHP * (item.effect.healPercent / 100));
@@ -839,23 +1213,204 @@ export class CombatEngine {
     this.playerAP -= this.freeActionCharges > 0 ? 0 : analyzeCost;
     if (this.freeActionCharges > 0 && analyzeCost > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('analyze');
     const target = this.pickTarget(targetKey);
     if (target) {
+      this.pushComboTags(TAGS_ANALYZE, target);
       (target as InternalEnemy)._revealed = true;
-      this.log.push(`You Analyze ${target.name}, reading its weaknesses.`);
+      this.investigate(target._key, 1, []);
+      const def = ALL_ENEMY_DEFS[target.defId];
+      const tend = this.tendencyFor(target);
+      this.log.push(`You Scan ${target.name}.${def?.description ? ` ${def.description}` : ''}`);
+      if (tend) this.log.push(`Tendency: ${tendencyName(tend)} — ${tendencyHint(tend)}`);
+      if (target._isBoss && this.bossDef) {
+        const phaseInfo = this.bossDef.getPhase(target.hp / target.maxHp);
+        this.log.push(`It is in phase "${phaseInfo.label}" (${phaseInfo.key}).`);
+      }
+      const intent = this.intentDefFor(target);
+      if (intent) this.log.push(`You sense what it intends: ${intent.label}.`);
     }
     this.gainMomentum(1);
+    this.player.insight = Math.min(3, this.player.insight + 1);
+    this.applyTokenDelta(1, 'Analysis sharpens the moment — +1 token refunded.');
     this.lastActionId = 'analyze';
     this.lastActionType = null;
     return this.snapshot();
   }
 
-  /** Free toggle: reveal/un-reveal every live enemy's weaknesses and stats. Costs no AP, no action. */
-  toggleAnalyze(): CombatSnapshot {
-    const allRevealed = this.enemies.length > 0 && this.enemies.every((e) => e._revealed);
-    for (const e of this.enemies) e._revealed = !allRevealed;
-    this.lastActionId = 'analyze';
+  private investigate(key: string, layer: number, probes: string[]): void {
+    const inv = this.investigationOf(key);
+    inv.layer = Math.max(inv.layer, layer);
+    for (const p of probes) {
+      if (!inv.probes.includes(p)) inv.probes.push(p);
+    }
+  }
+
+  private investigationOf(key: string): { layer: number; probes: string[] } {
+    let inv = this.investigations.get(key);
+    if (!inv) {
+      inv = { layer: 0, probes: [] };
+      this.investigations.set(key, inv);
+    }
+    return inv;
+  }
+
+  private tendencyFor(e: InternalEnemy): EnemyTendency | undefined {
+    if (e._isBoss && this.bossDef) return this.BOSS_TENDENCY[this.bossDef.id];
+    return ALL_ENEMY_DEFS[e.defId]?.tendency;
+  }
+
+  private intentDefFor(e: InternalEnemy): IntentDef | BossIntentDef | undefined {
+    const pid = this.pendingIntents.get(e._key);
+    if (pid === undefined) return undefined;
+    if (e._isBoss && this.bossDef) return this.bossDef.intents?.find((i) => i.id === pid);
+    return ALL_ENEMY_DEFS[e.defId]?.intents?.find((i) => i.id === pid);
+  }
+
+  /** Probe (1 AP): a focused line of intel on the target. Requires a Scan first. */
+  probe(targetKey: string | undefined, probeId: string): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    const target = this.pickTarget(targetKey);
+    if (!target) return this.snapshot();
+    const inv = this.investigationOf(target._key);
+    if (inv.layer < 1) {
+      this.log.push('You need to Scan the target before probing it.');
+      return this.snapshot();
+    }
+    if (this.playerAP < 1 && this.freeActionCharges < 1) return this.snapshot();
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : 1;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
+    this.recordAction('probe');
+    this.investigate(target._key, 2, [probeId]);
+    this.log.push(...this.probeIntel(target, probeId));
+    if (this.player.stats.int >= 10) {
+      this.log.push(this.probeBonus(target));
+      this.log.push(this.probeBonus(target));
+    } else if (this.player.stats.int >= 7) {
+      this.log.push(this.probeBonus(target));
+    }
+    this.lastActionId = 'probe';
     this.lastActionType = null;
+    return this.snapshot();
+  }
+
+  private probeIntel(e: InternalEnemy, probeId: string): string[] {
+    const tend = this.tendencyFor(e);
+    const intent = this.intentDefFor(e);
+    const lines: string[] = [];
+    switch (probeId) {
+      case 'observe_body': {
+        lines.push(`BODY — ${e.name} has ATK ${e.atk} / DEF ${e.def} / SPD ${e.spd}.`);
+        const weaks = Object.entries(e.affinities).filter(([, v]) => v > 1).map(([t]) => t);
+        const resists = Object.entries(e.affinities).filter(([, v]) => v < 1).map(([t]) => t);
+        lines.push(`Weak to: ${weaks.join(', ') || 'nothing'}. Resists: ${resists.join(', ') || 'nothing'}.`);
+        break;
+      }
+      case 'observe_mind': {
+        if (tend) lines.push(`MIND — pattern suggests ${tendencyName(tend)}. ${tendencyHint(tend)}`);
+        if (e._isBoss && this.bossDef) {
+          const phase = this.bossDef.getPhase(e.hp / e.maxHp);
+          lines.push(`It is in phase "${phase.label}" (${phase.key}).`);
+        } else {
+          lines.push('It reacts to damage, not to feints.');
+        }
+        break;
+      }
+      case 'observe_weapon': {
+        const atkType = e.attackType;
+        lines.push(`WEAPON — it favours ${atkType} strikes.${intent ? ` Next: ${intent.label} (${intent.description})` : ''}`);
+        break;
+      }
+      case 'observe_memory': {
+        const def = ALL_ENEMY_DEFS[e.defId];
+        lines.push(`MEMORY — ${def?.description ?? 'It leaves no memory worth keeping.'}`);
+        if (intent) lines.push(`It is gathering itself for "${intent.label}".`);
+        break;
+      }
+      case 'observe_resonance': {
+        if (e._isBoss && this.bossDef) {
+          const phase = this.bossDef.getPhase(e.hp / e.maxHp);
+          lines.push(`RESONANCE — phase shift arrives at ${Math.round(phase.hpFloorPercent * 100)}% HP.`);
+        } else {
+          lines.push('RESONANCE — no resonant phase; its pattern is steady.');
+        }
+        break;
+      }
+      default: {
+        lines.push('Nothing more to observe.');
+      }
+    }
+    return lines;
+  }
+
+  private probeBonus(e: InternalEnemy): string {
+    const intent = this.intentDefFor(e);
+    if (intent) return `Your intellect catches an extra thread — "${intent.label}": ${intent.description}`;
+    return 'Your intellect catches an extra thread — no further intent, but its timing is now predictable.';
+  }
+
+  /** Deep Analysis (2 AP): full read on the target. Requires at least one probe. */
+  deepAnalyze(targetKey?: string): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    const target = this.pickTarget(targetKey);
+    if (!target) return this.snapshot();
+    const inv = this.investigationOf(target._key);
+    if (inv.probes.length === 0) {
+      this.log.push('You need at least one Probe before a Deep Analysis.');
+      return this.snapshot();
+    }
+    if (this.playerAP < 2 && this.freeActionCharges < 1) return this.snapshot();
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : 2;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
+    this.recordAction('deep_analyze');
+    this.investigate(target._key, 4, []);
+    this.log.push(`DEEP ANALYSIS — ${target.name}:`);
+    const pool = this.intentPoolFor(target);
+    for (const i of pool) {
+      this.log.push(`  ${i.label} — ${i.description}`);
+    }
+    this.lastActionId = 'deep_analyze';
+    this.lastActionType = null;
+    return this.snapshot();
+  }
+
+  private intentPoolFor(e: InternalEnemy): Array<{ id: string; label: string; description: string }> {
+    if (e._isBoss && this.bossDef?.intents) return this.bossDef.intents.map((i) => ({ id: i.id, label: i.label, description: i.description }));
+    return (ALL_ENEMY_DEFS[e.defId]?.intents ?? []).map((i) => ({ id: i.id, label: i.label, description: i.description }));
+  }
+
+  /** Spend 3 Insight on a combat-wide exploitation. */
+  spendInsight(option: 'full_ai' | 'perfect_prediction' | 'focused_study' | 'weakness_window'): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    if (this.player.insight < 3) {
+      this.log.push('You need 3 Insight for that.');
+      return this.snapshot();
+    }
+    this.player.insight -= 3;
+    if (option === 'full_ai') {
+      for (const e of this.aliveEnemies()) this.investigate(e._key, 4, []);
+      this.log.push('INSIGHT — you read the full pattern of every enemy.');
+    } else if (option === 'perfect_prediction') {
+      for (const e of this.aliveEnemies()) this.investigate(e._key, 3, []);
+      this.log.push('INSIGHT — every intent on the field is now certain.');
+    } else if (option === 'focused_study') {
+      this.insightDamageBonus = true;
+      this.log.push('INSIGHT — studied targets take +15% damage for the rest of the fight.');
+    } else {
+      for (const e of this.aliveEnemies()) {
+        let s = this.windowStates.get(e._key);
+        if (!s) {
+          s = freshWindowState();
+          this.windowStates.set(e._key, s);
+        }
+        s.turns = Math.max(s.turns, 2);
+      }
+      this.log.push('INSIGHT — you open a Weakness Window on every enemy for 2 rounds.');
+    }
     return this.snapshot();
   }
 
@@ -866,8 +1421,10 @@ export class CombatEngine {
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.sunder;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('sunder');
     const target = this.pickTarget(targetKey);
     if (target) {
+      this.pushComboTags(TAGS_SUNDER, target);
       applyStatus(target.statuses, 'armour_break', 2);
       this.log.push(`You Sunder ${target.name}'s armour. Defense -50% for 2 turns.`);
     }
@@ -887,11 +1444,13 @@ export class CombatEngine {
     this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.withdraw;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
+    this.recordAction('withdraw');
     const alive = this.aliveEnemies();
     const avgSpd = alive.reduce((s, e) => s + e.spd, 0) / Math.max(1, alive.length);
     const chance = Math.max(10, Math.min(90, 60 + (this.effectivePlayerSpeed() - avgSpd)));
     if (this.rng() * 100 < chance) {
       this.phase = 'fled';
+      this.restoreOverclockedMaxHp();
       this.log.push('You break away and withdraw from the fight.');
     } else {
       this.log.push('You fail to withdraw.');
@@ -904,17 +1463,23 @@ export class CombatEngine {
   resolveMomentum(choice: MomentumChoice): CombatSnapshot {
     if (this.phase !== 'momentum_choice') return this.snapshot();
     this.player.momentum = 0;
-    if (choice === 'extra_turn') {
+    if (choice === 'flow') {
       this.playerAP += 2;
-      this.log.push('Momentum: Extra Turn — you act again immediately.');
-    } else if (choice === 'chorus_heal') {
+      applyStatus(this.playerStatuses, 'exhausted', 1);
+      this.log.push('Momentum: Flow — you act again immediately, but will start next round exhausted.');
+    } else if (choice === 'harmony') {
       const heal = Math.round(this.player.derived.maxHP * 0.25);
       this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
-      this.log.push(`Momentum: Chorus Heal — restored ${heal} HP.`);
-    } else if (choice === 'clarity') {
-      const restore = Math.round(this.player.derived.maxMP * 0.4);
-      this.player.currentMP = Math.min(this.player.derived.maxMP, this.player.currentMP + restore);
-      this.log.push(`Momentum: Clarity — restored ${restore} MP.`);
+      this.bossEnrageTurns = this.bossDef ? 2 : 0;
+      this.log.push(`Momentum: Harmony — restored ${heal} HP${this.bossDef ? '; the boss enrages (+30% damage).' : '.'}`);
+    } else if (choice === 'archive') {
+      const boss = this.enemies.find((e) => e._isBoss && e.hp > 0);
+      if (boss && this.bossDef) {
+        const phaseLabel = this.bossDef.getPhase(boss.hp / boss.maxHp).label;
+        this.log.push(`Momentum: Archive — you remember this phase: ${phaseLabel}.`);
+      } else {
+        this.log.push('Momentum: Archive — nothing to recall; the fight stays as it is.');
+      }
     } else if (choice === 'forgotten_technique') {
       this.freeActionCharges += 1;
       this.log.push('Momentum: Forgotten Technique — your next action costs 0 AP.');
@@ -930,6 +1495,14 @@ export class CombatEngine {
     } else if (choice === 'desperate_strike') {
       this.desperateStrike = true;
       this.log.push('Momentum: Desperate Strike — all your attacks crit this turn.');
+    } else if (choice === 'overclock') {
+      if (this.overclockMaxHpReduced === null) {
+        this.overclockMaxHpReduced = this.player.derived.maxHP;
+        this.player.derived.maxHP = Math.max(1, Math.round(this.player.derived.maxHP * 0.8));
+        this.player.currentHP = Math.min(this.player.currentHP, this.player.derived.maxHP);
+      }
+      this.overclockActive = true;
+      this.log.push('Momentum: Overclock — +70% damage this turn, in exchange for 20% of your max HP.');
     }
     this.phase = 'player';
     return this.snapshot();
@@ -945,6 +1518,13 @@ export class CombatEngine {
 
   getEnemiesKilled(): number {
     return this.enemies.filter((e) => e.hp <= 0).length;
+  }
+
+  /** Phase 3: returns and clears the queued reaction/combo banners since the last read. */
+  drainBanners(): string[] {
+    const banners = [...this.pendingBanners];
+    this.pendingBanners = [];
+    return banners;
   }
 
   getXpEarned(): number {
@@ -977,26 +1557,47 @@ export class CombatEngine {
       playerStatuses: this.playerStatuses,
       momentum: this.player.momentum,
       guarding: this.guarding,
+      fatigue: this.player.fatigue,
+      insight: this.player.insight,
       enemies: this.enemies
         .filter((e) => e.hp > 0 || this.phase === 'victory')
-        .map((e) => ({
-          key: e._key,
-          name: e.name,
-          hp: e.hp,
-          maxHp: e.maxHp,
-          alive: e.hp > 0,
-          statuses: e.statuses,
-          revealed: e._revealed,
-          revealCount: this.player.skillsKnown.includes('librarians_eye') ? 2 : 1,
-          affinities: e.affinities,
-          atk: e.atk,
-          def: e.def,
-          spd: e.spd,
-        })),
+        .map((e) => {
+          const layer = this.investigations.get(e._key)?.layer ?? 0;
+          const probes = this.investigations.get(e._key)?.probes ?? [];
+          const pid = this.pendingIntents.get(e._key);
+          const intentDef = pid !== undefined
+            ? (e._isBoss && this.bossDef
+              ? this.bossDef.intents?.find((i) => i.id === pid)
+              : ALL_ENEMY_DEFS[e.defId]?.intents?.find((i) => i.id === pid))
+            : undefined;
+          return {
+            key: e._key,
+            name: e.name,
+            hp: e.hp,
+            maxHp: e.maxHp,
+            alive: e.hp > 0,
+            statuses: e.statuses,
+            revealed: e._revealed,
+            revealCount: this.player.skillsKnown.includes('librarians_eye') ? 2 : 1,
+            affinities: e.affinities,
+            atk: e.atk,
+            def: e.def,
+            spd: e.spd,
+            tendency: tendencyGlyph(this.tendencyFor(e)),
+            investigationLayer: layer,
+            investigationProbes: probes,
+            pendingIntent: intentDef ? { id: intentDef.id, label: intentDef.label, confidence: confidenceFor(layer) } : null,
+            weakWindowTurns: this.windowStates.get(e._key)?.turns ?? 0,
+            weakHitStreak: this.windowStates.get(e._key)?.streak ?? 0,
+            lastHitType: this.lastHitTypes.get(e._key),
+          };
+        }),
       initiativeOrder,
       playerHitEnemyKeys: [...this.playerHitEnemyKeys],
       log: this.log,
       bossPhaseLabel: bossAlive && this.bossDef ? this.bossDef.getPhase(bossAlive.hp / bossAlive.maxHp).label : undefined,
+      banners: [...this.pendingBanners],
+      comboStacks: this.comboCount,
     };
   }
 }

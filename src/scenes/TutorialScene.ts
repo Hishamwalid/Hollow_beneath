@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { TUTORIAL_SCREENS } from '@data/tutorialText';
-import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { settingsManager } from '@systems/SettingsManager';
@@ -42,17 +42,17 @@ export class TutorialScene extends Phaser.Scene {
     const panelBg = this.add.image(cx, 250, 'panel_dialog').setDisplaySize(800, 240).setDepth(10);
     panelBg.setAlpha(0.9);
 
-    this.bodyText = this.add.text(cx - 370, 160, '', {
-      fontFamily: FONT_SERIF, fontSize: '17px', color: PALETTE_HEX.bone,
-      wordWrap: { width: 740 }, lineSpacing: 6,
+    this.bodyText = this.add.text(cx - 370, 152, '', {
+      fontFamily: FONT_BODY, fontSize: '18px', color: PALETTE_HEX.bone,
+      wordWrap: { width: 740 }, lineSpacing: 7,
     }).setDepth(11);
 
     this.promptText = this.add.text(cx + 370, 350, '▾ Continue', {
-      fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.gold,
+      fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.gold,
     }).setOrigin(1, 0).setDepth(12).setAlpha(0);
 
     this.skipText = this.add.text(GAME_WIDTH - 20, 20, '[Skip Tutorial]', {
-      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
+      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(1, 0).setDepth(20).setInteractive({ useHandCursor: true });
     this.skipText.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
       pointer.event.stopImmediatePropagation?.();

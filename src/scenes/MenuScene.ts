@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { ENDINGS } from '@data/endings';
-import { FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -49,8 +49,8 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(cx, y, 'a descent, a translation, a mistake made carefully', {
-        fontFamily: FONT_SERIF,
-        fontSize: '16px',
+        fontFamily: FONT_BODY,
+        fontSize: '18px',
         color: PALETTE_HEX.boneMuted,
         fontStyle: 'italic',
       })
@@ -59,8 +59,8 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(cx, y, `Echo Shards: ${meta.echoShards}    Runs: ${meta.totalRuns}    Endings seen: ${meta.endingsAchieved.length}/${ENDINGS.length}`, {
-        fontFamily: FONT_SERIF,
-        fontSize: '14px',
+        fontFamily: FONT_MONO,
+        fontSize: '15px',
         color: PALETTE_HEX.boneMuted,
       })
       .setOrigin(0.5);
@@ -73,8 +73,8 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(cx, GAME_HEIGHT - 40, 'placeholder build — art & audio pending · Team Akrasia', {
-        fontFamily: FONT_SERIF,
-        fontSize: '12px',
+        fontFamily: FONT_BODY,
+        fontSize: '14px',
         color: '#555555',
       })
       .setOrigin(0.5);
