@@ -4,6 +4,7 @@ import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX, SZ } from './uiTheme';
 import { weaknessLabel } from '@data/damageTypes';
 import { statusLabel } from '@data/statusEffects';
 import { intentLine } from '@systems/combat/IntentSystem';
+import { spawnHitParticles } from '@/systems/particles';
 import { GAME_WIDTH } from '@/config';
 
 export interface EnemyDisplay {
@@ -102,6 +103,7 @@ export function createEnemyDisplay(
   };
 
   let selected = false;
+  let wasWindowOpen = false;
   let diamondTween: Phaser.Tweens.Tween | undefined;
   const setSelected = (v: boolean) => {
     if (selected === v) return;
@@ -135,9 +137,15 @@ export function createEnemyDisplay(
         windowBadge.setText(`WEAK WINDOW (${view.weakWindowTurns})`);
         windowBadge.setAlpha(1).setX(0);
         token.setTint(0xc9a24b);
+        if (!wasWindowOpen) {
+          wasWindowOpen = true;
+          spawnHitParticles(scene, 0, -18, 0xc9a24b);
+          scene.tweens.add({ targets: token, scaleX: { from: 1.15, to: 1 }, scaleY: { from: 1.15, to: 1 }, duration: 350, ease: 'Sine.easeOut' });
+        }
       } else {
         windowBadge.setAlpha(0);
         token.clearTint();
+        wasWindowOpen = false;
       }
       if (view.revealed) {
         const entries = Object.entries(view.affinities)

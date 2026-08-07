@@ -315,6 +315,10 @@ export class CombatEngine {
     return base + (this.player.skillsKnown.includes('quickstep') ? 5 : 0);
   }
 
+  private enemyEffectiveSpeed(enemy: InternalEnemy): number {
+    return Math.round(enemy.spd * statMultiplier(enemy.statuses, 'spd'));
+  }
+
   private readonly CONTROL_STATUSES: StatusId[] = ['stun', 'sleep', 'fear', 'silence', 'confuse', 'seal_mind', 'blind'];
 
   /** Applies a status to the player, honoring Unshakeable's chance to resist Control-type effects. */
@@ -369,7 +373,7 @@ export class CombatEngine {
     this._playerUsedMagicLastTurn = false;
     this.pickIntents();
     const playerSpd = this.effectivePlayerSpeed();
-    const faster = alive.filter((e) => e.spd > playerSpd).sort((a, b) => b.spd - a.spd);
+    const faster = alive.filter((e) => this.enemyEffectiveSpeed(e) > playerSpd).sort((a, b) => this.enemyEffectiveSpeed(b) - this.enemyEffectiveSpeed(a));
     this.resolvingEnemyTurns = true;
     for (const e of faster) this.resolveEnemyTurn(e);
     this.resolvingEnemyTurns = false;
@@ -402,7 +406,7 @@ export class CombatEngine {
 
     const alive = this.aliveEnemies();
     const playerSpd = this.effectivePlayerSpeed();
-    const slowerOrEqual = alive.filter((e) => e.spd <= playerSpd).sort((a, b) => b.spd - a.spd);
+    const slowerOrEqual = alive.filter((e) => this.enemyEffectiveSpeed(e) <= playerSpd).sort((a, b) => this.enemyEffectiveSpeed(b) - this.enemyEffectiveSpeed(a));
     this.playerHitEnemyKeys = [];
     this.resolvingEnemyTurns = true;
     for (const e of slowerOrEqual) this.resolveEnemyTurn(e);
@@ -829,6 +833,8 @@ export class CombatEngine {
       }
       target.hp = Math.min(target.maxHp, target.hp + Math.abs(absorbDmg));
       this.log.push(`${label} is absorbed — ${target.name} heals ${Math.abs(absorbDmg)} instead.`);
+      const absorbState = this.windowStates.get(target._key);
+      if (absorbState) resetWeakStreak(absorbState);
       return { dmg: 0, hit: true, crit, weak: false };
     }
     if (damageType === 'shadow' && this.player.skillsKnown.includes('loom_touched')) {
@@ -893,6 +899,10 @@ export class CombatEngine {
   private applyReactionEffect(target: InternalEnemy, reaction: ReactionResult, hitDamage: number): void {
     if (reaction.status) {
       applyStatus(target.statuses, reaction.status.id, reaction.status.turns);
+    }
+    if (reaction.spdSlow) {
+      applyStatus(target.statuses, 'slow', reaction.spdSlow);
+      this.log.push(`REACTION ${reaction.label} — ${target.name} is slowed (speed -40%) for ${reaction.spdSlow} turn(s).`);
     }
     if (reaction.stripBuffs) {
       removeAllBuffs(target.statuses);
@@ -1446,7 +1456,7 @@ export class CombatEngine {
     this.actionsTakenThisRound += 1;
     this.recordAction('withdraw');
     const alive = this.aliveEnemies();
-    const avgSpd = alive.reduce((s, e) => s + e.spd, 0) / Math.max(1, alive.length);
+    const avgSpd = alive.reduce((s, e) => s + this.enemyEffectiveSpeed(e), 0) / Math.max(1, alive.length);
     const chance = Math.max(10, Math.min(90, 60 + (this.effectivePlayerSpeed() - avgSpd)));
     if (this.rng() * 100 < chance) {
       this.phase = 'fled';
@@ -1538,7 +1548,7 @@ export class CombatEngine {
     const bossAlive = this.enemies.find((e) => e._isBoss && e.hp > 0);
     const aliveEnemies = this.enemies.filter((e) => e.hp > 0);
     const playerSpd = this.effectivePlayerSpeed();
-    const sortedEnemies = [...this.aliveEnemies()].sort((a, b) => b.spd - a.spd);
+    const sortedEnemies = [...this.aliveEnemies()].sort((a, b) => this.enemyEffectiveSpeed(b) - this.enemyEffectiveSpeed(a));
     const initiativeOrder = [
       'player',
       ...sortedEnemies.map((e) => e._key),
@@ -1582,7 +1592,7 @@ export class CombatEngine {
             affinities: e.affinities,
             atk: e.atk,
             def: e.def,
-            spd: e.spd,
+            spd: this.enemyEffectiveSpeed(e),
             tendency: tendencyGlyph(this.tendencyFor(e)),
             investigationLayer: layer,
             investigationProbes: probes,
