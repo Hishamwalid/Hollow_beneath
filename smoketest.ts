@@ -156,6 +156,11 @@ for (const bossId of BOSS_ORDER) {
       continue;
     }
     assert(snap.phase === 'victory' || snap.phase === 'defeat', `boss ${bossId} fight terminates (got ${snap.phase} after ${rounds} rounds)`);
+    // Phase 5: the fight snapshot must surface the boss-intel readout (stress/band/adaptations/tell).
+    assert(snap.bossIntel !== undefined, `boss ${bossId} surfaces Phase 5 intel in snapshot`);
+    assert(typeof snap.bossIntel.stress === 'number' && Number.isFinite(snap.bossIntel.stress), `boss ${bossId} intel stress is finite`);
+    assert(Array.isArray(snap.bossIntel.adaptations), `boss ${bossId} intel surfaces adaptations array`);
+    assert(snap.bossIntel.chargedLabel === null || typeof snap.bossIntel.chargedLabel === 'string', `boss ${bossId} intel chargedLabel shaped`);
   }
   if (sawCharge) bossChargeSeen = bossId;
   ok(`boss ${bossId}: charge cycle ${sawCharge ? 'SEEN' : 'NOT SEEN'}`);
