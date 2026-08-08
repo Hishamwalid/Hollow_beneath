@@ -74,7 +74,6 @@ import {
   accompaniesIn,
   hasCooldown,
   loyaltyGain,
-  setCooldown,
   type AllySaveState,
 } from './ally/AllyTracking';
 import { planAllyTurn, type AllyCombatInput, type AllyTurnPlan } from './ally/AllyCombat';
@@ -547,7 +546,7 @@ export class CombatEngine {
       this.allyDenyBossFirstTurn = this.allyStates.some((st) => {
         if (hasCooldown(st, 'first_church_word')) return false;
         const def = this.allyDefFor(st);
-        const assist = bossAssist(def, st, this.allyBossAssistInput(false));
+        const assist = bossAssist(def, st, this.allyBossAssistInput(st, false));
         return assist.denyFirstStrike;
       });
       if (this.allyDenyBossFirstTurn) this.log.push('A companion speaks the First Church Word — the boss cannot begin moving.');
@@ -688,12 +687,12 @@ export class CombatEngine {
     for (const state of this.allyStates) {
       if (state.id !== 'covenant_courier' || !accompaniesIn(state.loyalty) || hasCooldown(state, 'bitter_revival')) continue;
       const def = this.allyDefFor(state);
-      const assist = bossAssist(def, state, this.allyBossAssistInput(true));
-      if (assist.reviveAvailable) {
-        this.player.currentHP = assist.reviveHealAmount;
-        setCooldown(state, 'bitter_revival', true);
-        return true;
-      }
+      const assist = bossAssist(def, state, this.allyBossAssistInput(state, true));
+       if (assist.reviveAvailable) {
+         this.player.currentHP = assist.reviveHealAmount;
+         this.consumeCooldown(state, 'bitter_revival');
+         return true;
+       }
     }
     return false;
   }
@@ -708,6 +707,11 @@ export class CombatEngine {
       const delta = loyaltyGain(state, this.phase === 'victory');
       if (delta > 0) this.log.push(`${this.allyDefFor(state).name}'s loyalty deepens (+${delta}).`);
     }
+  }
+
+  /** Phase 5: mark a once-per-fight ally ability as used, persisted on the companion object. */
+  private consumeCooldown(state: AllySaveState, abilityId: string): void {
+    state.combatCooldowns = [...new Set([...state.combatCooldowns, abilityId])];
   }
 
   /** Overclock's max-HP cost is scoped to a single combat — restore it when the fight concludes. */
@@ -743,7 +747,7 @@ export class CombatEngine {
         this.allyDenyBossFirstTurn = false;
         this.log.push(`${enemy.name} stands frozen, forbidden its first word.`);
         const zealot = this.allyStates.find((s) => s.id === 'sable_zealot');
-        if (zealot) setCooldown(zealot, 'first_church_word', true);
+        if (zealot) this.consumeCooldown(zealot, 'first_church_word');
         return;
       }
       this.bossOwnTurnCounter += 1;
@@ -1007,10 +1011,9 @@ export class CombatEngine {
     for (const state of this.allyStates) {
       if (!accompaniesIn(state.loyalty)) continue;
       const def = this.allyDefFor(state);
+      // One reliability roll; on a failure the ally fumbles (no action this round).
       if (this.rng() > def.profile.reliability) {
-        if (this.rng() > def.profile.reliability) {
-          this.log.push(`${def.name} fumbles, nearly tripping over the battlefield.`);
-        }
+        this.log.push(`${def.name} fumbles, nearly tripping over the battlefield.`);
         continue;
       }
       const plan = planAllyTurn(def, state.loyalty, this.allyCombatInput(def, state));
@@ -1027,15 +1030,13 @@ export class CombatEngine {
       ? this.enemies.find((e) => e._key === action.targetKey)
       : undefined;
 
-    switch (action.kind) {
+  switch (action.kind) {
       case 'heal': {
         if (this.noHeal) {
           this.log.push(`${def.name} tries to mend you, but One Last Memory seals all healing.`);
           return;
         }
-        const amount = Math.max(1, Math.round(this.player.derived.maxHP * profile.healPct));
-        this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + amount);
-        this.log.push(`${def.name} restores ${amount} HP.`);
+        this.applyAllyHeal(def, state, action.abilityId);
         return;
       }
       case 'guard': {
@@ -1046,12 +1047,13 @@ export class CombatEngine {
         if (!target) return;
         const useMagic = profile.matkPct > profile.atkPct;
         const power = Math.round((useMagic ? this.player.derived.magicAttack : this.player.derived.attack) * (useMagic ? profile.matkPct : profile.atkPct) * (1 + state.loyalty / 400));
-        const result = this.computeAndApplyDamage(target, power, useMagic ? target.mdef : target.def, profile.damageType, `${def.name}'s attack`, useMagic ? 'mdef' : 'def', false, false);
+        const result = this.computeAndApplyDamage(target, power, useMagic ? target.mdef : target.def, profile.damageType, `${def.name}'s attack`, useMagic ? 'mdef' : 'def', false, false, true);
         if (result.hit && result.crit) this.log.push(`${def.name} lands a critical blow!`);
+        if (result.hit) this.applyAllyDamageRider(def, action.abilityId, target, result.dmg);
         return;
       }
       case 'support': {
-        this.applyAllySupport(def, state, target);
+        this.applyAllySupport(def, state, target, action.abilityId);
         return;
       }
       case 'overwatch': {
@@ -1065,26 +1067,30 @@ export class CombatEngine {
     }
   }
 
+  /** Healing abilities resolved by id (Field Dressing vs Mercy Pact's status cure). */
+  private applyAllyHeal(def: AllyDef, state: AllySaveState, abilityId: string): void {
+    const amount = Math.max(1, Math.round(this.player.derived.maxHP * def.profile.healPct));
+    if (abilityId === 'mercy_pact') {
+      const debuffIds = ['weakness', 'defense_down', 'slow', 'armour_break', 'seal_mind', 'fragile_perception', 'exhausted', 'poison', 'bleed', 'curse', 'shock_dot', 'burn', 'frostbite', 'wound', 'root', 'blind', 'silence', 'reflect', 'terrified'];
+      const before = this.playerStatuses.filter((s) => debuffIds.includes(s.id)).length;
+      removeDebuffs(this.playerStatuses);
+      const after = this.playerStatuses.filter((s) => debuffIds.includes(s.id)).length;
+      const cleared = before - after;
+      if (cleared > 0) this.log.push(`${def.name} untangles the maledictions — removed ${cleared} harmful effect(s).`);
+      else this.log.push(`${def.name} mends your wounds — no condition to strip.`);
+    }
+    this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + amount);
+    if (abilityId === 'mercy_pact') this.log.push(`${def.name} grants Mercy Pact — +${amount} HP.`);
+    else this.log.push(`${def.name} restores ${amount} HP.`);
+  }
+
   /** Support abilities resolved by id (framework flavor, engine effects). */
-  private applyAllySupport(def: AllyDef, state: AllySaveState, target?: InternalEnemy): void {
-    const ability = def.abilities.find((a) => a.kind === 'support');
-    if (!ability) return;
-    switch (ability.id) {
+  private applyAllySupport(def: AllyDef, state: AllySaveState, target: InternalEnemy | undefined, abilityId: string): void {
+    switch (abilityId) {
       case 'rooted_hold':
         this.enemyDmgReduceTurns = Math.max(this.enemyDmgReduceTurns, 2);
         this.log.push(`${def.name} anchors the ground — enemy damage -30% while it holds.`);
         break;
-      case 'mercy_pact': {
-        if (this.noHeal) {
-          this.log.push(`${def.name} reaches to heal, but the seal holds.`);
-          break;
-        }
-        removeDebuffs(this.playerStatuses);
-        const amount = Math.round(this.player.derived.maxHP * 0.1);
-        this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + amount);
-        this.log.push(`${def.name} untangles the maledictions — +${amount} HP.`);
-        break;
-      }
       case 'annotation':
         this.nextAttackGuaranteed = true;
         this.log.push(`${def.name} marks a line on your map — your next hit cannot miss.`);
@@ -1094,6 +1100,43 @@ export class CombatEngine {
           applyStatus(target.statuses, 'defense_down', 2);
           this.log.push(`${def.name} redraws the defense — ${target.name} Defense -20% for 2 rounds.`);
         }
+        break;
+      case 'mercy_pact':
+        // Not a support ability — guard against misrouted plans.
+        this.applyAllyHeal(def, state, abilityId);
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** Riders carried by specific damage abilities (buff strip / AoE / intent reveal). */
+  private applyAllyDamageRider(def: AllyDef, abilityId: string, target: InternalEnemy, mitigated: number): void {
+    const BUFF_IDS = ['focus', 'barrier', 'regeneration', 'fortify', 'blessing', 'haste', 'reflection', 'brace', 'echo_surge', 'atk_up'];
+    switch (abilityId) {
+      case 'unmade_grip': {
+        const before = target.statuses.length;
+        target.statuses = target.statuses.filter((s) => !BUFF_IDS.includes(s.id));
+        if (target.statuses.length < before) {
+          this.log.push(`${def.name}'s Unmade Grip strips a buff from ${target.name}.`);
+        }
+        break;
+      }
+      case 'flame_prayer': {
+        applyStatus(target.statuses, 'burn', 2);
+        this.log.push(`${def.name}'s Flame Prayer sears ${target.name} (Burn, 2 turns).`);
+        const splash = Math.round(mitigated * 0.25);
+        if (splash > 0) {
+          for (const e of this.aliveEnemies().filter((x) => x._key !== target._key)) {
+            e.hp = Math.max(0, e.hp - splash);
+            this.log.push(`${def.name}'s Flame Prayer sears ${e.name} for ${splash} burn.`);
+          }
+        }
+        break;
+      }
+      case 'survey_probe':
+        this.playerHistorySet.add(target._key);
+        this.log.push(`${def.name}'s Survey Probe sketches ${target.name}'s weave — its next move is laid bare.`);
         break;
     }
   }
@@ -1110,12 +1153,12 @@ export class CombatEngine {
       const warden = this.allyStates.find((s) => s.id === 'warden_emissary' && accompaniesIn(s.loyalty) && !hasCooldown(s, 'unbroken_vigil'));
       if (warden && this.aliveEnemies().length > 0) {
         const def = this.allyDefFor(warden);
-        const assist = bossAssist(def, warden, this.allyBossAssistInput(false));
+        const assist = bossAssist(def, warden, this.allyBossAssistInput(warden, false));
         if (assist.guardCanIntervene) {
           const negated = Math.round((dmg * assist.vigilNegationPct) / 100);
           dmg = Math.max(0, dmg - negated);
           this.log.push(assist.lines[0] ?? `${def.name}: an oath-echo takes the blow.`);
-          setCooldown(warden, 'unbroken_vigil', true);
+          this.consumeCooldown(warden, 'unbroken_vigil');
         }
       }
     }
@@ -1123,7 +1166,7 @@ export class CombatEngine {
   }
 
   /** Input for bossAssist evaluations against a live state. */
-  private allyBossAssistInput(playerFallen: boolean): BossAssistInput {
+  private allyBossAssistInput(state: AllySaveState, playerFallen: boolean): BossAssistInput {
     const boss = this.enemies.find((e) => e._isBoss && e.hp > 0);
     return {
       playerHp: this.player.currentHP,
@@ -1132,7 +1175,7 @@ export class CombatEngine {
       playerFallen,
       playerHasDebuff: false,
       round: this.round,
-      foughtTogether: 1,
+      foughtTogether: state.battlesTogether,
     };
   }
 
@@ -1402,13 +1445,15 @@ export class CombatEngine {
     return mult;
   }
 
-  private computeAndApplyDamage(target: InternalEnemy, sourcePower: number, defenseStat: number, damageType: DamageType, label: string, statKey: 'def' | 'mdef' = 'def', guaranteedHit = false, recordProfile = true): { dmg: number; hit: boolean; crit: boolean; weak: boolean } {
+  private computeAndApplyDamage(target: InternalEnemy, sourcePower: number, defenseStat: number, damageType: DamageType, label: string, statKey: 'def' | 'mdef' = 'def', guaranteedHit = false, recordProfile = true, isAlly = false): { dmg: number; hit: boolean; crit: boolean; weak: boolean } {
     if (!guaranteedHit && !this.rollHit(target)) {
       this.log.push(`${label} misses ${target.name}.`);
-      this.playerAP = 0;
-      this.log.push('The miss unbalances you — all tokens lost.');
-      const missState = this.windowStates.get(target._key);
-      if (missState) resetWeakStreak(missState);
+      if (!isAlly) {
+        this.playerAP = 0;
+        this.log.push('The miss unbalances you — all tokens lost.');
+        const missState = this.windowStates.get(target._key);
+        if (missState) resetWeakStreak(missState);
+      }
       return { dmg: 0, hit: false, crit: false, weak: false };
     }
     let weakness = target.affinities[damageType] ?? 1.0;
@@ -1519,7 +1564,7 @@ export class CombatEngine {
     }
     const mitigated = applyBarrier(target.statuses, dmg);
     if (mitigated < dmg) this.log.push(`${target.name}'s Barrier absorbs part of the blow.`);
-    if (dmg > 0 && mitigated === 0) {
+    if (dmg > 0 && mitigated === 0 && !isAlly) {
       const lost = Math.floor(this.playerAP / 2);
       this.applyTokenDelta(-lost, `The blow was fully absorbed — you lose ${lost} token(s).`);
     }
@@ -1558,30 +1603,34 @@ export class CombatEngine {
 
     const weak = weakness > 1;
     this.log.push(`${label} hits ${target.name} for ${mitigated} damage${crit ? ' (Critical!)' : ''}${weak ? ' — weakness exploited!' : ''}.`);
+    // Phase 4d: the first time you exploit a weakness, Revelation is no longer pending on the trigger.
+    if (weak && !isAlly) this.firstWeaknessRevealed = true;
     if (weak) {
       const windowNote = recordWeakHit(state);
       const wMult = windowMomentumMult(state);
-      this.gainMomentum(2 * wMult);
-      this.applyTokenDelta(1, `Weakness hit — +1 token${wMult > 1 ? ' (window doubles momentum)' : ''}.`);
+      if (!isAlly) {
+        this.gainMomentum(2 * wMult);
+        this.applyTokenDelta(1, `Weakness hit — +1 token${wMult > 1 ? ' (window doubles momentum)' : ''}.`);
+      }
       if (windowNote === 'opened') {
         this.pendingBanners.push('WEAKNESS WINDOW — resistances melt; damage +50% for 2 turns');
         this.log.push(`WINDOW — ${target.name}'s weakness is laid bare: +50% damage for ${windowActive(state) ? '2 turns' : ''}.`);
       }
-    } else {
+    } else if (!isAlly) {
       resetWeakStreak(state);
     }
     if (reaction) {
       this.applyReactionEffect(target, reaction, mitigated);
       this.pendingBanners.push(`REACTION ${reaction.label}`);
     }
-    if (crit) {
+    if (crit && !isAlly) {
       this.gainMomentum(1);
       this.applyTokenDelta(1, 'Critical hit — +1 token.');
       if (this.player.skillsKnown.includes('precision')) {
         this.applyTokenDelta(1, 'Precision — the critical strike restores 1 AP.');
       }
     }
-    if (target.hp <= 0) {
+    if (target.hp <= 0 && !isAlly) {
       this.gainMomentum(1);
       this.applyTokenDelta(1, 'Enemy slain — +1 token.');
     }
@@ -2245,10 +2294,9 @@ export class CombatEngine {
     this.nudgeCalm(1);
     this.log.push(...this.probeIntel(target, probeId));
     if (this.player.stats.int >= 10) {
-      this.log.push(this.probeBonus(target));
-      this.log.push(this.probeBonus(target));
+      this.log.push(this.probeBonus(target, true));
     } else if (this.player.stats.int >= 7) {
-      this.log.push(this.probeBonus(target));
+      this.log.push(this.probeBonus(target, false));
     }
     this.lastActionId = 'probe';
     this.lastActionType = null;
@@ -2282,6 +2330,11 @@ export class CombatEngine {
         lines.push(`WEAPON — it favours ${atkType} strikes.${intent ? ` Next: ${intent.label} (${intent.description})` : ''}`);
         break;
       }
+      case 'observe_behavior': {
+        const tend = this.tendencyFor(e);
+        lines.push(`BEHAVIOR — ${tend ? `its pattern suggests ${tendencyName(tend)}. ${tendencyHint(tend)}` : 'it has no consistent tells — press the advantage with direct pressure.'}`);
+        break;
+      }
       case 'observe_memory': {
         const def = ALL_ENEMY_DEFS[e.defId];
         lines.push(`MEMORY — ${def?.description ?? 'It leaves no memory worth keeping.'}`);
@@ -2304,10 +2357,20 @@ export class CombatEngine {
     return lines;
   }
 
-  private probeBonus(e: InternalEnemy): string {
+  private probeBonus(e: InternalEnemy, deep: boolean): string {
     const intent = this.intentDefFor(e);
-    if (intent) return `Your intellect catches an extra thread — "${intent.label}": ${intent.description}`;
-    return 'Your intellect catches an extra thread — no further intent, but its timing is now predictable.';
+    const base = 'Your intellect catches an extra thread';
+    if (deep) {
+      if (intent) return `${base} — "${intent.label}": ${intent.description}. Its posture also gives you ${this.probeDefenseRead(e)}.`;
+      return `${base} — no further intent, but its timing is now predictable. Its posture gives you ${this.probeDefenseRead(e)}.`;
+    }
+    if (intent) return `${base} — "${intent.label}": ${intent.description}`;
+    return `${base} — no further intent, but its timing is now predictable.`;
+  }
+
+  private probeDefenseRead(e: InternalEnemy): string {
+    const tend = this.tendencyFor(e);
+    return tend ? `a hint of ${tendencyName(tend)}` : 'no clear opening';
   }
 
   /** Deep Analysis (2 AP): full read on the target. Requires at least one probe. */
@@ -2429,7 +2492,7 @@ export class CombatEngine {
     this.nudgeAggression(2);
     if (choice === 'flow') {
       this.playerAP += 2;
-      applyStatus(this.playerStatuses, 'exhausted', 1);
+       applyStatus(this.playerStatuses, 'exhausted', 2);
       this.log.push('Momentum: Flow — you act again immediately, but will start next round exhausted.');
     } else if (choice === 'harmony') {
       const heal = this.interdictedHeal(Math.round(this.player.derived.maxHP * 0.25));

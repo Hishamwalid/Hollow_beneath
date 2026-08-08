@@ -944,10 +944,12 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
     const state = freshAllyState(allyId);
-    state.loyalty = 5;
     const homeRegion = { warden_emissary: 'dominion', covenant_courier: 'covenant_deep', sable_zealot: 'sable_edge', archive_cartographer: 'keth_vor' }[allyId] as 'keth_vor' | 'dominion' | 'sable_edge' | 'covenant_deep';
-    bindRegion(state, homeRegion);
-    player.companions.push(state);
+    // A companion that chooses to walk with you starts at the nominal accompany threshold (15)
+    // and is formally bound to its home region for loyalty growth. (bindRegion returns a new
+    // state, so we capture it rather than discarding the +5 loyalty bump.)
+    const bound = bindRegion({ ...state, loyalty: 15 }, homeRegion);
+    player.companions.push(bound);
     player.echoShards += applyShardBonus(player, shardsForAllyVictory(5));
     const s = useGameStore.getState();
     s.addXp(8);

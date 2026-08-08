@@ -633,6 +633,18 @@ ok('all documented events/choices exercised');
     ok('ally tracking: loyalty curves, regions, cooldowns verified');
   }
 
+  // 17b-2. Recruitment: a companion found in the world must accompany (Phase 5 gating fix)
+  {
+    // Mirrors BoardScene.resolveAllyNode: fresh state + home-region bond.
+    const recruited = bindRegion({ ...freshAllyState('sable_zealot'), loyalty: 15 }, 'sable_edge');
+    assert(accompaniesIn(recruited.loyalty), 'recruited companion accompanies (loyalty >= 15)');
+    assert(recruited.boundRegions.length === 1, 'recruited companion is bound to its region');
+    // Cooldowns must persist: once set, the gate stays true (regression for dropped setCooldown).
+    const withCd = setCooldown(recruited, 'first_church_word', true);
+    assert(hasCooldown(withCd, 'first_church_word'), 'once-per-fight cooldown persists after setCooldown');
+    ok('ally recruitment: accompanying loyalty + persistent cooldowns verified');
+  }
+
   // 17c. Combat evaluator deterministic priorities
   {
     const courier = ALLY_DEFS.covenant_courier;
@@ -663,7 +675,7 @@ ok('all documented events/choices exercised');
     const courier = freshAllyState('covenant_courier');
     courier.loyalty = 100; // True: field_dressing + mercy_pact available
     player.currentHP = Math.round(player.derived.maxHP * 0.4);
-    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set(), allies: [courier] });
+    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: () => 0.1, playerHistory: new Set(), allies: [courier] });
     let snap = engine.beginRound();
     while (snap.phase === 'player' && snap.playerAP > 0) snap = engine.attack();
     const hpBeforeEnd = snap.playerHP;
