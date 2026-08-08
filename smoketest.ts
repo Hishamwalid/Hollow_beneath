@@ -568,6 +568,25 @@ ok('all documented events/choices exercised');
       ok('momentum Flow: +2 AP now, exhausted (2 turns) survives to next round (-1 AP)');
     }
 
+    // 13c2. Crisis trigger: a real weakness hit opens the Revelation crisis.
+    // Ties B2 (firstWeaknessRevealed on a weakness hit) -> checkCrisis -> pickCrisis('revelation').
+    {
+      // Low STR so sealing_strike (sacred, 2.0x weak vs echo_skeleton) lands a weakness
+      // hit without one-shotting the 35-HP skeleton.
+      const player = makeTestPlayer({ str: 4, dex: 6, con: 12, int: 10, will: 10 });
+      player.skillsKnown = ['sealing_strike'];
+      player.currentHP = player.derived.maxHP;
+      const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(7), playerHistory: new Set() });
+      const snap0 = engine.beginRound();
+      const key = snap0.enemies.find((e) => e.alive)?.key;
+      assert(!!key, 'engine has an alive enemy to provoke a weakness hit');
+      const after = engine.useSkill('sealing_strike', key);
+      assert(after.enemies.some((e) => e.alive), 'enemy survives a low-STR weakness hit');
+      const snap = engine.checkCrisis();
+      assert(snap.phase === 'crisis' && snap.pendingCrisis?.id === 'revelation', `first weakness hit triggers the Revelation crisis (phase=${snap.phase}, crisis=${snap.pendingCrisis?.id ?? 'none'})`);
+      ok('crisis trigger: Revelation fires on first weakness hit (revealed -> pickCrisis)');
+    }
+
     // 13d. Fear: threshold modifiers, snapshot surfacing, bravery actions.
     {
       assert(JSON.stringify(fearModifiers(49)) === JSON.stringify({ damageMult: 1, accuracyMult: 1 }), 'fear below threshold has no modifiers');
