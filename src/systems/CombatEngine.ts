@@ -100,6 +100,8 @@ import {
 import { bandFor, stressFor, STRESS_BAND_ORDER } from './combat/StressSystem';
 import { ADAPTATION_META, evaluateAdaptation } from './combat/AdaptationSystem';
 import { chargeBanner, chargeLabel, chargeLog, unleashBanner, unleashLog, adaptationBanner } from './combat/TellSystem';
+// ---- Phase 6a: battlefield states (global damage modifiers) ----
+import { BATTLEFIELD_STATES, BattlefieldState, battlefieldDamageMod, tickBattlefieldState, type BattlefieldStateId } from './combat/BattlefieldStateSystem';
 
 const ALL_ENEMY_DEFS = { ...ENEMIES, ...SUMMON_ENEMIES };
 
@@ -178,6 +180,8 @@ export interface CombatSnapshot {
   allies: Array<{ id: string; name: string; loyalty: number; tier: string; action: string }>;
   /** Phase 5: boss intelligence read-out (stress band, adaptations; absent for non-boss fights). */
   bossIntel?: BossIntelView;
+  /** Phase 6a: active global battlefield state (null when none). */
+  battlefieldState?: { id: BattlefieldStateId; turns: number } | null;
 }
 
 /** Phase 5: the boss's live read on the player, exported for the HUD. */
@@ -371,8 +375,12 @@ export class CombatEngine {
   private bossResistType: DamageType | null = null;
   /** Phase 5: telegraphed ultimate waiting to be unleashed next boss turn. */
   private chargedIntent: BossIntentDef | null = null;
-  /** Boss round during which the charge was declared (must pass before it can unleash). */
+     /** Boss round during which the charge was declared (must pass before it can unleash). */
   private chargedRound = -1;
+
+  // ---- Phase 6a: battlefield states (global damage modifiers) ----
+  /** Active global battlefield state (null when none; a new state overrides an old one). */
+  private battlefieldState: BattlefieldState | null = null;
 
   private readonly BOSS_TENDENCY: Record<string, EnemyTendency> = {
     sentinel: 'sage',
@@ -624,6 +632,12 @@ export class CombatEngine {
     if (this.aegisTurns > 0) { this.aegisTurns -= 1; if (this.aegisTurns === 0) this.aegisGuard = 0; }
     if (this.mirrorTurns > 0) this.mirrorTurns -= 1;
     if (this.eagleAccuracyTurns > 0) this.eagleAccuracyTurns -= 1;
+    // Phase 6a: battlefield state decays after each full round.
+    const prevState = this.battlefieldState;
+    this.battlefieldState = tickBattlefieldState(this.battlefieldState);
+    if (prevState && this.battlefieldState === null) {
+      this.log.push('The battlefield state fades.');
+    }
     for (const [key, turns] of this.marked) {
       const next = turns - 1;
       if (next <= 0) this.marked.delete(key);
@@ -975,6 +989,18 @@ export class CombatEngine {
     const enemy = this.buildEnemyCombatant(enemyId, hpOverride);
     enemy._key = uniqueKey;
     this.enemies.push(enemy);
+  }
+
+  // ---- Phase 6a: battlefield states -----------------------------------------
+  /** Sets (or refreshes) the global battlefield state. A new state type replaces; same type extends duration. */
+  applyBattlefieldState(id: BattlefieldStateId, turns = 3): void {
+    if (this.battlefieldState?.id === id) {
+      this.battlefieldState.turns = Math.max(this.battlefieldState.turns, turns);
+    } else {
+      this.battlefieldState = { id, turns };
+      this.log.push(`The field becomes ${BATTLEFIELD_STATES[id].label} — damage relations shift for ${turns} turns.`);
+      this.pendingBanners.push(`${BATTLEFIELD_STATES[id].label} — the field has changed.`);
+    }
   }
 
   // ---- Phase 5: companion turns ----------------------------------------------
@@ -1500,6 +1526,8 @@ export class CombatEngine {
     if (target._isBoss && this.bossBand() === 'critical') effDefSource = Math.round(defenseStat * 0.7);
     const effDef = Math.round(effDefSource * defReduction * reactionArmorPierce * statMultiplier(target.statuses, statKey));
     let dmg = Math.max(3, Math.round((sourcePower - effDef / 2) * weakness * variance * unravelMult * comboMult));
+    const stateMod = battlefieldDamageMod(this.battlefieldState, damageType);
+    if (stateMod !== 1) dmg = Math.round(dmg * stateMod);
     dmg = Math.round(dmg * windowDamageMult(state));
     if (crit) dmg = Math.round(dmg * 1.5);
     if (hasStatus(this.playerStatuses, 'echo_surge')) dmg = Math.round(dmg * 1.2);
@@ -2884,6 +2912,7 @@ export class CombatEngine {
         : undefined,
       fear: this.fear,
       bossIntel: this.bossIntelView() ?? undefined,
+      battlefieldState: this.battlefieldState,
       allies: this.allyStates
         .filter((s) => accompaniesIn(s.loyalty))
         .map((s) => ({

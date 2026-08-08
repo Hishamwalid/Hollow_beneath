@@ -29,6 +29,7 @@ import {
 } from '@systems/combat/WeaknessWindowSystem';
 import { resolveReaction } from '@systems/combat/ElementalReactionSystem';
 import { matchCombo } from '@systems/combat/ComboSystem';
+import { battlefieldDamageMod, BATTLEFIELD_STATES } from '@systems/combat/BattlefieldStateSystem';
 import { CRISES, type CrisisId } from '@systems/combat/CrisisSystem';
 import { fearModifiers } from '@systems/combat/FearSystem';
 import { hasStatus, getStatus, tickDurations } from '@systems/StatusEffectSystem';
@@ -794,6 +795,33 @@ assert(bossChargeSeen !== '', 'boss charge cycle seen in simulation');
     assert(snap.phase === 'defeat', `0 HP yields defeat (got phase=${snap.phase})`);
     assert(snap.playerHP === 0, `defeat snapshot reports playerHP=0 (got ${snap.playerHP})`);
     ok('edge case: 0 HP -> defeat (no throw, well-formed snapshot)');
+  }
+
+  // ---- 19. Phase 6a: Battlefield States (global damage modifiers) -------------
+  {
+    // Unit: state multipliers are correct and null is neutral.
+    assert(battlefieldDamageMod({ id: 'sacred_ground', turns: 3 }, 'sacred') === 1.3, 'sacred ground: sacred x1.3');
+    assert(battlefieldDamageMod({ id: 'sacred_ground', turns: 3 }, 'shadow') === 0.6, 'sacred ground: shadow x0.6');
+    assert(battlefieldDamageMod({ id: 'silence_field', turns: 3 }, 'flame') === 0.5, 'silence field: magic x0.5');
+    assert(battlefieldDamageMod({ id: 'silence_field', turns: 3 }, 'slash') === 1.1, 'silence field: physical x1.1');
+    assert(battlefieldDamageMod(null, 'slash') === 1, 'no state = neutral');
+    // New overrides old; same-type extends (max).
+    assert(Object.keys(BATTLEFIELD_STATES).length === 8, `all 8 battlefield states defined (has ${Object.keys(BATTLEFIELD_STATES).length})`);
+
+    // Integration: state is applied, survives one tick, then expires.
+    const player = makeTestPlayer({ str: 4, dex: 6, con: 12, int: 10, will: 10 });
+    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(4501), playerHistory: new Set() });
+    engine.beginRound();
+    engine.applyBattlefieldState('truth_aura', 2);
+    let snap = engine.snapshot();
+    assert(snap.battlefieldState?.id === 'truth_aura' && snap.battlefieldState.turns === 2, `state applied (id=${snap.battlefieldState?.id}, turns=${snap.battlefieldState?.turns})`);
+    snap = engine.endPlayerPhase();
+    assert(snap.battlefieldState?.turns === 1, `state ticks down to 1 after one round (got ${snap.battlefieldState?.turns})`);
+    if (snap.phase !== 'victory' && snap.phase !== 'defeat') snap = engine.beginRound();
+    snap = engine.endPlayerPhase();
+    assert(snap.battlefieldState === null, `state expires after its duration (got ${snap.battlefieldState})`);
+    assert(snap.log.some((l) => l.includes('battlefield state fades')), 'expiry produces a log line');
+    ok('battlefield states: apply -> tick -> expire (truth_aura, 2 turns)');
   }
 }
 
