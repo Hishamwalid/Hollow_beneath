@@ -95,7 +95,7 @@ function makeTestPlayer(stats: StatBlock): PlayerState {
 // ---- 2. Regular combat vs a weak enemy ------------------------------------
 {
   const player = makeTestPlayer({ str: 8, dex: 6, con: 8, int: 4, will: 4 });
-  const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set() });
+  const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(555), playerHistory: new Set() });
   let snap = engine.beginRound();
   let rounds = 0;
   while (snap.phase !== 'victory' && snap.phase !== 'defeat' && rounds < 40) {
@@ -122,7 +122,7 @@ for (const bossId of BOSS_ORDER) {
     const boss = BOSSES[bossId];
     let engine: CombatEngine;
     try {
-      engine = new CombatEngine({ player, enemyIds: [], page: boss.page, bossDef: boss, rng: Math.random, playerHistory: new Set(['ate_venn_bread', 'joined_hymn']) });
+      engine = new CombatEngine({ player, enemyIds: [], page: boss.page, bossDef: boss, rng: mulberry32(7000 + attempt), playerHistory: new Set(['ate_venn_bread', 'joined_hymn']) });
     } catch (e) {
       failures++;
       console.error(`FAIL: boss ${bossId} constructor threw`, e);
@@ -163,22 +163,25 @@ for (const bossId of BOSS_ORDER) {
 assert(bossChargeSeen !== '', 'boss charge cycle seen in simulation');
 
 // ---- 4. Every documented event + every choice ------------------------------
-for (const event of Object.values(EVENTS)) {
-  for (const choice of event.choices) {
-    const player = makeTestPlayer({ str: 9, dex: 6, con: 6, int: 9, will: 9 });
-    player.gold = 200;
-    player.resonance = 60;
-    player.faction = { sable: 30, archive: 30, covenant: 30, caravan: 30 };
-    try {
-      const res = resolveEventChoice(player, choice, Math.random);
-      assert(typeof res.text === 'string' && res.text.length > 0, `${event.id}/${choice.id} returns text`);
-    } catch (e) {
-      failures++;
-      console.error(`FAIL: ${event.id}/${choice.id} threw`, e);
+{
+  let rngSeq = 0;
+  for (const event of Object.values(EVENTS)) {
+    for (const choice of event.choices) {
+      const player = makeTestPlayer({ str: 9, dex: 6, con: 6, int: 9, will: 9 });
+      player.gold = 200;
+      player.resonance = 60;
+      player.faction = { sable: 30, archive: 30, covenant: 30, caravan: 30 };
+      try {
+        const res = resolveEventChoice(player, choice, mulberry32(rngSeq++));
+        assert(typeof res.text === 'string' && res.text.length > 0, `${event.id}/${choice.id} returns text`);
+      } catch (e) {
+        failures++;
+        console.error(`FAIL: ${event.id}/${choice.id} threw`, e);
+      }
     }
   }
+  ok('all documented events/choices exercised');
 }
-ok('all documented events/choices exercised');
 
 // ---- 5. Endings ------------------------------------------------------------
 {
@@ -203,6 +206,7 @@ ok('all documented events/choices exercised');
 {
   const seenFragmentIds = new Set<string>();
   const allDefs = [...Object.values(EVENTS), ...Object.values(MINOR_LANDMARKS)];
+  let rngSeq = 0;
   for (const event of allDefs) {
     for (const choice of event.choices) {
       const player = makeTestPlayer({ str: 9, dex: 6, con: 6, int: 9, will: 9 });
@@ -210,7 +214,7 @@ ok('all documented events/choices exercised');
       player.resonance = 60;
       player.faction = { sable: 30, archive: 30, covenant: 30, caravan: 30 };
       try {
-        resolveEventChoice(player, choice, Math.random);
+        resolveEventChoice(player, choice, mulberry32(rngSeq++));
       } catch (e) {
         failures++;
         console.error(`FAIL: ${event.id}/${choice.id} threw`, e);
@@ -288,7 +292,7 @@ ok('all documented events/choices exercised');
 {
   const player = makeTestPlayer({ str: 8, dex: 6, con: 8, int: 10, will: 8 });
   player.skillsKnown.push('hunters_mark');
-  const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set() });
+  const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(6500), playerHistory: new Set() });
   let snap = engine.beginRound();
   const mpBefore = snap.playerMP;
   snap = engine.useSkill('hunters_mark'); // apCost:1, mpCost:3
@@ -425,7 +429,7 @@ ok('all documented events/choices exercised');
     const player = makeTestPlayer({ str: 12, dex: 6, con: 12, int: 10, will: 10 });
     player.skillsKnown = ['sealing_strike'];
     player.currentHP = player.derived.maxHP;
-    const engine = new CombatEngine({ player, enemyIds: ['venn_custodian'], page: 1, rng: Math.random, playerHistory: new Set() });
+    const engine = new CombatEngine({ player, enemyIds: ['venn_custodian'], page: 1, rng: mulberry32(333), playerHistory: new Set() });
     let snap = engine.beginRound();
     const actions = ['attack', 'sunder', 'skill'] as const;
     let next = 0;
@@ -502,7 +506,7 @@ ok('all documented events/choices exercised');
     const makeEngine = (stats: StatBlock = { str: 8, dex: 6, con: 8, int: 4, will: 4 }) => {
       const player = makeTestPlayer(stats);
       player.currentHP = player.derived.maxHP;
-      return new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set() });
+      return new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(8008), playerHistory: new Set() });
     };
     const raw = (engine: CombatEngine) => engine as unknown as {
       phase: string; pendingCrisisId: string | null; playerAP: number; fear: number;
