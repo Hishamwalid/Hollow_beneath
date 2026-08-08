@@ -36,6 +36,7 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     faction: { ...STARTING_FACTIONS },
     equipment: { weapon: 'rusty_dagger', armour: 'leather_vest', accessory: null, focus: 'cracked_lens' },
     inventory: STARTING_INVENTORY.map((i) => ({ ...i })),
+    companions: [],
     flags: {},
     history: [],
     loreFragments: [],

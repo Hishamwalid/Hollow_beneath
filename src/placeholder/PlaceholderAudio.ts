@@ -59,6 +59,9 @@ class PlaceholderAudioEngine {
   shardGain(): void { this.tone(900, 50, 'sine'); this.tone(1200, 70, 'sine', 40); }
   pageTurn(): void { this.tone(200, 40, 'triangle'); this.tone(160, 60, 'triangle', 30); }
   checkpoint(): void { this.tone(660, 80, 'triangle'); this.tone(880, 120, 'triangle', 90); }
+  crisis(): void { this.tone(90, 320, 'sawtooth', 0, 1.3); this.tone(60, 400, 'sine', 90, 1.2); this.tone(130, 200, 'sawtooth', 200, 0.9); }
+  bravery(): void { this.tone(330, 80, 'triangle'); this.tone(440, 120, 'triangle', 70); this.tone(550, 160, 'triangle', 140); }
+  desperation(): void { this.tone(140, 240, 'square', 0, 0.9); this.tone(105, 300, 'sine', 80, 0.9); }
 
   setMasterVolume(v: number): void {
     this.masterVolume = Math.min(1, Math.max(0, v / 100));

@@ -2,7 +2,7 @@ import type { GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
 import { CLASS_OF_PRESET, closestPresetName } from '@data/stats';
 
 const STORAGE_KEY = 'hollow_beneath_save_v1';
-const VERSION = 3;
+const VERSION = 4;
 
 function simpleChecksum(payload: string): string {
   let hash = 0;
@@ -50,6 +50,8 @@ function migrateBlob(blob: SaveBlob): SaveBlob {
     if (typeof player.insight !== 'number') player.insight = 0;
     if (typeof player.fearGauge !== 'number') player.fearGauge = 0;
     if (!player.position) player.position = 'middle';
+    // Phase 5: v3 saves predate companions.
+    if (!Array.isArray(player.companions)) player.companions = [];
   }
   blob.version = VERSION;
   return blob;

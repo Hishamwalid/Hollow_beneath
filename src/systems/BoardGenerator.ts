@@ -6,6 +6,13 @@ import { TOTAL_NODES, NODES_PER_PAGE, PAGES } from '@/config';
 export const CHECKPOINTS = [40, 80, 120, 160];
 export const LANDMARK_INDICES = [40, 80, 120, 160, 200];
 export const CAPTURE_INDICES = [10, 30, 50, 70, 90, 110, 130, 150, 170, 190];
+/** Phase 5: fixed encounter points where companions can join the run. */
+export const ALLY_INDICES: Record<number, string> = {
+  25: 'warden_emissary',
+  70: 'covenant_courier',
+  115: 'sable_zealot',
+  160: 'archive_cartographer',
+};
 
 const NODE_WEIGHTS: Array<[NodeType, number]> = [
   ['event', 45],
@@ -44,6 +51,10 @@ export function generateBoard(rng: () => number): BoardNode[] {
     }
     if (CAPTURE_INDICES.includes(i)) {
       nodes.push({ index: i, page, type: 'discovery', subtype: 'capture_point', resolved: false });
+      continue;
+    }
+    if (ALLY_INDICES[i]) {
+      nodes.push({ index: i, page, type: 'discovery', subtype: `ally:${ALLY_INDICES[i]}`, resolved: false });
       continue;
     }
 

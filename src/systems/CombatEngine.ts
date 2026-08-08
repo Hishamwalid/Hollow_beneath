@@ -1,4 +1,5 @@
 import type {
+  AdaptationId,
   AffinityMap,
   BossDef,
   BossIntentDef,
@@ -12,6 +13,7 @@ import type {
   SkillDef,
   StatusId,
   StatusInstance,
+  StressBand,
 } from '@data/types';
 import { ENEMIES, SUMMON_ENEMIES } from '@data/enemies';
 import { ITEMS } from '@data/items';
@@ -66,6 +68,39 @@ import {
   tagsForSkill,
   type ComboDef,
 } from './combat/ComboSystem';
+// ---- Phase 5: companion / ally systems ----
+import { ALLY_DEFS, tierForLoyalty, type AllyDef, type AllyAbilityDef } from './ally/AllyDefs';
+import {
+  accompaniesIn,
+  hasCooldown,
+  loyaltyGain,
+  setCooldown,
+  type AllySaveState,
+} from './ally/AllyTracking';
+import { planAllyTurn, type AllyCombatInput, type AllyTurnPlan } from './ally/AllyCombat';
+import { bossAssist, type BossAssistInput } from './ally/AllyBoss';
+// ---- Phase 5: boss intelligence (profiling / stress / adaptation / tells) ----
+import {
+  createProfile,
+  profileView,
+  recordAction,
+  recordAnalyze,
+  recordBuffUsed,
+  recordCombo,
+  recordCrit,
+  recordDamage,
+  recordGuard,
+  recordHeal,
+  recordItem,
+  recordMomentumSpend,
+  recordRepeat,
+  recordStatusApplied,
+  recordTurn,
+  recordWeaknessHit,
+} from './combat/ProfileSystem';
+import { bandFor, stressFor, STRESS_BAND_ORDER } from './combat/StressSystem';
+import { ADAPTATION_META, evaluateAdaptation } from './combat/AdaptationSystem';
+import { chargeBanner, chargeLabel, chargeLog, unleashBanner, unleashLog, adaptationBanner } from './combat/TellSystem';
 
 const ALL_ENEMY_DEFS = { ...ENEMIES, ...SUMMON_ENEMIES };
 
@@ -79,6 +114,8 @@ export interface CombatSetup {
   bossDef?: BossDef;
   precombatFlags?: Record<string, number>;
   playerHistory: Set<string>;
+  /** Phase 5: companions accompanying the player into this fight. */
+  allies?: AllySaveState[];
 }
 
 export interface EnemyView {
@@ -97,7 +134,7 @@ export interface EnemyView {
   tendency: string;
   investigationLayer: number;
   investigationProbes: string[];
-  pendingIntent: { id: string; label: string; confidence: IntentConfidence } | null;
+  pendingIntent: { id: string; label: string; confidence: IntentConfidence; charged?: boolean } | null;
   /** Turns remaining on an opened weakness window (Phase 3). */
   weakWindowTurns: number;
   /** Consecutive weakness hits landed (Phase 3). */
@@ -138,6 +175,19 @@ export interface CombatSnapshot {
   pendingCrisis?: { id: CrisisId; title: string; flavor: string; options: CrisisOption[] };
   /** Phase 4e: hidden fear gauge 0-100 (HUD may show a shiver when >50). */
   fear: number;
+  /** Phase 5: companions present in the fight (name, loyalty, tier, last action note). */
+  allies: Array<{ id: string; name: string; loyalty: number; tier: string; action: string }>;
+  /** Phase 5: boss intelligence read-out (stress band, adaptations; absent for non-boss fights). */
+  bossIntel?: BossIntelView;
+}
+
+/** Phase 5: the boss's live read on the player, exported for the HUD. */
+export interface BossIntelView {
+  stress: number;
+  band: StressBand;
+  adaptations: AdaptationId[];
+  resistType: DamageType | null;
+  chargedLabel: string | null;
 }
 
 interface InternalEnemy extends CombatState_Enemy {
@@ -265,6 +315,31 @@ export class CombatEngine {
   /** Crisis All-In: the player gambles a 30% death chance on their next damaging attack. */
   private allInPending = false;
 
+  // ---- Phase 4 crisis-option & desperation effect state ----
+  /** Revelation-Exploit Focus: treat the target as weak (best affinity x2) for N turns. */
+  private alwaysWeakTurns = 0;
+  /** Revelation-Share: +20% damage vs this damage type for the fight. */
+  private fightTypeBuff: DamageType | null = null;
+  /** Critical Moment-Cascade: +100% damage this turn after spending all momentum. */
+  private cascadeThisTurn = false;
+  /** Fate's Edge-Final Stand: +50% damage for N turns. */
+  private playerDmgMultTurns = 0;
+  /** Last Prayer: +30% damage for N turns. */
+  private lastPrayerDmgTurns = 0;
+  /** Incoming damage multiplier (Final Stand x2 / Broken Resolve x1.8) for N turns. */
+  private incomingMultTurns = 0;
+  private incomingMultFactor = 1;
+  /** Fate's Edge-Prolong: enemies deal 30% less damage for N turns. */
+  private enemyDmgReduceTurns = 0;
+  /** Desperation-Broken Resolve: next 3 attacks deal 2x. */
+  private desperation2xCharges = 0;
+  /** Desperation-One Last Memory: healing sealed for the fight. */
+  private noHeal = false;
+  /** Desperation-One Last Memory: attacks ignore defense for the fight. */
+  private armorPierceAll = false;
+  /** Desperation-Burn the Archive: +30% damage for the fight. */
+  private fightDmgBuff = 0;
+
   // ---- Phase 4d/e/f: Crisis, Fear, Desperation ----
   private crisisSeen: CrisisId[] = [];
   /** Snapshot-exposed pending crisis the scene must present as a modal. */
@@ -274,6 +349,31 @@ export class CombatEngine {
   private desperationFired: DesperationId[] = [];
   /** First weakness ever revealed (drives the Revelation crisis). */
   private firstWeaknessRevealed = false;
+
+  // ---- Phase 5: companion / ally systems ----
+  /** Companion save-states carried into this fight (mutated on victory/defeat). */
+  private allyStates: AllySaveState[] = [];
+  /** True while the ally absorbed the next hit meant for the player (Aegis Body). */
+  private allyGuardAbsorb = 0;
+  /** Once-per-combat loyalty/reward accounting. */
+  private allyRewardsApplied = false;
+  /** First Church Word: the boss cannot act first this combat. */
+  private allyDenyBossFirstTurn = false;
+
+  // ---- Phase 5: boss intelligence state (profiling / stress / adaptations) ----
+  /** Combat-local 12-metric trace of the player's behaviour. */
+  private profile = createProfile();
+  /** Stress nudges: player aggression vs. caution (pure counters; merged with HP loss at read time). */
+  private bossAggression = 0;
+  private bossCalm = 0;
+  /** Adaptations the boss has learned (ids only; effects live in the engine). */
+  private adaptations: AdaptationId[] = [];
+  /** Favourite-element resistance learned via adaptation. */
+  private bossResistType: DamageType | null = null;
+  /** Phase 5: telegraphed ultimate waiting to be unleashed next boss turn. */
+  private chargedIntent: BossIntentDef | null = null;
+  /** Boss round during which the charge was declared (must pass before it can unleash). */
+  private chargedRound = -1;
 
   private readonly BOSS_TENDENCY: Record<string, EnemyTendency> = {
     sentinel: 'sage',
@@ -290,6 +390,7 @@ export class CombatEngine {
     this.bossDef = setup.bossDef;
     this.flags = { ...(setup.precombatFlags ?? {}) };
     this.playerHistorySet = setup.playerHistory;
+    this.allyStates = (setup.allies ?? []).map((a) => ({ ...a }));
 
     if (this.player.skillsKnown.includes('chorus_echo')) {
       this.player.momentum = Math.max(this.player.momentum, 1);
@@ -297,6 +398,9 @@ export class CombatEngine {
 
     if (setup.bossDef) {
       this.enemies.push(this.buildBossCombatant(setup.bossDef));
+      if (setup.bossDef.persona) {
+        this.log.push(`${setup.bossDef.name} — the ${setup.bossDef.persona.label}. ${setup.bossDef.persona.blurb}`);
+      }
     } else {
       for (const id of setup.enemyIds) {
         const enemy = this.buildEnemyCombatant(id);
@@ -394,10 +498,11 @@ export class CombatEngine {
   beginRound(): CombatSnapshot {
     if (this.phase === 'victory' || this.phase === 'defeat' || this.phase === 'fled') return this.snapshot();
     this.round += 1;
+    recordTurn(this.profile);
+    for (const e of this.enemies) if (e._isBoss) e.flags.martyrShockFired = 0;
     this.playerAP = 3 + (this.round === 1 && this.player.skillsKnown.includes('borrowed_time') ? 1 : 0) + this.bankedAP;
     this.bankedAP = 0;
     this.guarding = false;
-    this.lastActionRepeated = false;
     this.veilStepGuaranteed = false;
     this.nextAttackMult = 1;
     this.nextAttackGuaranteed = false;
@@ -409,6 +514,7 @@ export class CombatEngine {
     this.actionsTakenThisRound = 0;
     this.flags.fossilLastLaw = 0;
     this.overclockActive = false;
+    this.cascadeThisTurn = false;
     if (this.bossEnrageTurns > 0) this.bossEnrageTurns -= 1;
 
     // Exhaustion (from the "Flow" momentum trigger)
@@ -436,6 +542,16 @@ export class CombatEngine {
     }
     this._playerUsedMagicLastTurn = false;
     this.pickIntents();
+    // Phase 5: First Church Word — a loyal zealot can deny the boss its opening move.
+    if (this.round === 1) {
+      this.allyDenyBossFirstTurn = this.allyStates.some((st) => {
+        if (hasCooldown(st, 'first_church_word')) return false;
+        const def = this.allyDefFor(st);
+        const assist = bossAssist(def, st, this.allyBossAssistInput(false));
+        return assist.denyFirstStrike;
+      });
+      if (this.allyDenyBossFirstTurn) this.log.push('A companion speaks the First Church Word — the boss cannot begin moving.');
+    }
     const playerSpd = this.effectivePlayerSpeed();
     const faster = alive.filter((e) => this.enemyEffectiveSpeed(e) > playerSpd).sort((a, b) => this.enemyEffectiveSpeed(b) - this.enemyEffectiveSpeed(a));
     this.resolvingEnemyTurns = true;
@@ -459,6 +575,7 @@ export class CombatEngine {
     if (this.phase !== 'player') return this.snapshot();
     this.lastActionRepeated = this.lastActionId !== null && this.lastActionId === this._prevActionId;
     this._prevActionId = this.lastActionId;
+    if (this.lastActionRepeated) recordRepeat(this.profile);
 
     // AP banking: leftover AP banks 1 (max 1 stored); idling the whole turn banks up to 2.
     if (this.actionsTakenThisRound === 0) {
@@ -489,12 +606,21 @@ export class CombatEngine {
       // applied implicitly via statMultiplier('spd') using status effects; frostbite speed penalty is informational for now
     }
     if (hasStatus(this.playerStatuses, 'regeneration')) {
-      const regenAmt = Math.round(this.player.derived.maxHP * 0.05);
+      const regenAmt = this.interdictedHeal(Math.round(this.player.derived.maxHP * 0.05));
       this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + regenAmt);
+      if (regenAmt > 0) recordHeal(this.profile, regenAmt);
       this.log.push(`Regeneration restores ${regenAmt} HP.`);
     }
     tickDurations(this.playerStatuses).forEach((m) => this.log.push(m));
     if (this.lastStandTurns > 0) this.lastStandTurns -= 1;
+    if (this.alwaysWeakTurns > 0) this.alwaysWeakTurns -= 1;
+    if (this.playerDmgMultTurns > 0) this.playerDmgMultTurns -= 1;
+    if (this.lastPrayerDmgTurns > 0) this.lastPrayerDmgTurns -= 1;
+    if (this.incomingMultTurns > 0) {
+      this.incomingMultTurns -= 1;
+      if (this.incomingMultTurns === 0) this.incomingMultFactor = 1;
+    }
+    if (this.enemyDmgReduceTurns > 0) this.enemyDmgReduceTurns -= 1;
     if (this.thesisTurns > 0) { this.thesisTurns -= 1; if (this.thesisTurns === 0) this.thesisType = null; }
     if (this.aegisTurns > 0) { this.aegisTurns -= 1; if (this.aegisTurns === 0) this.aegisGuard = 0; }
     if (this.mirrorTurns > 0) this.mirrorTurns -= 1;
@@ -527,25 +653,61 @@ export class CombatEngine {
     }
 
     this.checkOutcome();
+    if (this.phase === 'player') this.resolveAllyTurns();
+    this.checkOutcome();
     return this.snapshot();
   }
 
   private checkOutcome(): void {
     if (this.player.currentHP <= 0) {
-      if (this.player.skillsKnown.includes('unfinished_sentence') && !this.player.flags.deathWardUsed) {
+      // Phase 5: a devoted courier refuses to let the letter end here.
+      if (this.tryAllyRevive()) {
+        this.log.push('Your companion pulls you back from the threshold.');
+      } else if (this.player.skillsKnown.includes('unfinished_sentence') && !this.player.flags.deathWardUsed) {
         this.player.flags.deathWardUsed = true;
         this.player.currentHP = 1;
         this.log.push('Unfinished Sentence: the killing blow leaves you at 1 HP instead.');
       } else {
         this.phase = 'defeat';
         this.restoreOverclockedMaxHp();
+        this.applyAllyRewards();
         return;
       }
     }
     if (this.aliveEnemies().length === 0) {
       this.phase = 'victory';
     }
-    if (this.phase === 'victory') this.restoreOverclockedMaxHp();
+    if (this.phase === 'victory') {
+      this.restoreOverclockedMaxHp();
+      this.applyAllyRewards();
+    }
+  }
+
+  /** Phase 5: Bitter Revival — a devoted courier restores the player at 20% HP (once per combat). */
+  private tryAllyRevive(): boolean {
+    for (const state of this.allyStates) {
+      if (state.id !== 'covenant_courier' || !accompaniesIn(state.loyalty) || hasCooldown(state, 'bitter_revival')) continue;
+      const def = this.allyDefFor(state);
+      const assist = bossAssist(def, state, this.allyBossAssistInput(true));
+      if (assist.reviveAvailable) {
+        this.player.currentHP = assist.reviveHealAmount;
+        setCooldown(state, 'bitter_revival', true);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Phase 5: once per combat, tabulate loyalty and battle counts for companions. */
+  private applyAllyRewards(): void {
+    if (this.allyRewardsApplied) return;
+    this.allyRewardsApplied = true;
+    for (const state of this.allyStates) {
+      if (!accompaniesIn(state.loyalty)) continue;
+      state.battlesTogether += 1;
+      const delta = loyaltyGain(state, this.phase === 'victory');
+      if (delta > 0) this.log.push(`${this.allyDefFor(state).name}'s loyalty deepens (+${delta}).`);
+    }
   }
 
   /** Overclock's max-HP cost is scoped to a single combat — restore it when the fight concludes. */
@@ -576,16 +738,32 @@ export class CombatEngine {
     }
 
     if (enemy._isBoss && this.bossDef) {
+      // Phase 5: a denied opening — the boss wastes its first round.
+      if (this.allyDenyBossFirstTurn) {
+        this.allyDenyBossFirstTurn = false;
+        this.log.push(`${enemy.name} stands frozen, forbidden its first word.`);
+        const zealot = this.allyStates.find((s) => s.id === 'sable_zealot');
+        if (zealot) setCooldown(zealot, 'first_church_word', true);
+        return;
+      }
       this.bossOwnTurnCounter += 1;
       const hpPercent = enemy.hp / enemy.maxHp;
       const phaseInfo = this.bossDef.getPhase(hpPercent);
       enemy.affinities = { ...phaseInfo.affinities };
+      // Phase 5: a declared ultimate unleashes instead of a fresh intent.
+      if (this.isChargeDue() && this.unleashCharge(enemy)) {
+        if (this.bossOwnTurnCounter % 3 === 0) this.maybeAdapt(enemy);
+        this.checkOutcome();
+        return;
+      }
       const ctx = this.makeBossTurnCtx(enemy, this.bossOwnTurnCounter, phaseInfo.key);
       const intentId = this.pendingIntents.get(enemy._key);
       const intent = this.bossDef.intents?.find((i) => i.id === intentId);
       this.pendingIntents.delete(enemy._key);
       if (intent) intent.resolve(ctx);
       else this.bossDef.takeTurn(ctx);
+      // Phase 5: adaptation checks fire every 3rd boss turn.
+      if (this.bossOwnTurnCounter % 3 === 0) this.maybeAdapt(enemy);
       this.checkOutcome();
       return;
     }
@@ -605,10 +783,15 @@ export class CombatEngine {
     this.pendingIntents.clear();
     for (const e of this.aliveEnemies()) {
       if (e._isBoss && this.bossDef?.intents?.length) {
+        // Phase 5: a declared ultimate occupies the telegraph slot; no fresh intent is picked.
+        if (this.chargedIntent) continue;
         const phaseInfo = this.bossDef.getPhase(e.hp / e.maxHp);
         const ctx = this.makeBossTurnCtx(e, this.bossOwnTurnCounter + 1, phaseInfo.key);
         const picked = pickBossIntent(this.bossDef.intents, ctx, this.rng);
-        if (picked) this.pendingIntents.set(e._key, picked.id);
+        if (picked) {
+          if (picked.charge) this.declareCharge(e, picked);
+          else this.pendingIntents.set(e._key, picked.id);
+        }
       } else {
         const def = ALL_ENEMY_DEFS[e.defId];
         if (def?.intents?.length) {
@@ -637,9 +820,17 @@ export class CombatEngine {
   }
 
   private makeBossTurnCtx(enemy: InternalEnemy, turn: number, phaseKey: string): BossTurnContext {
+    const pv = this.playerCombatView();
+    // Phase 5 adaptations read the player's defense through the boss's learned counters.
+    if (this.adaptations.includes('armor_pierce')) pv.def = Math.round(pv.def * 0.5);
+    if (this.bossBand() === 'critical') {
+      // Desperate: +30% damage => the boss bypasses 30% of your defenses.
+      pv.def = Math.round(pv.def * 0.7);
+      pv.mdef = Math.round(pv.mdef * 0.7);
+    }
     return {
       self: enemy,
-      player: this.playerCombatView(),
+      player: pv,
       turn,
       phaseKey,
       rng: this.rng,
@@ -662,7 +853,116 @@ export class CombatEngine {
       playerResonance: this.player.resonance,
       playerLastActionType: this.lastActionType,
       playerRepeatedLastAction: this.lastActionRepeated,
+      stress: this.bossStress(),
+      band: this.bossBand(),
+      adaptations: [...this.adaptations],
     };
+  }
+
+  // ---- Phase 5: boss intelligence helpers ---------------------------------------
+
+  private bossAlive(): InternalEnemy | undefined {
+    return this.enemies.find((e) => e._isBoss && e.hp > 0);
+  }
+
+  private bossStress(): number {
+    const boss = this.bossAlive();
+    const hpPct = boss ? boss.hp / boss.maxHp : 1;
+    return stressFor(hpPct, this.bossAggression, this.bossCalm);
+  }
+
+  private bossBand(): StressBand {
+    return bandFor(this.bossStress());
+  }
+
+  private bossIntelView(): BossIntelView | null {
+    if (!this.bossDef) return null;
+    return {
+      stress: this.bossStress(),
+      band: this.bossBand(),
+      adaptations: [...this.adaptations],
+      resistType: this.bossResistType,
+      chargedLabel: this.chargedIntent ? this.chargedIntent.label : null,
+    };
+  }
+
+  private nudgeAggression(amount: number): void {
+    if (this.bossDef) this.bossAggression += amount;
+  }
+
+  private nudgeCalm(amount: number): void {
+    if (this.bossDef) this.bossCalm += amount;
+  }
+
+  private unreadable(): boolean {
+    return this.bossDef !== undefined && this.adaptations.includes('unreadable');
+  }
+
+  private sureRead(key: string): boolean {
+    return (this.investigations.get(key)?.layer ?? 0) >= 3;
+  }
+
+  /** Player healing passes through this — the Interdict adaptation halves it. */
+  private interdictedHeal(amount: number): number {
+    if (this.bossDef && this.adaptations.includes('interdict')) return Math.max(0, Math.round(amount * 0.5));
+    return amount;
+  }
+
+  /** Every 3rd boss turn, the boss evaluates its profile and learns one counter. */
+  private maybeAdapt(enemy: InternalEnemy): void {
+    if (this.phase === 'victory' || this.phase === 'defeat' || this.phase === 'fled') return;
+    const id = evaluateAdaptation(profileView(this.profile), this.adaptations);
+    if (!id) return;
+    this.adaptations.push(id);
+    const meta = ADAPTATION_META[id];
+    this.log.push(`${enemy.name} has learned: ${meta.text}`);
+    this.pendingBanners.push(adaptationBanner(meta.label));
+    this.nudgeAggression(3);
+    switch (id) {
+      case 'magic_shield':
+        enemy.mdef = Math.round(enemy.mdef * 1.4);
+        break;
+      case 'blind_marksman':
+        this.applyStatusToPlayerChecked('blind', 3);
+        break;
+      case 'elemental_resistance':
+        this.bossResistType = profileView(this.profile).favoriteElement;
+        break;
+      case 'dispel_conclave':
+        removeAllBuffs(this.playerStatuses);
+        this.log.push(`${enemy.name} dispels your enhancements.`);
+        break;
+      default:
+        // armor_pierce / unreadable / resonance_drain / interdict / echo_lock
+        // are handled at their engine touch-points.
+        break;
+    }
+  }
+
+  /** Declares a charged ultimate: shown to the player, unleashed on the boss's NEXT turn. */
+  private declareCharge(enemy: InternalEnemy, intent: BossIntentDef): void {
+    this.chargedIntent = intent;
+    this.chargedRound = this.round;
+    this.log.push(chargeLog(enemy.name, intent.label));
+    this.pendingBanners.push(chargeBanner(enemy.name, intent.label));
+  }
+
+  /** True when an already-declared charge may unleash (the declaration round has fully passed). */
+  private isChargeDue(): boolean {
+    return this.chargedIntent !== null && this.round > this.chargedRound;
+  }
+
+  /** Resolves the declared ultimate; returns true when a charge was unleashed. */
+  private unleashCharge(enemy: InternalEnemy): boolean {
+    const intent = this.chargedIntent;
+    if (!intent) return false;
+    this.chargedIntent = null;
+    const phaseInfo = this.bossDef ? this.bossDef.getPhase(enemy.hp / enemy.maxHp) : null;
+    const ctx = this.makeBossTurnCtx(enemy, this.bossOwnTurnCounter, phaseInfo?.key ?? '');
+    intent.resolve(ctx);
+    this.log.push(unleashLog(enemy.name, intent.label));
+    this.pendingBanners.push(unleashBanner(enemy.name, intent.label));
+    return true;
   }
 
   private spawnAdd(enemyId: string, hpOverride?: number): void {
@@ -671,6 +971,169 @@ export class CombatEngine {
     const enemy = this.buildEnemyCombatant(enemyId, hpOverride);
     enemy._key = uniqueKey;
     this.enemies.push(enemy);
+  }
+
+  // ---- Phase 5: companion turns ----------------------------------------------
+
+  private allyDefFor(state: AllySaveState): AllyDef {
+    return ALLY_DEFS[state.id];
+  }
+
+  /** View of the battle an ally reasons over (deterministic; drives planAllyTurn). */
+  private allyCombatInput(def: AllyDef, state: AllySaveState): AllyCombatInput {
+    return {
+      playerHp: this.player.currentHP,
+      playerMaxHp: this.player.derived.maxHP,
+      playerHasDebuff: this.playerStatuses.some((s) => ['poison', 'bleed', 'curse', 'shock_dot', 'wound'].includes(s.id)),
+      playerGuarding: this.guarding,
+      playerMomentum: this.player.momentum,
+      round: this.round,
+      bossPhaseKey: (() => {
+        const boss = this.enemies.find((e) => e._isBoss && e.hp > 0);
+        return boss && this.bossDef ? this.bossDef.getPhase(boss.hp / boss.maxHp).key : null;
+      })(),
+      enemies: this.aliveEnemies().map((e) => ({
+        key: e._key,
+        hpFraction: e.hp / e.maxHp,
+        isBoss: e._isBoss,
+        hasDebuff: e.statuses.length > 0,
+      })),
+    };
+  }
+
+  /** Companion takes one action per round, resolved at round end after enemies act. */
+  private resolveAllyTurns(): void {
+    if (this.phase === 'victory' || this.phase === 'defeat' || this.phase === 'fled') return;
+    for (const state of this.allyStates) {
+      if (!accompaniesIn(state.loyalty)) continue;
+      const def = this.allyDefFor(state);
+      if (this.rng() > def.profile.reliability) {
+        if (this.rng() > def.profile.reliability) {
+          this.log.push(`${def.name} fumbles, nearly tripping over the battlefield.`);
+        }
+        continue;
+      }
+      const plan = planAllyTurn(def, state.loyalty, this.allyCombatInput(def, state));
+      this.executeAllyPlan(def, state, plan);
+      this.log.push(plan.line);
+    }
+  }
+
+  /** Applies the planned ally action with engine-appropriate consequences. */
+  private executeAllyPlan(def: AllyDef, state: AllySaveState, plan: AllyTurnPlan): void {
+    const action = plan.action;
+    const profile = def.profile;
+    const target = action.kind === 'attack' || action.kind === 'support'
+      ? this.enemies.find((e) => e._key === action.targetKey)
+      : undefined;
+
+    switch (action.kind) {
+      case 'heal': {
+        if (this.noHeal) {
+          this.log.push(`${def.name} tries to mend you, but One Last Memory seals all healing.`);
+          return;
+        }
+        const amount = Math.max(1, Math.round(this.player.derived.maxHP * profile.healPct));
+        this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + amount);
+        this.log.push(`${def.name} restores ${amount} HP.`);
+        return;
+      }
+      case 'guard': {
+        this.allyGuardAbsorb = Math.max(this.allyGuardAbsorb, 1);
+        return;
+      }
+      case 'attack': {
+        if (!target) return;
+        const useMagic = profile.matkPct > profile.atkPct;
+        const power = Math.round((useMagic ? this.player.derived.magicAttack : this.player.derived.attack) * (useMagic ? profile.matkPct : profile.atkPct) * (1 + state.loyalty / 400));
+        const result = this.computeAndApplyDamage(target, power, useMagic ? target.mdef : target.def, profile.damageType, `${def.name}'s attack`, useMagic ? 'mdef' : 'def', false, false);
+        if (result.hit && result.crit) this.log.push(`${def.name} lands a critical blow!`);
+        return;
+      }
+      case 'support': {
+        this.applyAllySupport(def, state, target);
+        return;
+      }
+      case 'overwatch': {
+        // Last Oath: pre-armed reaction — handled reactively in dealDamageToPlayer.
+        this.log.push(`${def.name} holds an overwatch — a blow that would end you is already refused.`);
+        return;
+      }
+      case 'wait': {
+        return;
+      }
+    }
+  }
+
+  /** Support abilities resolved by id (framework flavor, engine effects). */
+  private applyAllySupport(def: AllyDef, state: AllySaveState, target?: InternalEnemy): void {
+    const ability = def.abilities.find((a) => a.kind === 'support');
+    if (!ability) return;
+    switch (ability.id) {
+      case 'rooted_hold':
+        this.enemyDmgReduceTurns = Math.max(this.enemyDmgReduceTurns, 2);
+        this.log.push(`${def.name} anchors the ground — enemy damage -30% while it holds.`);
+        break;
+      case 'mercy_pact': {
+        if (this.noHeal) {
+          this.log.push(`${def.name} reaches to heal, but the seal holds.`);
+          break;
+        }
+        removeDebuffs(this.playerStatuses);
+        const amount = Math.round(this.player.derived.maxHP * 0.1);
+        this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + amount);
+        this.log.push(`${def.name} untangles the maledictions — +${amount} HP.`);
+        break;
+      }
+      case 'annotation':
+        this.nextAttackGuaranteed = true;
+        this.log.push(`${def.name} marks a line on your map — your next hit cannot miss.`);
+        break;
+      case 'corrosion_graph':
+        if (target) {
+          applyStatus(target.statuses, 'defense_down', 2);
+          this.log.push(`${def.name} redraws the defense — ${target.name} Defense -20% for 2 rounds.`);
+        }
+        break;
+    }
+  }
+
+  /** Phase 5: ally reactions at the moment damage lands (guard, warden vigil, overwatch). */
+  private allyDamageMitigation(amount: number): number {
+    let dmg = amount;
+    if (this.allyGuardAbsorb > 0) {
+      this.allyGuardAbsorb = 0;
+      dmg = Math.round(dmg * 0.4);
+      this.log.push('A companion throws itself between you and the blow — damage 60% absorbed.');
+    }
+    if (dmg > 0) {
+      const warden = this.allyStates.find((s) => s.id === 'warden_emissary' && accompaniesIn(s.loyalty) && !hasCooldown(s, 'unbroken_vigil'));
+      if (warden && this.aliveEnemies().length > 0) {
+        const def = this.allyDefFor(warden);
+        const assist = bossAssist(def, warden, this.allyBossAssistInput(false));
+        if (assist.guardCanIntervene) {
+          const negated = Math.round((dmg * assist.vigilNegationPct) / 100);
+          dmg = Math.max(0, dmg - negated);
+          this.log.push(assist.lines[0] ?? `${def.name}: an oath-echo takes the blow.`);
+          setCooldown(warden, 'unbroken_vigil', true);
+        }
+      }
+    }
+    return dmg;
+  }
+
+  /** Input for bossAssist evaluations against a live state. */
+  private allyBossAssistInput(playerFallen: boolean): BossAssistInput {
+    const boss = this.enemies.find((e) => e._isBoss && e.hp > 0);
+    return {
+      playerHp: this.player.currentHP,
+      playerMaxHp: this.player.derived.maxHP,
+      bossPhaseKey: boss && this.bossDef ? this.bossDef.getPhase(boss.hp / boss.maxHp).key : null,
+      playerFallen,
+      playerHasDebuff: false,
+      round: this.round,
+      foughtTogether: 1,
+    };
   }
 
   private playerCombatView() {
@@ -700,6 +1163,17 @@ export class CombatEngine {
         this.log.push('The boss is enraged — damage +30%.');
         amount = enragedAmount;
       }
+    }
+    // Phase 5: a desperate boss (critical stress) strikes 30% harder.
+    if (this._currentAttackerKey && this.enemies.some((e) => e._key === this._currentAttackerKey && e._isBoss) && this.bossBand() === 'critical') {
+      const desperateAmount = Math.round(amount * 1.3);
+      if (desperateAmount !== amount) amount = desperateAmount;
+    }
+    if (this.incomingMultFactor > 1) {
+      amount = Math.round(amount * this.incomingMultFactor);
+    }
+    if (this.enemyDmgReduceTurns > 0) {
+      amount = Math.round(amount * 0.7);
     }
     let dodge = this.player.derived.dodge + (this.player.skillsKnown.includes('chorus_step') ? 10 : 0);
     if (this.player.skillsKnown.includes('risk') && this.player.currentHP / this.player.derived.maxHP < 0.25) {
@@ -753,12 +1227,20 @@ export class CombatEngine {
       this.gainMomentum(1);
     }
     dmg = applyBarrier(this.playerStatuses, dmg);
+    // Phase 5: companions can stand between you and the blow.
+    dmg = this.allyDamageMitigation(dmg);
     if (dmg > 0 && this.player.skillsKnown.includes('resolve') && this.resolveStacks >= 3) {
       this.resolveStacks = 0;
       dmg = 0;
       this.log.push(`RESOLVE — you spend your will to nullify ${label} entirely.`);
     }
     this.player.currentHP = Math.max(0, this.player.currentHP - dmg);
+    // Phase 5: Resonance Drain — the boss sips momentum with every landed hit.
+    if (dmg > 0 && this.adaptations.includes('resonance_drain') && this.player.momentum > 0
+      && this._currentAttackerKey && this.enemies.some((e) => e._key === this._currentAttackerKey && e._isBoss)) {
+      this.player.momentum = Math.max(0, this.player.momentum - 1);
+      this.log.push('The boss drains your momentum — −1 Momentum.');
+    }
     if (dmg > 0) {
       this.player.fatigue = clampFatigue(this.player.fatigue + Math.floor(dmg / 10) * 2);
       if (this.player.skillsKnown.includes('rage')) {
@@ -776,6 +1258,10 @@ export class CombatEngine {
       } else if (beforeHp / this.player.derived.maxHP >= 0.25 && this.player.currentHP / this.player.derived.maxHP < 0.25) {
         this.fear = clampFear(this.fear + FEAR_CRIT_GAIN);
       }
+      // G6: a boss's crushing blow (35%+ of max HP) stokes dread even harder.
+      if (hpPct >= 35 && this._currentAttackerKey && this.enemies.some((e) => e._key === this._currentAttackerKey && e._isBoss)) {
+        this.fear = clampFear(this.fear + FEAR_ULTIMATE_GAIN);
+      }
     }
     if (dmg > 0 && this._currentAttackerKey) {
       if (!this.playerHitEnemyKeys.includes(this._currentAttackerKey)) this.playerHitEnemyKeys.push(this._currentAttackerKey);
@@ -792,7 +1278,7 @@ export class CombatEngine {
       this.player.currentHP / this.player.derived.maxHP < 0.25
     ) {
       this.flags.secondWindUsed = 1;
-      const heal = Math.round(this.player.derived.maxHP * 0.15);
+      const heal = this.interdictedHeal(Math.round(this.player.derived.maxHP * 0.15));
       this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
       this.log.push(`Second Wind: you catch yourself and recover ${heal} HP.`);
     }
@@ -849,6 +1335,7 @@ export class CombatEngine {
   }
 
   private recordAction(id: string): void {
+    recordAction(this.profile);
     this.actionRepeatCounts[id] = (this.actionRepeatCounts[id] ?? 0) + 1;
     if (this.actionRepeatCounts[id] >= 3) {
       this.player.fatigue = clampFatigue(this.player.fatigue + 10);
@@ -915,7 +1402,7 @@ export class CombatEngine {
     return mult;
   }
 
-  private computeAndApplyDamage(target: InternalEnemy, sourcePower: number, defenseStat: number, damageType: DamageType, label: string, statKey: 'def' | 'mdef' = 'def', guaranteedHit = false): { dmg: number; hit: boolean; crit: boolean; weak: boolean } {
+  private computeAndApplyDamage(target: InternalEnemy, sourcePower: number, defenseStat: number, damageType: DamageType, label: string, statKey: 'def' | 'mdef' = 'def', guaranteedHit = false, recordProfile = true): { dmg: number; hit: boolean; crit: boolean; weak: boolean } {
     if (!guaranteedHit && !this.rollHit(target)) {
       this.log.push(`${label} misses ${target.name}.`);
       this.playerAP = 0;
@@ -924,7 +1411,9 @@ export class CombatEngine {
       if (missState) resetWeakStreak(missState);
       return { dmg: 0, hit: false, crit: false, weak: false };
     }
-    const weakness = target.affinities[damageType] ?? 1.0;
+    let weakness = target.affinities[damageType] ?? 1.0;
+    // Revelation-Exploit Focus: while active, every strike lands as a weakness hit.
+    if (this.alwaysWeakTurns > 0 && weakness <= 1) weakness = 2;
     let state = this.windowStates.get(target._key);
     if (!state) {
       state = freshWindowState();
@@ -943,6 +1432,7 @@ export class CombatEngine {
       defReduction = Math.min(defReduction, 0.7);
       this.unityBlade = false;
     }
+    if (this.armorPierceAll) defReduction = Math.min(defReduction, 0);
     if (this.thesisTurns > 0 && (statKey === 'mdef' || ['shadow', 'sacred', 'shock', 'frost', 'flame'].includes(damageType))) {
       defReduction = Math.min(defReduction, 0.7);
     }
@@ -960,7 +1450,10 @@ export class CombatEngine {
     const comboDefPierce = this.pendingComboDefPierce;
     this.pendingComboDefPierce = 1;
     if (comboDefPierce < 1) defReduction = Math.min(defReduction, comboDefPierce);
-    const effDef = Math.round(defenseStat * defReduction * reactionArmorPierce * statMultiplier(target.statuses, statKey));
+    // Phase 5: desperate — desperate criticals shed 30% of the boss's defense.
+    let effDefSource = defenseStat;
+    if (target._isBoss && this.bossBand() === 'critical') effDefSource = Math.round(defenseStat * 0.7);
+    const effDef = Math.round(effDefSource * defReduction * reactionArmorPierce * statMultiplier(target.statuses, statKey));
     let dmg = Math.max(3, Math.round((sourcePower - effDef / 2) * weakness * variance * unravelMult * comboMult));
     dmg = Math.round(dmg * windowDamageMult(state));
     if (crit) dmg = Math.round(dmg * 1.5);
@@ -981,6 +1474,16 @@ export class CombatEngine {
       // accuracy handled at hit-roll; no damage change
     }
     if (this.mirrorTurns > 0) dmg = Math.round(dmg * 1.15);
+    // Phase 4 crisis-option & desperation damage boosts.
+    if (this.playerDmgMultTurns > 0) dmg = Math.round(dmg * 1.5);
+    if (this.lastPrayerDmgTurns > 0) dmg = Math.round(dmg * 1.3);
+    if (this.cascadeThisTurn) dmg = Math.round(dmg * 2);
+    if (this.fightDmgBuff > 0) dmg = Math.round(dmg * (1 + this.fightDmgBuff));
+    if (this.fightTypeBuff !== null && damageType === this.fightTypeBuff) dmg = Math.round(dmg * 1.2);
+    if (this.desperation2xCharges > 0) {
+      dmg = Math.round(dmg * 2);
+      this.desperation2xCharges -= 1;
+    }
     // Phase 4e: terrified players deal 10% less damage.
     dmg = Math.round(dmg * fearModifiers(this.fear).damageMult);
     if (this.forcedCrits > 0) {
@@ -1009,6 +1512,11 @@ export class CombatEngine {
     if (damageType === 'shadow' && this.player.skillsKnown.includes('parting_words') && target.hp / target.maxHp < 0.3) {
       dmg = Math.round(dmg * 1.4);
     }
+    // Phase 5: Elemental Resistance — the boss has hardened against your favourite type.
+    if (target._isBoss && this.adaptations.includes('elemental_resistance') && this.bossResistType === damageType) {
+      dmg = Math.round(dmg * 0.7);
+      this.log.push(`${target.name} has hardened against ${damageType} — your damage is dampened.`);
+    }
     const mitigated = applyBarrier(target.statuses, dmg);
     if (mitigated < dmg) this.log.push(`${target.name}'s Barrier absorbs part of the blow.`);
     if (dmg > 0 && mitigated === 0) {
@@ -1016,6 +1524,14 @@ export class CombatEngine {
       this.applyTokenDelta(-lost, `The blow was fully absorbed — you lose ${lost} token(s).`);
     }
     target.hp = Math.max(0, target.hp - mitigated);
+
+    // Phase 5: the martyr persona — the Fossil King answers every wound in kind.
+    if (target._isBoss && this.bossDef?.persona?.martyr && mitigated > 0 && !target.flags.martyrShockFired) {
+      target.flags.martyrShockFired = 1;
+      const shock = Math.max(1, Math.round(mitigated * 0.3));
+      this.dealDamageToPlayer(shock, 'shadow', "the martyr king's blood price", false, target._key);
+      this.log.push(`The martyr king pays his own blood price — ${shock} damage bites back at you.`);
+    }
 
     // Crisis All-In: after the gambled strike lands, a 30% chance the player collapses.
     if (this.allInPending && mitigated > 0) {
@@ -1072,6 +1588,18 @@ export class CombatEngine {
     if (investigated && this.pendingIntents.has(target._key)) {
       this.applyTokenDelta(1, 'You read its intent and struck true — +1 token.');
     }
+    // Phase 5: profiling — the boss tallies what the player does.
+    if (recordProfile) {
+      if (mitigated > 0) {
+        recordDamage(this.profile, damageType, mitigated);
+        this.nudgeAggression(1);
+      }
+      if (weak) {
+        recordWeaknessHit(this.profile);
+        this.nudgeAggression(1);
+      }
+      if (crit) recordCrit(this.profile);
+    }
     return { dmg: mitigated, hit: true, crit, weak };
   }
 
@@ -1107,6 +1635,7 @@ export class CombatEngine {
     if (!combo) return null;
     this.tagHistory = [];
     this.comboCount += 1;
+    recordCombo(this.profile);
     this.executeCombo(combo.label);
     this.pendingBanners.push(`COMBO ${combo.label}`);
     this.applyComboEffect(combo, target);
@@ -1175,8 +1704,11 @@ export class CombatEngine {
     if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     const target = this.pickTarget(targetKey);
     if (!target) return this.snapshot();
-    this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.attack;
+    const echoLockAttack = this.adaptations.includes('echo_lock') && this.lastActionId === 'attack';
+    if (this.freeActionCharges < 1 && (this.playerAP < ACTION_AP_COST.attack + (echoLockAttack ? 1 : 0))) return this.snapshot();
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.attack + (echoLockAttack ? 1 : 0);
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    if (echoLockAttack) this.log.push('Echo Lock — the boss mirrors your power: repeating an attack costs 1 extra AP.');
     this.actionsTakenThisRound += 1;
     this.recordAction('attack');
     let atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk');
@@ -1222,10 +1754,13 @@ export class CombatEngine {
       return this.snapshot();
     }
 
-    const cost = this.freeActionCharges > 0 ? 0 : skill.apCost;
+    const cost = this.freeActionCharges > 0 ? 0 : skill.apCost + (this.adaptations.includes('echo_lock') && this.lastActionId === `skill:${skillId}` ? 1 : 0);
     if (this.playerAP < cost) return this.snapshot();
     this.playerAP -= cost;
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    if (this.adaptations.includes('echo_lock') && this.lastActionId === `skill:${skillId}`) {
+      this.log.push('Echo Lock — the boss mirrors your rhythm: repeating the skill costs 1 extra AP.');
+    }
     this.actionsTakenThisRound += 1;
     if (mpCost > 0) {
       this.player.currentMP = Math.max(0, this.player.currentMP - mpCost);
@@ -1284,12 +1819,14 @@ export class CombatEngine {
           })();
           for (const t of targets) {
             applyStatus(t.statuses, eff.id, eff.turns, eff.stacks);
+            recordStatusApplied(this.profile);
             this.log.push(`${skill.name} — ${t.name} is afflicted with ${eff.id} for ${eff.turns} turn(s).`);
           }
           break;
         }
         case 'buff':
           applyStatus(this.playerStatuses, eff.id, eff.turns);
+          recordBuffUsed(this.profile);
           this.log.push(`${skill.name} — you gain ${eff.id} for ${eff.turns} turn(s).`);
           break;
         case 'debuff':
@@ -1304,8 +1841,12 @@ export class CombatEngine {
         case 'heal': {
           let amount = eff.flat ?? 0;
           if (eff.pct) amount += Math.round(this.player.derived.maxHP * eff.pct);
+          amount = this.interdictedHeal(amount);
           this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + amount);
-          if (amount > 0) this.log.push(`${skill.name} restores ${amount} HP.`);
+          if (amount > 0) {
+            recordHeal(this.profile, amount);
+            this.log.push(`${skill.name} restores ${amount} HP.`);
+          }
           break;
         }
         case 'barrier':
@@ -1535,6 +2076,8 @@ export class CombatEngine {
     this.pushComboTags(tagsForGuard(this.player.skillsKnown.includes('retaliation')));
     this.guarding = true;
     this.player.fatigue = clampFatigue(this.player.fatigue - 10);
+    recordGuard(this.profile);
+    this.nudgeCalm(1);
     this.log.push('You raise your guard. Fatigue eases.');
     this.lastActionId = 'guard';
     this.lastActionType = null;
@@ -1552,6 +2095,8 @@ export class CombatEngine {
     this.player.currentMP = mpRestore;
     this.log.push('You focus your will, restoring 15 MP.');
     this.gainMomentum(1);
+    recordAnalyze(this.profile);
+    this.nudgeCalm(1);
     this.lastActionId = 'focus';
     this.lastActionType = null;
     return this.snapshot();
@@ -1581,14 +2126,20 @@ export class CombatEngine {
     if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
     this.recordAction('use_item');
+    recordItem(this.profile);
     entry.qty -= 1;
     this.player.inventory = this.player.inventory.filter((i) => i.qty > 0);
     this.player.fatigue = clampFatigue(this.player.fatigue - 20);
 
     if (item.effect?.healPercent) {
-      const heal = Math.round(this.player.derived.maxHP * (item.effect.healPercent / 100));
-      this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
-      this.log.push(`You use ${item.name}, healing ${heal} HP.`);
+      if (this.noHeal) {
+        this.log.push(`You try to use ${item.name}, but One Last Memory seals all healing this combat.`);
+      } else {
+        const heal = this.interdictedHeal(Math.round(this.player.derived.maxHP * (item.effect.healPercent / 100)));
+        this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
+        recordHeal(this.profile, heal);
+        this.log.push(`You use ${item.name}, healing ${heal} HP.`);
+      }
     }
     if (item.effect?.cureStatus) {
       for (const s of item.effect.cureStatus) {
@@ -1611,6 +2162,8 @@ export class CombatEngine {
     if (this.freeActionCharges > 0 && analyzeCost > 0) this.freeActionCharges -= 1;
     this.actionsTakenThisRound += 1;
     this.recordAction('analyze');
+    recordAnalyze(this.profile);
+    this.nudgeCalm(1);
     const target = this.pickTarget(targetKey);
     if (target) {
       this.pushComboTags(TAGS_ANALYZE, target);
@@ -1626,6 +2179,7 @@ export class CombatEngine {
       }
       const intent = this.intentDefFor(target);
       if (intent) this.log.push(`You sense what it intends: ${intent.label}.`);
+      else if (target._isBoss && this.unreadable()) this.log.push('You sense nothing — it has sealed its intentions behind the learning.');
     }
     this.gainMomentum(1);
     this.player.insight = Math.min(3, this.player.insight + 1);
@@ -1662,6 +2216,8 @@ export class CombatEngine {
   }
 
   private intentDefFor(e: InternalEnemy): IntentDef | BossIntentDef | undefined {
+    // Phase 5: Hidden Mechanisms — an adapted boss hides its intent below Deep Analysis.
+    if (e._isBoss && this.unreadable() && !this.sureRead(e._key)) return undefined;
     const pid = this.pendingIntents.get(e._key);
     if (pid === undefined) return undefined;
     if (e._isBoss && this.bossDef) return this.bossDef.intents?.find((i) => i.id === pid);
@@ -1685,6 +2241,8 @@ export class CombatEngine {
     this.actionsTakenThisRound += 1;
     this.recordAction('probe');
     this.investigate(target._key, 2, [probeId]);
+    recordAnalyze(this.profile);
+    this.nudgeCalm(1);
     this.log.push(...this.probeIntel(target, probeId));
     if (this.player.stats.int >= 10) {
       this.log.push(this.probeBonus(target));
@@ -1769,6 +2327,8 @@ export class CombatEngine {
     this.actionsTakenThisRound += 1;
     this.recordAction('deep_analyze');
     this.investigate(target._key, 4, []);
+    recordAnalyze(this.profile);
+    this.nudgeCalm(1);
     this.log.push(`DEEP ANALYSIS — ${target.name}:`);
     const pool = this.intentPoolFor(target);
     for (const i of pool) {
@@ -1865,13 +2425,16 @@ export class CombatEngine {
   resolveMomentum(choice: MomentumChoice): CombatSnapshot {
     if (this.phase !== 'momentum_choice') return this.snapshot();
     this.player.momentum = 0;
+    recordMomentumSpend(this.profile);
+    this.nudgeAggression(2);
     if (choice === 'flow') {
       this.playerAP += 2;
       applyStatus(this.playerStatuses, 'exhausted', 1);
       this.log.push('Momentum: Flow — you act again immediately, but will start next round exhausted.');
     } else if (choice === 'harmony') {
-      const heal = Math.round(this.player.derived.maxHP * 0.25);
+      const heal = this.interdictedHeal(Math.round(this.player.derived.maxHP * 0.25));
       this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
+      recordHeal(this.profile, heal);
       this.bossEnrageTurns = this.bossDef ? 2 : 0;
       this.log.push(`Momentum: Harmony — restored ${heal} HP${this.bossDef ? '; the boss enrages (+30% damage).' : '.'}`);
     } else if (choice === 'archive') {
@@ -1947,6 +2510,7 @@ export class CombatEngine {
     const boss = this.enemies.find((e) => e._isBoss && e.hp > 0);
     this.applyCrisisOption(optionId, boss);
     this.phase = 'player';
+    this.checkOutcome();
     return this.snapshot();
   }
 
@@ -1974,8 +2538,49 @@ export class CombatEngine {
     const def = pickDesperation(this.desperationFired, this.rng);
     if (!def) return this.snapshot();
     this.desperationFired.push(def.id);
+    this.applyDesperation(def.id);
     this.log.push(`DESPERATION — ${def.title}: ${def.detail}`);
+    this.pendingBanners.push(`DESPERATION — ${def.title}`);
+    this.checkOutcome();
     return this.snapshot();
+  }
+
+  private applyDesperation(id: DesperationId): void {
+    switch (id) {
+      case 'broken_resolve':
+        this.desperation2xCharges = 3;
+        this.incomingMultTurns = Math.max(this.incomingMultTurns, 3);
+        this.incomingMultFactor = Math.max(this.incomingMultFactor, 1.8);
+        break;
+      case 'forget_pain': {
+        const original = this.player.derived.maxHP;
+        if (this.player.derived.maxHP > 10) {
+          this.player.derived.maxHP = Math.max(1, Math.round(this.player.derived.maxHP * 0.8));
+        }
+        this.player.currentHP = Math.min(this.player.derived.maxHP, original);
+        this.player.currentMP = this.player.derived.maxMP;
+        break;
+      }
+      case 'shatter_resonance':
+        this.forcedCrits = Math.max(this.forcedCrits, 3);
+        break;
+      case 'burn_the_archive': {
+        let cleared = 0;
+        for (const e of this.enemies) {
+          if (!e._isBoss) {
+            e.hp = 0;
+            cleared += 1;
+          }
+        }
+        this.fightDmgBuff = Math.max(this.fightDmgBuff, 0.3);
+        this.log.push(cleared > 0 ? `Desperation: Burn the Archive — ${cleared} minion(s) unmade.` : 'Desperation: Burn the Archive — no minions to burn.');
+        break;
+      }
+      case 'one_last_memory':
+        this.noHeal = true;
+        this.armorPierceAll = true;
+        break;
+    }
   }
 
   /** Bonus AP/buff surfaced by desperation so the scene can show it without editing the engine’s data. */
@@ -2007,7 +2612,7 @@ export class CombatEngine {
       }
       case 'last_prayer':
         this.player.currentMP = Math.min(this.player.derived.maxMP, this.player.currentMP + Math.round(this.player.derived.maxMP * 0.4));
-        this.momentumMultTurns = Math.max(this.momentumMultTurns, 3);
+        this.lastPrayerDmgTurns = Math.max(this.lastPrayerDmgTurns, 3);
         this.log.push('Crisis: Last Prayer — MP restored 40%; +30% damage for 3 turns.');
         break;
       case 'defy':
@@ -2031,6 +2636,74 @@ export class CombatEngine {
         }
         break;
       }
+      case 'exploit_focus':
+        this.alwaysWeakTurns = Math.max(this.alwaysWeakTurns, 2);
+        this.log.push('Crisis: Exploit Focus — every strike finds the weakness for 2 turns.');
+        break;
+      case 'study': {
+        this.gainMomentum(3);
+        for (const e of this.enemies) {
+          this.investigate(e._key, 3, ['observe_body', 'observe_mind', 'observe_weapon', 'observe_resonance']);
+          e._revealed = true;
+        }
+        this.log.push('Crisis: Study — +3 Momentum; the field lays bare before you.');
+        break;
+      }
+      case 'share': {
+        const foe = this.aliveEnemies()[0] ?? this.enemies[0];
+        if (foe) {
+          let best: DamageType = 'slash';
+          let bestAff = 0;
+          for (const [t, a] of Object.entries(foe.affinities) as [DamageType, number][]) {
+            if (a > bestAff) {
+              bestAff = a;
+              best = t;
+            }
+          }
+          this.fightTypeBuff = best;
+          this.log.push(`Crisis: Share — your study of ${foe.name} grants +20% ${best} damage for the fight.`);
+        } else {
+          this.log.push('Crisis: Share — no enemy stands to study.');
+        }
+        break;
+      }
+      case 'cascade':
+        this.player.momentum = 0;
+        this.cascadeThisTurn = true;
+        this.log.push('Crisis: Cascade — all momentum spent for +100% damage this turn.');
+        break;
+      case 'tactical_reset':
+        removeAllDebuffs(this.playerStatuses);
+        applyStatus(this.playerStatuses, 'barrier', 1, 1, { amount: Math.round(this.player.derived.maxHP * 0.3) });
+        this.log.push('Crisis: Tactical Reset — debuffs purged; a barrier absorbs 30% of your max HP.');
+        break;
+      case 'rhythm':
+        this.bankedAP += 3;
+        this.log.push('Crisis: Rhythm — you bank 3 AP for the next round.');
+        break;
+      case 'final_stand':
+        this.playerDmgMultTurns = Math.max(this.playerDmgMultTurns, 2);
+        this.incomingMultTurns = Math.max(this.incomingMultTurns, 2);
+        this.incomingMultFactor = Math.max(this.incomingMultFactor, 2);
+        this.log.push('Crisis: Final Stand — +50% damage, but you take double damage for 2 turns.');
+        break;
+      case 'prolong': {
+        const heal = Math.round(this.player.derived.maxHP * 0.3);
+        this.player.currentHP = Math.min(this.player.derived.maxHP, this.player.currentHP + heal);
+        this.enemyDmgReduceTurns = Math.max(this.enemyDmgReduceTurns, 2);
+        this.log.push(`Crisis: Prolong — you restore ${heal} HP and deaden the foe's blows 30% for 2 turns.`);
+        break;
+      }
+      case 'gamble': {
+        if (this.rng() < 0.5) {
+          for (const e of this.enemies) e.hp = 0;
+          this.log.push('Crisis: Gamble — fate favors you; the enemy is unmade.');
+        } else {
+          this.player.currentHP = 0;
+          this.log.push('Crisis: Gamble — fate turns its back; you collapse.');
+        }
+        break;
+      }
       default:
         this.log.push('Crisis: the moment passes.');
     }
@@ -2041,7 +2714,14 @@ export class CombatEngine {
   // ---- Rewards / teardown -----------------------------------------------------
 
   getFlags(): Record<string, number> {
-    return this.flags;
+    const intel = this.bossIntelView();
+    return {
+      ...this.flags,
+      bossStress: intel?.stress ?? 0,
+      bossBand: intel ? STRESS_BAND_ORDER.indexOf(intel.band) : -1,
+      bossAdaptations: intel?.adaptations.length ?? 0,
+      bossCharged: this.chargedIntent ? 1 : 0,
+    };
   }
 
   getEnemiesKilled(): number {
@@ -2098,6 +2778,9 @@ export class CombatEngine {
               ? this.bossDef.intents?.find((i) => i.id === pid)
               : ALL_ENEMY_DEFS[e.defId]?.intents?.find((i) => i.id === pid))
             : undefined;
+          // Phase 5: a declared charge replaces the intent read-out; Hidden Mechanisms hides it below layer 3.
+          const bossHidden = e._isBoss && this.unreadable() && !this.sureRead(e._key);
+          const charged = e._isBoss && this.chargedIntent && !this.isChargeDue() ? this.chargedIntent : null;
           return {
             key: e._key,
             name: e.name,
@@ -2114,7 +2797,11 @@ export class CombatEngine {
             tendency: tendencyGlyph(this.tendencyFor(e)),
             investigationLayer: layer,
             investigationProbes: probes,
-            pendingIntent: intentDef ? { id: intentDef.id, label: intentDef.label, confidence: confidenceFor(layer) } : null,
+            pendingIntent: charged && !bossHidden
+              ? { id: charged.id, label: chargeLabel(charged.label), confidence: 'certain', charged: true }
+              : intentDef && !bossHidden
+                ? { id: intentDef.id, label: intentDef.label, confidence: confidenceFor(layer) }
+                : null,
             weakWindowTurns: this.windowStates.get(e._key)?.turns ?? 0,
             weakHitStreak: this.windowStates.get(e._key)?.streak ?? 0,
             lastHitType: this.lastHitTypes.get(e._key),
@@ -2133,6 +2820,21 @@ export class CombatEngine {
           })()
         : undefined,
       fear: this.fear,
+      bossIntel: this.bossIntelView() ?? undefined,
+      allies: this.allyStates
+        .filter((s) => accompaniesIn(s.loyalty))
+        .map((s) => ({
+          id: s.id,
+          name: ALLY_DEFS[s.id].name,
+          loyalty: s.loyalty,
+          tier: tierForLoyalty(s.loyalty),
+          action: '',
+        })),
     };
+  }
+
+  /** Phase 5: persistable copy of the companion states after a fight. */
+  getAllyStates(): AllySaveState[] {
+    return this.allyStates.map((a) => ({ ...a }));
   }
 }

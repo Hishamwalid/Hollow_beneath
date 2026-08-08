@@ -112,7 +112,8 @@ export const ENEMIES: Record<string, EnemyDef> = {
         description: 'Chants a rite that restores a wounded ally for 20 HP.',
         condition: (ctx) => !!ctx.allies.find((a) => a.hp > 0 && a.hp / a.maxHp < 0.4),
         resolve(ctx) {
-          const woundedAlly = ctx.allies.find((a) => a.hp > 0 && a.hp / a.maxHp < 0.4)!;
+          const woundedAlly = ctx.allies.find((a) => a.hp > 0 && a.hp / a.maxHp < 0.4);
+          if (!woundedAlly) return `${ctx.self.name} begins to pray, but no ally needs it.`;
           woundedAlly.hp = Math.min(woundedAlly.maxHp, woundedAlly.hp + 20);
           return `${ctx.self.name} chants a Healing Prayer over ${woundedAlly.name} (+20 HP).`;
         },

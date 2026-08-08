@@ -107,8 +107,9 @@ export const SENTINEL: BossDef = {
     },
     {
       id: 'quotation', label: 'Quotation', weight: 900,
-      condition: (ctx) => ctx.phaseKey === 'erudite',
-      description: 'Echoes your own tactic back at you as sacred damage.',
+      charge: true,
+      condition: (ctx) => ctx.phaseKey === 'erudite' && (ctx.band === 'high' || ctx.band === 'critical'),
+      description: 'Echoes your own tactic back at you as sacred damage (declared a turn before).',
       resolve(ctx) {
         const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 1.1);
         ctx.applyDamageToPlayer(dmg, 'sacred', 'Quotation');
@@ -186,8 +187,9 @@ export const SENTINEL: BossDef = {
       ctx.log.push(`${ctx.self.name} swings desperately for ${dmg} damage.`);
     }
   },
-  aftermathText: () =>
+aftermathText: () =>
     'The silver light fades from its engravings all at once, like a held breath finally let go. It does not fall so much as settle, the way a door settles back into its frame. Somewhere underneath the corridor, you feel — rather than hear — something unlock.',
+  persona: { label: 'Scholar', blurb: 'It files every move you make away before it strikes, and quotes your own tactics back at you.' },
   getRewards: () => ({
     factionDelta: { archive: 20 },
     resonanceDelta: 5,
@@ -318,8 +320,9 @@ export const PATRIARCH: BossDef = {
     },
     {
       id: 'martyr_unleashed', label: 'Martyr\'s Flame', weight: 999,
-      condition: (ctx) => ctx.phaseKey === 'martyr',
-      description: 'Stops holding back: alternate an unguardedable Martyr\'s Flame (2.0x magic, self-recoil) and Punishing Strike.',
+      charge: true,
+      condition: (ctx) => ctx.phaseKey === 'martyr' && (ctx.band === 'high' || ctx.band === 'critical'),
+      description: 'Stops holding back: an unguardedable Martyr\'s Flame (2.0x magic, self-recoil) — declared a turn before.',
       resolve(ctx) {
         patriarchPrepare(ctx);
         if (!ctx.flags.martyrEntered) {
@@ -327,16 +330,10 @@ export const PATRIARCH: BossDef = {
           ctx.self.atk = Math.round(ctx.self.atk * 1.3);
           ctx.log.push(`${ctx.self.name} stops holding back. (Attack +30%, he no longer heals)`);
         }
-        if (ctx.turn % 2 === 0) {
-          const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 2.0);
-          ctx.damageSelf(15);
-          ctx.applyDamageToPlayer(dmg, 'sacred', "Martyr's Flame", true);
-          ctx.log.push(`${ctx.self.name} unleashes Martyr's Flame for ${dmg} damage — it cannot be Guarded (15 HP recoil).`);
-        } else {
-          const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.5) + Math.round(ctx.playerResonance * 0.3);
-          ctx.applyDamageToPlayer(dmg, 'sacred', 'Punishing Strike');
-          ctx.log.push(`${ctx.self.name} lands a Punishing Strike for ${dmg} damage.`);
-        }
+        const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 2.0);
+        ctx.damageSelf(15);
+        ctx.applyDamageToPlayer(dmg, 'sacred', "Martyr's Flame", true);
+        ctx.log.push(`${ctx.self.name} unleashes Martyr's Flame for ${dmg} damage — it cannot be Guarded (15 HP recoil).`);
       },
     },
     {
@@ -429,6 +426,7 @@ export const PATRIARCH: BossDef = {
     flags.cassDefWeakened === 1
       ? 'He kneels again before he falls, and this time it looks less like prayer. "You already knew," he says. "That\'s the part I couldn\'t forgive." The fire behind him finally goes out.'
       : "He goes down still murmuring the same rite, three words behind where he should be. The fire behind him gutters and, for the first time since you arrived, actually looks like it's burning something.",
+  persona: { label: 'Executioner', blurb: 'He does not fight to win. He fights to finish — the blow you cannot Guard is the only prayer he believes in.' },
   getRewards: () => ({
     factionDelta: { sable: 25 },
     resonanceDelta: 8,
@@ -539,8 +537,9 @@ export const CHORUS: BossDef = {
     },
     {
       id: 'harmonic_overload', label: 'Harmonic Overload', weight: 950,
-      condition: (ctx) => ctx.playerRepeatedLastAction === true,
-      description: 'Punishes repetition — 2.0x magic damage of the type you just used.',
+      charge: true,
+      condition: (ctx) => ctx.playerRepeatedLastAction === true && (ctx.band === 'high' || ctx.band === 'critical'),
+      description: 'Punishes repetition — 2.0x magic damage of the type you just used (declared a turn before).',
       resolve(ctx) {
         chorusPrepare(ctx);
         const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 2.0);
@@ -819,25 +818,12 @@ export const FOSSIL_KING: BossDef = {
       },
     },
     {
-      id: 'silence_that_followed', label: 'The Silence That Followed', weight: 999,
-      condition: (ctx) => ctx.phaseKey === 'fossil' && ctx.flags.ultimateCharging === 1,
-      description: 'Releases the charged ultimate — unGuardable 2.5x sacred damage.',
-      resolve(ctx) {
-        fossilPrepare(ctx);
-        ctx.flags.ultimateCharging = 0;
-        const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 2.5);
-        ctx.applyDamageToPlayer(dmg, 'sacred', 'The Silence That Followed', true);
-        ctx.log.push(`${ctx.self.name} releases The Silence That Followed for ${dmg} damage — it cannot be Guarded.`);
-      },
-    },
-    {
-      id: 'charge_ultimate', label: 'Utter Stillness', weight: 900,
-      condition: (ctx) => ctx.phaseKey === 'fossil' && ctx.flags.ultimateCharging !== 1 && ctx.turn % 4 === 0,
-      description: 'Goes utterly still, charging something vast.',
-      resolve(ctx) {
-        fossilPrepare(ctx);
-        ctx.flags.ultimateCharging = 1;
-        ctx.log.push(`${ctx.self.name} goes utterly still. Something vast is charging.`);
+      id: 'utter_stillness', label: 'Utter Stillness', weight: 999,
+      charge: true,
+      condition: (ctx) => ctx.phaseKey === 'fossil' && (ctx.band === 'high' || ctx.band === 'critical'),
+      description: 'Goes utterly still; The Silence Before was never quiet from now on: an unGuardable 2.5x sacred strike, declared a turn before.',
+      resolve(_ctx) {
+        // Resolution happens on the following turn via the engine's unleash path.
       },
     },
     {
@@ -916,18 +902,6 @@ export const FOSSIL_KING: BossDef = {
       return;
     }
     // fossil phase
-    if (ctx.flags.ultimateCharging === 1) {
-      ctx.flags.ultimateCharging = 0;
-      const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 2.5);
-      ctx.applyDamageToPlayer(dmg, 'sacred', 'The Silence That Followed', true);
-      ctx.log.push(`${ctx.self.name} releases The Silence That Followed for ${dmg} damage — it cannot be Guarded.`);
-      return;
-    }
-    if (ctx.turn % 4 === 0) {
-      ctx.flags.ultimateCharging = 1;
-      ctx.log.push(`${ctx.self.name} goes utterly still. Something vast is charging.`);
-      return;
-    }
     const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.0);
     ctx.applyDamageToPlayer(dmg, 'slash', 'a last, unfocused blow');
     ctx.log.push(`${ctx.self.name} strikes weakly for ${dmg} damage.`);
@@ -936,6 +910,7 @@ export const FOSSIL_KING: BossDef = {
     flags.ultimateCharging === 1
       ? 'He falls mid-syllable, the ultimate decree unfinished, and something in his stone face looks — almost — relieved. "...thank...you..." is all that makes it out before the quiet takes the rest.'
       : 'The last of him settles into the throne completely, indistinguishable now from the stone around it. The Court he ruled crumbles a little further with him, the way an argument does once no one is left to keep having it.',
+  persona: { label: 'The Last Emperor', blurb: 'A king who outlived everyone he ruled. He does not attack so much as hand down sentences — and the finished one is the one you cannot Guard.' },
   getRewards: () => ({
     factionDelta: { caravan: 15, archive: 10 },
     resonanceDelta: 10,
@@ -1052,24 +1027,12 @@ export const REFLECTION: BossDef = {
       },
     },
     {
-      id: 'the_story_you_told', label: 'The Story You Told', weight: 999,
-      condition: (ctx) => ctx.phaseKey === 'answer' && ctx.flags.ultimateCharging === 1,
-      description: 'Finishes the story: 2.5x magic damage, ignoring 50% Magic Defense.',
-      resolve(ctx) {
-        const primaryType = DAMAGE_TYPE_CYCLE[ctx.flags.primaryDmgType ?? 0];
-        ctx.flags.ultimateCharging = 0;
-        const dmg = bossDamage(ctx.self.matk, Math.round(ctx.player.mdef * 0.5), 2.5);
-        ctx.applyDamageToPlayer(dmg, primaryType, 'The Story You Told');
-        ctx.log.push(`${ctx.self.name} finishes The Story You Told for ${dmg} damage (ignores 50% Magic Defense).`);
-      },
-    },
-    {
-      id: 'gather_everything', label: 'Gather Everything', weight: 900,
-      condition: (ctx) => ctx.phaseKey === 'answer' && ctx.flags.ultimateCharging !== 1 && ctx.turn % 3 === 0,
-      description: 'Goes still, gathering everything you told it about yourself.',
-      resolve(ctx) {
-        ctx.flags.ultimateCharging = 1;
-        ctx.log.push(`${ctx.self.name} goes still, gathering everything you've told it about yourself.`);
+      id: 'gather_everything', label: 'Gather Everything', weight: 999,
+      charge: true,
+      condition: (ctx) => ctx.phaseKey === 'answer' && (ctx.band === 'high' || ctx.band === 'critical'),
+      description: 'Goes still, gathering everything you told it; The Story You Told descends next turn (2.5x magic, ignores 50% Magic Defense).',
+      resolve(_ctx) {
+        // Resolution happens on the following turn via the engine's unleash path.
       },
     },
     {
@@ -1146,24 +1109,13 @@ export const REFLECTION: BossDef = {
       return;
     }
     // answer phase
-    if (ctx.flags.ultimateCharging === 1) {
-      ctx.flags.ultimateCharging = 0;
-      const dmg = bossDamage(ctx.self.matk, Math.round(ctx.player.mdef * 0.5), 2.5);
-      ctx.applyDamageToPlayer(dmg, primaryType, 'The Story You Told');
-      ctx.log.push(`${ctx.self.name} finishes The Story You Told for ${dmg} damage (ignores 50% Magic Defense).`);
-      return;
-    }
-    if (ctx.turn % 3 === 0) {
-      ctx.flags.ultimateCharging = 1;
-      ctx.log.push(`${ctx.self.name} goes still, gathering everything you've told it about yourself.`);
-      return;
-    }
     const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.2);
     ctx.applyDamageToPlayer(dmg, primaryType, 'a final, honest blow');
     ctx.log.push(`${ctx.self.name} strikes plainly for ${dmg} damage.`);
   },
   aftermathText: () =>
     "It doesn't dissolve so much as stop insisting on a shape. What's left in the mirrors is just your own reflection again, ordinary, breathing hard, alone in a room full of glass. Somewhere below, or above, or nowhere at all, The Loom has finished asking its question — and is waiting, with what might be patience, for you to answer it yourself.",
+  persona: { label: 'Prophet', blurb: 'It wears your choices the way the Loom wears thread. Whatever it is about to do, it declared before it did — you simply chose not to hear.' },
   getRewards: () => ({
     resonanceDelta: 10,
     echoShards: 10,

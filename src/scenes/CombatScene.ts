@@ -64,6 +64,7 @@ export class CombatScene extends Phaser.Scene {
   private overlayBg?: Phaser.GameObjects.Rectangle;
   private endTurnBtn?: ReturnType<typeof createButton>;
   private speedBar?: ReturnType<typeof createSpeedBar>;
+  private companionText?: Phaser.GameObjects.Text;
   private resultShown = false;
 
   constructor() {
@@ -99,6 +100,7 @@ export class CombatScene extends Phaser.Scene {
       bossDef,
       precombatFlags: data.precombatFlags,
       playerHistory: new Set(player.history),
+      allies: player.companions ?? [],
     });
 
     this.add
@@ -146,6 +148,13 @@ export class CombatScene extends Phaser.Scene {
 
     const whisper = maybePickWhisper(player.resonance, 'combat', Math.random);
     if (whisper) showWhisper(this, GAME_WIDTH / 2, 96, whisper.text, 600);
+
+    this.companionText = this.add.text(16, 540, '', {
+      fontFamily: FONT_MONO,
+      fontSize: '13px',
+      color: PALETTE_HEX.boneMuted,
+      lineSpacing: 5,
+    }).setDepth(9).setAlpha(0.9);
 
     this.refresh(initialSnap);
     if (data.mode === 'boss') this.showBossEntry();
@@ -221,6 +230,11 @@ export class CombatScene extends Phaser.Scene {
     this.speedBar?.update(snap.initiativeOrder, snap.phase === 'player' ? 'player' : undefined);
     this.log(snap.log);
     this.endTurnBtn?.setEnabled(snap.phase === 'player');
+    this.companionText?.setText(
+      snap.allies.length > 0
+        ? `COMPANIONS\n${snap.allies.map((a) => `${a.name} — ${a.tier} (${a.loyalty})`).join('\n')}`
+        : '',
+    );
 
     if (snap.phase === 'momentum_choice') {
       this.showMomentumModal();
@@ -516,9 +530,12 @@ export class CombatScene extends Phaser.Scene {
     for (const banner of snap.banners) {
       const isCombo = banner.startsWith('COMBO');
       const isWindow = banner.startsWith('WEAKNESS WINDOW');
-      const color = isWindow ? '#e9c876' : isCombo ? '#9b59b6' : '#5dade2';
-      const label = banner.replace(/^(COMBO |REACTION |WEAKNESS WINDOW — )/, '');
-      const title = isWindow ? 'WEAKNESS WINDOW' : isCombo ? 'COMBO' : 'REACTION';
+      const isCharge = banner.startsWith('CHARGE');
+      const isUlt = banner.startsWith('ULTIMATE');
+      const isAdapt = banner.startsWith('ADAPTATION');
+      const color = isCharge ? '#c9a24b' : isUlt ? '#e1665c' : isAdapt ? '#8e5fd9' : isWindow ? '#e9c876' : isCombo ? '#9b59b6' : '#5dade2';
+      const label = banner.replace(/^(COMBO |REACTION |WEAKNESS WINDOW — |CHARGE — |ULTIMATE — |ADAPTATION — )/, '');
+      const title = isCharge ? 'CHARGE' : isUlt ? 'ULTIMATE' : isAdapt ? 'ADAPTATION' : isWindow ? 'WEAKNESS WINDOW' : isCombo ? 'COMBO' : 'REACTION';
       const t = this.add.text(GAME_WIDTH / 2, 210, `${title}: ${label}`, {
         fontFamily: FONT_SERIF,
         fontSize: '24px',
@@ -680,7 +697,8 @@ export class CombatScene extends Phaser.Scene {
   private showCrisisModal(crisis: { id: string; title: string; flavor: string; options: { id: string; label: string; subtitle: string }[] }) {
     if (this.overlayBg) return;
     this.closeOverlay();
-    audio.momentumFull();
+    this.cameras.main.flash(180, 138, 0, 0);
+    audio.crisis();
     this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.78).setDepth(35);
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 180, crisis.title, { fontFamily: FONT_SERIF, fontSize: '28px', color: PALETTE_HEX.danger }).setOrigin(0.5).setDepth(36);
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 140, crisis.flavor, { fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5).setDepth(36);
@@ -761,6 +779,9 @@ export class CombatScene extends Phaser.Scene {
     const store = useGameStore.getState();
     const player = store.player;
     if (!player) return;
+
+    // Phase 5: companions carry their loyalty / cooldowns out of the fight.
+    player.companions = this.engine.getAllyStates();
 
     if (phase === 'defeat') {
       audio.defeat();

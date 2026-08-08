@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import type { StatBlock } from '@data/types';
 import { computeDerivedStats, isValidBuild, pointsSpent, POINT_BUY_TOTAL, PRESET_BUILDS, STARTING_EQUIPMENT_BONUSES, STAT_MAX, STAT_MIN, closestPresetName, CLASS_OF_PRESET } from '@data/stats';
-import { PRESET_STARTING_SKILL } from '@data/skills';
 import { useGameStore } from '@store/gameStore';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';

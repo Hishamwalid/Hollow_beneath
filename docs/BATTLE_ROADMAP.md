@@ -34,7 +34,7 @@ This is the step-by-step execution plan for implementing the full system into th
 | 1 Action Economy | ✅ | TokenSystem.inline, FatigueSystem, momentum rebuild, ACTION_AP_COST, analyze paid |
 | 2 Investigation & Intent | ✅ | IntentSystem, Scan/Probe/Deep, insight spend, 17 enemies + 5 bosses given intents; legacy `act`/`takeTurn` kept as fallbacks |
 | 3 Weakness Depth | ✅ | WeaknessWindowSystem (3-hit streak→2-turn window, 1.5x dmg/+25% crit/+2 momentum), ElementalReactionSystem (8 ordered pairs), ComboSystem (8 tag sequences, +2 tokens), Snapshot bansHUD HUD badge + tint, CMG color-coded dmg by type + banners, smoketest 16 |
-| 4 Classes & Crisis | ☐ | |
+| 4 Classes & Crisis | ✅ | classes.ts (6×6 skills), class-locked trees, SkillEffect resolver, 5 crises × 15 options all live, fear/bravery wired, desperation applies real effects, boss-ultimate fear, smoketest §13 |
 | 5 Boss Intelligence | ☐ | |
 | 6 States, Position, Meta | ☐ | |
 | 7 Polish & Balance | ☐ | |

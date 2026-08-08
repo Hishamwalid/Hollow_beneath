@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import type { BoardNode, FactionState } from '@data/types';
 import { CHECKPOINTS, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
+import { ALLY_DEFS } from '@systems/ally/AllyDefs';
+import { freshAllyState, bindRegion } from '@systems/ally/AllyTracking';
+import { shardsForAllyVictory } from '@systems/ally/AllyRewards';
 import { FIRST_NODE_TOOLTIPS } from '@data/tutorialText';
 import { rollDie, rollMovement } from '@systems/checks';
 import { TOTAL_NODES, PAGES, NODES_PER_PAGE, GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -861,6 +864,12 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
     if (node.type === 'discovery') {
+      if (node.subtype.startsWith('ally:')) {
+        this.resolveAllyNode(player, node);
+        this.markResolved(node);
+        this.afterInlineResolution();
+        return;
+      }
       if (node.subtype === 'capture_point' && MINOR_LANDMARKS[node.index]) {
         this.markResolved(node);
         fadeToScene(this, 'Event', { eventDef: MINOR_LANDMARKS[node.index] });
@@ -917,6 +926,33 @@ export class BoardScene extends Phaser.Scene {
     } else {
       this.log(`You rest a while. +${heal} HP, +${mpRestore} MP (-1 Resonance).`);
     }
+  }
+
+  /** Phase 5: a companion found in the world chooses to walk with you. */
+  private resolveAllyNode(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {
+    const allyId = node.subtype.replace('ally:', '') as keyof typeof ALLY_DEFS;
+    const def = ALLY_DEFS[allyId];
+    if (!def) {
+      this.log('Someone was here once, and left only a shape in the dust.');
+      return;
+    }
+    const existing = player.companions.find((c) => c.id === allyId);
+    if (existing) {
+      const shards = shardsForAllyVictory(existing.loyalty);
+      player.echoShards += applyShardBonus(player, shards);
+      this.log(`${def.name} finds you again — you are already companions. +${shards} Echo Shards.`);
+      return;
+    }
+    const state = freshAllyState(allyId);
+    state.loyalty = 5;
+    const homeRegion = { warden_emissary: 'dominion', covenant_courier: 'covenant_deep', sable_zealot: 'sable_edge', archive_cartographer: 'keth_vor' }[allyId] as 'keth_vor' | 'dominion' | 'sable_edge' | 'covenant_deep';
+    bindRegion(state, homeRegion);
+    player.companions.push(state);
+    player.echoShards += applyShardBonus(player, shardsForAllyVictory(5));
+    const s = useGameStore.getState();
+    s.addXp(8);
+    this.log(`${def.name} steps out of the hollow and chooses to walk with you. It is bound to ${homeRegion}.`);
+    this.showNodeTooltip(`${def.name} joins you — it will fight beside you.`);
   }
 
   private resolveDiscovery(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {

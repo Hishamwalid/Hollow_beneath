@@ -201,6 +201,75 @@ export interface BossIntentDef {
   description: string;
   condition?: (ctx: BossTurnContext) => boolean;
   resolve: (ctx: BossTurnContext) => void;
+  /** Phase 5: instead of resolving now, the boss declares ("charging") and unleashes it on its NEXT turn. */
+  charge?: boolean;
+}
+
+// ---- Phase 5: Boss intelligence -------------------------------------------------
+
+/** Stress bands a boss moves through during a fight. */
+export type StressBand = 'low' | 'medium' | 'high' | 'critical';
+
+/** The 12 player-metrics a boss profiles during a fight (combat-local). */
+export interface BossProfile {
+  dmgByType: Partial<Record<DamageType, number>>;
+  totalDmg: number;
+  actions: number;
+  turns: number;
+  guards: number;
+  analyzes: number;
+  items: number;
+  heals: number;            // HP actually restored (for dominance checks)
+  healCount: number;        // times the player healed (for Interdict adaptation)
+  buffsUsed: number;        // buffs the player applied to itself
+  statusesApplied: number;  // statuses the player inflicted
+  momentumSpends: number;   // momentum choice trigger used
+  weaknessHits: number;
+  crits: number;
+  combos: number;
+  repeats: number;          // times the player used the same action two turns running
+}
+
+/** Read-only view of a profile used by the adaptation evaluator / HUD. */
+export interface ProfileView {
+  totalDmg: number;
+  physPct: number;
+  magicPct: number;
+  favoriteElement: DamageType | null;
+  favoriteShare: number;
+  guardPct: number;
+  analyzeCount: number;
+  actionsPerTurn: number;
+  healCount: number;
+  items: number;
+  statusesApplied: number;
+  buffsUsed: number;
+  momentumSpends: number;
+  weaknessHits: number;
+  crits: number;
+  combos: number;
+  repeats: number;
+  turns: number;
+}
+
+/** Adaptations a boss learns mid-fight from profiling the player. */
+export type AdaptationId =
+  | 'magic_shield'
+  | 'armor_pierce'
+  | 'blind_marksman'
+  | 'unreadable'
+  | 'resonance_drain'
+  | 'elemental_resistance'
+  | 'interdict'
+  | 'dispel_conclave'
+  | 'echo_lock';
+
+/** Per-boss behavioural identity (Phase 5 personalities). */
+export interface BossPersona {
+  label: string;   // Scholar / Executioner / Echo / Martyr / Prophet
+  blurb: string;   // one flavour line about how it fights
+  /** Fossil King: taking damage lashes back at the player. */
+  martyr?: boolean;
 }
 
 // ---- Bosses --------------------------------------------------------------------
@@ -237,6 +306,10 @@ export interface BossTurnContext {
   playerResonance: number;
   playerLastActionType: DamageType | null; // damage type of the player's most recent offensive action
   playerRepeatedLastAction: boolean; // true if the player used the same action id two turns running
+  // Phase 5: boss intelligence read-outs (profiling / stress / adaptations)
+  stress: number;
+  band: StressBand;
+  adaptations: AdaptationId[];
 }
 
 export interface BossDef {
@@ -253,6 +326,8 @@ export interface BossDef {
   intents?: BossIntentDef[];
   /** Executed once per boss turn. May call ctx.endCombat() for scripted phase transitions. Legacy fallback when `intents` is absent. */
   takeTurn(ctx: BossTurnContext): void;
+  /** Phase 5: personality identity — flavour + behaviour hooks (e.g. martyr). */
+  persona?: BossPersona;
   aftermathText(flags: Record<string, number>): string;
   getRewards(flags: Record<string, number>): BossRewards;
 }
@@ -419,6 +494,21 @@ export interface InventoryEntry {
   qty: number;
 }
 
+/** Phase 5: persistent companion record carried on a run (see systems/ally/AllyTracking). */
+export interface CompanionState {
+  id: 'warden_emissary' | 'covenant_courier' | 'sable_zealot' | 'archive_cartographer';
+  /** 0..100 loyalty; gates tier abilities. */
+  loyalty: number;
+  /** Narrative hooks already spent (once-per-bond events). */
+  spentHooks: string[];
+  /** One-shot combat abilities consumed since last save (e.g. bitter_revival used). */
+  combatCooldowns: string[];
+  /** Regions the companion has bonded with; gains are faster there. */
+  boundRegions: string[];
+  /** Total fights fought alongside the player (feeds reward curves). */
+  battlesTogether: number;
+}
+
 export interface PlayerState {
   stats: StatBlock;
   derived: DerivedStats;
@@ -450,6 +540,8 @@ export interface PlayerState {
 
   equipment: Equipment;
   inventory: InventoryEntry[];
+  /** Phase 5: companions traveling with the run (loyalty tiers in the ally systems). */
+  companions: CompanionState[];
 
   flags: Record<string, boolean>;
   history: string[]; // ordered log of major choice ids, used by Final Reflection

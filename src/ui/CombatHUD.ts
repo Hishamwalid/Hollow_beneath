@@ -161,8 +161,9 @@ export function createEnemyDisplay(
       }
       statusText.setText(view.statuses.map((s) => statusLabel(s.id)).join(', '));
       if (view.pendingIntent) {
-        intentText.setText(intentLine(view.pendingIntent.label, view.investigationLayer, false));
-        intentText.setColor(view.investigationLayer >= 2 ? '#e9c876' : PALETTE_HEX.boneMuted);
+        const isCharged = view.pendingIntent.charged === true;
+        intentText.setText(`${isCharged ? '⚡' : ''}${intentLine(view.pendingIntent.label, view.investigationLayer, false)}`);
+        intentText.setColor(isCharged ? '#c9a24b' : view.investigationLayer >= 2 ? '#e9c876' : PALETTE_HEX.boneMuted);
       } else {
         intentText.setText(view.investigationLayer >= 1 ? '(already moved this round)' : 'intentions unreadable');
         intentText.setColor(PALETTE_HEX.boneMuted);

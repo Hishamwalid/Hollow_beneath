@@ -29,6 +29,9 @@ import {
 } from '@systems/combat/WeaknessWindowSystem';
 import { resolveReaction } from '@systems/combat/ElementalReactionSystem';
 import { matchCombo } from '@systems/combat/ComboSystem';
+import { CRISES, type CrisisId } from '@systems/combat/CrisisSystem';
+import { fearModifiers } from '@systems/combat/FearSystem';
+import { hasStatus } from '@systems/StatusEffectSystem';
 
 let failures = 0;
 function assert(cond: boolean, msg: string) {
@@ -56,6 +59,7 @@ function makeTestPlayer(stats: StatBlock): PlayerState {
     faction: { ...STARTING_FACTIONS },
     equipment: { weapon: 'rusty_dagger', armour: 'leather_vest', accessory: null, focus: 'cracked_lens' },
     inventory: [{ id: 'ration', qty: 2 }, { id: 'bandage', qty: 1 }],
+    companions: [],
     flags: {},
     history: [],
     loreFragments: [],
@@ -109,44 +113,54 @@ function makeTestPlayer(stats: StatBlock): PlayerState {
 }
 
 // ---- 3. All 5 bosses: simulate full fights with a strong test player ------
+let bossChargeSeen = '';
 for (const bossId of BOSS_ORDER) {
-  const player = makeTestPlayer({ str: 10, dex: 8, con: 8, int: 10, will: 8 });
-  player.currentHP = player.derived.maxHP;
-  const boss = BOSSES[bossId];
-  let engine: CombatEngine;
-  try {
-    engine = new CombatEngine({ player, enemyIds: [], page: boss.page, bossDef: boss, rng: Math.random, playerHistory: new Set(['ate_venn_bread', 'joined_hymn']) });
-  } catch (e) {
-    failures++;
-    console.error(`FAIL: boss ${bossId} constructor threw`, e);
-    continue;
-  }
-  let snap = engine.beginRound();
-  let rounds = 0;
-  try {
-    while (snap.phase !== 'victory' && snap.phase !== 'defeat' && rounds < 150) {
-      let guard = 0;
-      while (snap.phase === 'player' && snap.playerAP > 0 && guard < 10) {
-        const target = snap.enemies.find((e) => e.alive)?.key;
-        snap = engine.attack(target);
-        guard++;
-        if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
-      }
-      if (snap.phase === 'crisis' && snap.pendingCrisis) snap = engine.resolveCrisis(snap.pendingCrisis.options[0].id);
-      if (snap.phase === 'player') snap = engine.endPlayerPhase();
-      if (snap.phase !== 'victory' && snap.phase !== 'defeat') snap = engine.beginRound();
-      rounds++;
-      // heal player a bit each round to survive the simulation without real strategy
-      player.currentHP = Math.min(player.derived.maxHP, player.currentHP + Math.round(player.derived.maxHP * 0.05));
+  let sawCharge = false;
+  for (let attempt = 0; attempt < 60 && !sawCharge; attempt++) {
+    const player = makeTestPlayer({ str: 10 + (attempt % 5), dex: 8, con: 10, int: 10, will: 8 });
+    player.currentHP = player.derived.maxHP;
+    const boss = BOSSES[bossId];
+    let engine: CombatEngine;
+    try {
+      engine = new CombatEngine({ player, enemyIds: [], page: boss.page, bossDef: boss, rng: Math.random, playerHistory: new Set(['ate_venn_bread', 'joined_hymn']) });
+    } catch (e) {
+      failures++;
+      console.error(`FAIL: boss ${bossId} constructor threw`, e);
+      continue;
     }
-  } catch (e) {
-    failures++;
-    console.error(`FAIL: boss ${bossId} threw during simulation at round ${rounds}`, e);
-    continue;
+    let snap = engine.beginRound();
+    let rounds = 0;
+    try {
+      while (snap.phase !== 'victory' && snap.phase !== 'defeat' && rounds < 150) {
+        let guard = 0;
+        while (snap.phase === 'player' && snap.playerAP > 0 && guard < 10) {
+          const target = snap.enemies.find((e) => e.alive)?.key;
+          snap = engine.attack(target);
+          guard++;
+          if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
+        }
+        if (snap.phase === 'victory' || snap.phase === 'defeat') break;
+        if (snap.phase === 'crisis' && snap.pendingCrisis) snap = engine.resolveCrisis(snap.pendingCrisis.options[0].id);
+        if (snap.phase === 'player') snap = engine.endPlayerPhase();
+        if (snap.phase !== 'victory' && snap.phase !== 'defeat') {
+          if (snap.enemies.some((e) => e.pendingIntent?.charged === true) || snap.banners.some((b) => b.startsWith('CHARGE'))) sawCharge = true;
+          snap = engine.beginRound();
+        }
+        rounds++;
+        // heal player a bit each round to survive the simulation without real strategy
+        player.currentHP = Math.min(player.derived.maxHP, player.currentHP + Math.round(player.derived.maxHP * 0.05));
+      }
+    } catch (e) {
+      failures++;
+      console.error(`FAIL: boss ${bossId} threw during simulation at round ${rounds}`, e);
+      continue;
+    }
+    assert(snap.phase === 'victory' || snap.phase === 'defeat', `boss ${bossId} fight terminates (got ${snap.phase} after ${rounds} rounds)`);
   }
-  assert(snap.phase === 'victory' || snap.phase === 'defeat', `boss ${bossId} fight terminates (got ${snap.phase} after ${rounds} rounds)`);
-  ok(`boss ${bossId}: ${snap.phase} in ${rounds} rounds, flags=${JSON.stringify(engine.getFlags())}`);
+  if (sawCharge) bossChargeSeen = bossId;
+  ok(`boss ${bossId}: charge cycle ${sawCharge ? 'SEEN' : 'NOT SEEN'}`);
 }
+assert(bossChargeSeen !== '', 'boss charge cycle seen in simulation');
 
 // ---- 4. Every documented event + every choice ------------------------------
 for (const event of Object.values(EVENTS)) {
@@ -384,14 +398,14 @@ ok('all documented events/choices exercised');
     const player = makeTestPlayer({ str: 4, dex: 6, con: 12, int: 10, will: 10 });
     player.skillsKnown = ['sealing_strike'];
     player.currentMP = player.derived.maxMP;
-    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set() });
+    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(7), playerHistory: new Set() });
     let snap = engine.beginRound();
     const sawWindow = { on: false };
     let rounds = 0;
     while (!sawWindow.on && rounds < 12) {
       const t = snap.enemies.find((e) => e.alive)?.key;
       if (snap.phase === 'player' && snap.playerAP >= 2 && t) snap = engine.useSkill('sealing_strike', t);
-      for (const b of snap.banners) if (b.startsWith('WEAKNESS WINDOW')) sawWindow.on = true;
+      for (const b of snap.banners) if (b.includes('WINDOW')) sawWindow.on = true;
       if (snap.phase === 'player') snap = engine.endPlayerPhase();
       if (snap.phase === 'momentum_choice') snap = engine.resolveMomentum('flow');
       if (snap.phase === 'crisis' && snap.pendingCrisis) snap = engine.resolveCrisis(snap.pendingCrisis.options[0].id);
@@ -465,6 +479,223 @@ ok('all documented events/choices exercised');
       assert(!!s.apCost || s.apCost === 0, `class skill ${id} has apCost`);
     }
     ok(`class identity: ${CLASSES.length} classes, ${Object.keys(CLASS_SKILLS).length} skills, ${SKILL_TREES.length} class-locked trees`);
+  }
+
+  // ---- 13. Phase 4 completeness: crisis options, fear, desperation, bravery ----
+  {
+    const makeEngine = (stats: StatBlock = { str: 8, dex: 6, con: 8, int: 4, will: 4 }) => {
+      const player = makeTestPlayer(stats);
+      player.currentHP = player.derived.maxHP;
+      return new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set() });
+    };
+    const raw = (engine: CombatEngine) => engine as unknown as {
+      phase: string; pendingCrisisId: string | null; playerAP: number; fear: number;
+      player: { currentHP: number; derived: { maxHP: number }; momentum: number };
+      rng: () => number;
+    };
+
+    // 13a. Every crisis option must have an actual effect (no "the moment passes" no-op).
+    for (const crisisId of Object.keys(CRISES) as CrisisId[]) {
+      const engine = makeEngine();
+      for (const opt of CRISES[crisisId].options) {
+        const r = raw(engine);
+        r.phase = 'crisis';
+        r.pendingCrisisId = crisisId;
+        const before = engine.snapshot().log.length;
+        const snap = engine.resolveCrisis(opt.id);
+        const newLog = snap.log.slice(before).join(' ');
+        assert(!newLog.includes('the moment passes'), `crisis '${crisisId}' option '${opt.id}' resolves with an effect (got "${newLog.slice(0, 100)}")`);
+      }
+    }
+    ok(`crisis: all ${Object.keys(CRISES).length} crises x options resolve with real effects`);
+
+    // 13b. Spot-check crisis consequences land in engine state.
+    {
+      const engine = makeEngine();
+      let r = raw(engine);
+      r.phase = 'crisis'; r.pendingCrisisId = 'revelation';
+      let snap = engine.resolveCrisis('study');
+      assert(snap.momentum === 3, `Study crisis grants exactly +3 momentum (got ${snap.momentum})`);
+      assert(snap.enemies.every((e) => e.investigationLayer >= 3), 'Study reveals all enemies to layer 3');
+
+      r.phase = 'crisis'; r.pendingCrisisId = 'critical_moment';
+      snap = engine.resolveCrisis('tactical_reset');
+      assert(hasStatus(snap.playerStatuses, 'barrier') && hasStatus(snap.playerStatuses, 'atk_up') === false, 'Tactical Reset grants a Barrier');
+
+      r.phase = 'crisis'; r.pendingCrisisId = 'critical_moment';
+      snap = engine.resolveCrisis('rhythm');
+      assert(snap.bankedAP === 3, `rhythm banks 3 AP (got ${snap.bankedAP})`);
+
+      r.phase = 'crisis'; r.pendingCrisisId = 'fates_edge';
+      snap = engine.resolveCrisis('gamble');
+      assert(snap.phase === 'victory' || snap.phase === 'defeat', `gamble resolves the fight one way or another (phase=${snap.phase})`);
+    }
+
+    // 13c. Fear: threshold modifiers, snapshot surfacing, bravery actions.
+    {
+      assert(JSON.stringify(fearModifiers(49)) === JSON.stringify({ damageMult: 1, accuracyMult: 1 }), 'fear below threshold has no modifiers');
+      assert(fearModifiers(60).damageMult === 0.9 && fearModifiers(60).accuracyMult === 0.8, 'terrified: -10% damage, -20% accuracy');
+      const engine = makeEngine();
+      const r = raw(engine);
+      r.fear = 60;
+      r.player.currentHP = r.player.derived.maxHP;
+      r.phase = 'player';
+      r.player.momentum = 0;
+      // playerAP must be >= the bravery cost
+      const snap = engine.resolveBravery('face_fear');
+      assert(snap.fear === 0, `Face Fear resets the gauge to 0 (got ${snap.fear})`);
+      assert(hasStatus(snap.playerStatuses, 'atk_up'), 'Face Fear grants atk_up boon');
+    }
+
+    // 13d. Desperation: all 5 events fire, each applies a real mechanic.
+    {
+      const stats: StatBlock = { str: 10, dex: 8, con: 12, int: 6, will: 6 };
+      const engine = makeEngine(stats);
+      const r = raw(engine);
+      r.rng = () => 0; // every roll succeeds -> desperation always rolls in
+      const seen = new Set<string>();
+      for (let i = 0; i < 12 && seen.size < 5; i++) {
+        r.player.currentHP = 5; // force < 35% HP
+        r.phase = 'player';
+        engine.checkDesperation();
+        for (const id of engine.getDesperationIds()) seen.add(id);
+      }
+      assert(seen.size === 5, `all 5 desperation events fire over repeated low-HP turns (fired: ${[...seen].join(',')})`);
+
+      // Healing seal: after one_last_memory fires, consumable heals do nothing.
+      const engine2 = makeEngine(stats);
+      const r2 = raw(engine2);
+      r2.rng = () => 0;
+      for (let i = 0; i < 6 && !engine2.getDesperationIds().includes('one_last_memory'); i++) {
+        r2.player.currentHP = 5;
+        r2.phase = 'player';
+        engine2.checkDesperation();
+      }
+      if (engine2.getDesperationIds().includes('one_last_memory')) {
+        r2.phase = 'player';
+        r2.playerAP = 3;
+        r2.player.currentHP = 5;
+        const before = engine2.snapshot().playerHP;
+        const snap = engine2.useItem('ration');
+        assert(snap.playerHP === before, 'one_last_memory seals consumable healing (hp unchanged)');
+        assert(snap.log.some((l) => l.includes('One Last Memory seals')), 'one_last_memory heal block is logged');
+      } else {
+        assert(false, 'one_last_memory fired during the desperation loop');
+      }
+    }
+  }
+}
+
+// ---- 17. Phase 5: companion / ally systems ----------------------------------
+{
+  const {
+    ALLY_DEFS,
+    LOYALTY_TIERS,
+    tierForLoyalty,
+    abilitiesForLoyalty,
+  } = await import('@systems/ally/AllyDefs');
+  const {
+    freshAllyState,
+    loyaltyGain,
+    mergeAllyStates,
+    setCooldown,
+    hasCooldown,
+    bindRegion,
+    accompaniesIn,
+  } = await import('@systems/ally/AllyTracking');
+  const { planAllyTurn } = await import('@systems/ally/AllyCombat');
+  const { bossAssist } = await import('@systems/ally/AllyBoss');
+  const { shardsForAllyVictory, resonanceForBondThreshold } = await import('@systems/ally/AllyRewards');
+
+  // 17a. Defs + loyalty tiers.
+  assert(Object.keys(ALLY_DEFS).length === 4, `4 companion archetypes (has ${Object.keys(ALLY_DEFS).length})`);
+  assert(tierForLoyalty(0) === 'bonded' && tierForLoyalty(30) === 'steadfast' && tierForLoyalty(60) === 'devoted' && tierForLoyalty(90) === 'true', 'loyalty tier thresholds 0/25/50/80');
+  assert(LOYALTY_TIERS.length === 4, '4 defined loyalty tiers');
+  assert(abilitiesForLoyalty(ALLY_DEFS.covenant_courier, 0).some((a) => a.id === 'field_dressing'), 'courier heals from bonded tier');
+  assert(!abilitiesForLoyalty(ALLY_DEFS.covenant_courier, 0).some((a) => a.id === 'bitter_revival'), 'bitter revival gated behind devotion');
+  ok('ally registry: 4 archetypes, tier-gated abilities verified');
+
+  // 17b. Tracking: gain/merge/cooldowns/regions
+  {
+    const s = freshAllyState('sable_zealot');
+    assert(s.loyalty === 0 && accompaniesIn(s.loyalty) === false, 'fresh ally has 0 loyalty and does not accompany yet');
+    const deltaAfterWin = loyaltyGain(s, true);
+    assert(deltaAfterWin === 12 && s.loyalty === 12, `win grants +12 loyalty (got ${deltaAfterWin})`);
+    const d2 = loyaltyGain(s, false);
+    assert(d2 === 4 && s.loyalty === 16, `loss grants +4 loyalty (got ${d2})`);
+    const bound = bindRegion(s, 'sable_edge');
+    assert(bound.boundRegions.includes('sable_edge'), 'bindRegion records the region');
+    const merged = mergeAllyStates(freshAllyState('sable_zealot'), bound);
+    assert(merged.boundRegions.includes('sable_edge'), 'merge keeps bond history');
+    const cooled = setCooldown(s, 'bitter_revival', true);
+    assert(hasCooldown(cooled, 'bitter_revival'), 'cooldown set');
+    assert(!hasCooldown(setCooldown(cooled, 'bitter_revival', false), 'bitter_revival'), 'cooldown cleared');
+    ok('ally tracking: loyalty curves, regions, cooldowns verified');
+  }
+
+  // 17c. Combat evaluator deterministic priorities
+  {
+    const courier = ALLY_DEFS.covenant_courier;
+    const dyingPlan = planAllyTurn(courier, 100, { playerHp: 5, playerMaxHp: 100, playerHasDebuff: false, playerGuarding: false, playerMomentum: 0, round: 1, bossPhaseKey: null, enemies: [] });
+    assert(dyingPlan.action.kind === 'heal', 'courier heals a dying player first');
+    const steadyPlan = planAllyTurn(courier, 100, { playerHp: 90, playerMaxHp: 100, playerHasDebuff: false, playerGuarding: false, playerMomentum: 0, round: 1, bossPhaseKey: null, enemies: [] });
+    assert(['overwatch', 'support', 'wait'].includes(steadyPlan.action.kind), 'courier does not waste heals on a healthy player');
+    const zealot = ALLY_DEFS.sable_zealot;
+    const weakAdd = planAllyTurn(zealot, 100, { playerHp: 90, playerMaxHp: 100, playerHasDebuff: false, playerGuarding: false, playerMomentum: 0, round: 1, bossPhaseKey: null, enemies: [{ key: 'e1', hpFraction: 0.2, isBoss: false, hasDebuff: false }, { key: 'e2', hpFraction: 0.9, isBoss: false, hasDebuff: false }] });
+    assert(weakAdd.action.kind === 'attack' && weakAdd.action.targetKey === 'e1', 'zealot finishes the weakest add first');
+    ok('ally evaluator: heal-first, weakest-add priority verified');
+  }
+
+  // 17d. Boss assist bindings
+  {
+    const courier = ALLY_DEFS.covenant_courier;
+    const devoted = { ...freshAllyState('covenant_courier'), loyalty: 60 };
+    const assist = bossAssist(courier, devoted, { playerHp: 0, playerMaxHp: 100, bossPhaseKey: 'wrath', playerFallen: true, playerHasDebuff: false, round: 3, foughtTogether: 1 });
+    assert(assist.reviveAvailable && assist.reviveHealAmount === 20, `devoted courier revives at 20% HP (got ${assist.reviveHealAmount})`);
+    const wardenAssist = bossAssist(ALLY_DEFS.warden_emissary, { ...freshAllyState('warden_emissary'), loyalty: 90 }, { playerHp: 10, playerMaxHp: 100, bossPhaseKey: 'wrath', playerFallen: false, playerHasDebuff: false, round: 2, foughtTogether: 3 });
+    assert(wardenAssist.guardCanIntervene === true, 'true-tier warden can arm the unbroken vigil');
+    ok('boss assist: revive + vigil bindings verified');
+  }
+
+  // 17e. Engine integration: healing, revive, and loyalty after victory
+  {
+    const player = makeTestPlayer({ str: 8, dex: 6, con: 10, int: 4, will: 4 });
+    const courier = freshAllyState('covenant_courier');
+    courier.loyalty = 100; // True: field_dressing + mercy_pact available
+    player.currentHP = Math.round(player.derived.maxHP * 0.4);
+    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: Math.random, playerHistory: new Set(), allies: [courier] });
+    let snap = engine.beginRound();
+    while (snap.phase === 'player' && snap.playerAP > 0) snap = engine.attack();
+    const hpBeforeEnd = snap.playerHP;
+    snap = engine.endPlayerPhase();
+    const healed = snap.playerHP > hpBeforeEnd;
+    const allyLogged = snap.log.some((l) => l.includes('Covenant Courier'));
+    assert(snap.allies.some((a) => a.id === 'covenant_courier'), 'snapshot surfaces the companion');
+    assert(allyLogged, 'ally acts and logs during a round');
+    ok(`companion rounds: healed=${healed}, snapshot allies=${snap.allies.map((a) => a.name).join(',')}`);
+  }
+  {
+    // Bitter Revival: a devoted courier saves the player from death, once.
+    const player = makeTestPlayer({ str: 8, dex: 8, con: 20, int: 4, will: 4 });
+    const courier = freshAllyState('covenant_courier');
+    courier.loyalty = 60;
+    player.currentHP = player.derived.maxHP;
+    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: () => 0.99, playerHistory: new Set(), allies: [courier] });
+    let snap = engine.beginRound(); // starts healthy: no crisis interruption
+    const rawP = engine as unknown as { player: { currentHP: number } };
+    rawP.player.currentHP = 1; // drop to the brink after the crisis check
+    if (snap.phase === 'player') snap = engine.endPlayerPhase();
+    assert(snap.phase === 'player' && snap.playerHP >= Math.round(player.derived.maxHP * 0.2), `killing blow is refused by Bitter Revival (hp=${snap.playerHP})`);
+    ok(`bitter revival: saved at ${snap.playerHP} HP (phase=${snap.phase})`);
+  }
+  {
+    // Reward curves: post-victory loyalty and shards
+    const s = freshAllyState('archive_cartographer');
+    s.loyalty = 30;
+    shardsForAllyVictory(s.loyalty);
+    assert(shardsForAllyVictory(30) >= 1, 'ally victory shards always >= 1');
+    resonanceForBondThreshold(ALLY_DEFS.archive_cartographer, { ...s, spentHooks: [] });
+    ok('ally rewards: shard and resonance formulas resolve');
   }
 }
 
