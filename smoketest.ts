@@ -31,7 +31,7 @@ import { resolveReaction } from '@systems/combat/ElementalReactionSystem';
 import { matchCombo } from '@systems/combat/ComboSystem';
 import { CRISES, type CrisisId } from '@systems/combat/CrisisSystem';
 import { fearModifiers } from '@systems/combat/FearSystem';
-import { hasStatus } from '@systems/StatusEffectSystem';
+import { hasStatus, getStatus, tickDurations } from '@systems/StatusEffectSystem';
 
 let failures = 0;
 function assert(cond: boolean, msg: string) {
@@ -458,6 +458,22 @@ ok('all documented events/choices exercised');
     assert(comboBanner || inLog, `combo fires from [Strike,Break,Sacred] across rounds (banners=${JSON.stringify(snap.banners)}, log=${JSON.stringify(snap.log.slice(-4))})`);
     ok(`engine combo: banners=${JSON.stringify(snap.banners)}, log has Expose Truth=${inLog}`);
   }
+  // ---- 12b. Investigation regression: Probe types resolve, observe_behavior exists, INT>=10 bonus singles, not doubled ----
+  {
+    const player = makeTestPlayer({ str: 12, dex: 6, con: 12, int: 10, will: 10 });
+    player.currentHP = player.derived.maxHP;
+    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(9), playerHistory: new Set() });
+    let snap = engine.beginRound();
+    const key = snap.enemies.find((e) => e.alive)?.key;
+    assert(!!key, 'test enemy is present and alive');
+    snap = engine.analyze(key); // Scan (1 AP) -> investigation layer 1
+    const probed = engine.probe(key, 'observe_behavior');
+    assert(probed.log.some((l) => l.startsWith('BEHAVIOR')), 'observe_behavior probe resolves a BEHAVIOR line');
+    // INT >= 10 should grant exactly ONE deep bonus line (regression: was pushed twice).
+    const bonusLines = probed.log.filter((l) => l.startsWith('Your intellect catches an extra thread'));
+    assert(bonusLines.length === 1, `INT 10 probe bonus is single, not doubled (got ${bonusLines.length})`);
+    ok(`probe integrity: observe_behavior fires, single INT bonus (int=${player.stats.int})`);
+  }
 
   // ---- 12. Class identity (Phase 4b): 6 classes, 36 skills, class trees ----
   {
@@ -531,7 +547,28 @@ ok('all documented events/choices exercised');
       assert(snap.phase === 'victory' || snap.phase === 'defeat', `gamble resolves the fight one way or another (phase=${snap.phase})`);
     }
 
-    // 13c. Fear: threshold modifiers, snapshot surfacing, bravery actions.
+    // 13c. Momentum Flow: +2 AP now, but start the NEXT round exhausted (−1 AP).
+    // Regression guard: "exhausted" must be applied for 2 turns so it survives the
+    // end-of-round tickDurations and is still present at next beginRound. A 1-turn
+    // application would be swallowed by endPlayerPhase and never penalize the player.
+    {
+      const player = makeTestPlayer({ str: 12, dex: 6, con: 12, int: 10, will: 10 });
+      player.currentHP = player.derived.maxHP;
+      const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(7), playerHistory: new Set() });
+      engine.beginRound();
+      const r = engine as unknown as { phase: string; player: { momentum: number } };
+      r.phase = 'momentum_choice';
+      r.player.momentum = 5;
+      const snap = engine.resolveMomentum('flow');
+      assert(snap.playerAP === 5, `Flow grants +2 AP immediately from base 3 (got ${snap.playerAP})`);
+      assert(getStatus(snap.playerStatuses, 'exhausted')?.turnsRemaining === 2, 'Flow applies exhausted for 2 turns');
+      tickDurations(snap.playerStatuses);
+      assert(hasStatus(snap.playerStatuses, 'exhausted'), 'exhausted survives the end-of-round tick');
+      assert(getStatus(snap.playerStatuses, 'exhausted')?.turnsRemaining === 1, 'one tick consumed, one turn remains for next beginRound');
+      ok('momentum Flow: +2 AP now, exhausted (2 turns) survives to next round (-1 AP)');
+    }
+
+    // 13d. Fear: threshold modifiers, snapshot surfacing, bravery actions.
     {
       assert(JSON.stringify(fearModifiers(49)) === JSON.stringify({ damageMult: 1, accuracyMult: 1 }), 'fear below threshold has no modifiers');
       assert(fearModifiers(60).damageMult === 0.9 && fearModifiers(60).accuracyMult === 0.8, 'terrified: -10% damage, -20% accuracy');
