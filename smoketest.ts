@@ -774,6 +774,27 @@ assert(bossChargeSeen !== '', 'boss charge cycle seen in simulation');
     resonanceForBondThreshold(ALLY_DEFS.archive_cartographer, { ...s, spentHooks: [] });
     ok('ally rewards: shard and resonance formulas resolve');
   }
+
+  // ---- 18. Combat edge case: 0 HP cleanly resolves to defeat (no crash/hang) ----
+  {
+    // D4: a player reduced to exactly 0 HP with no revive/deathward in play
+    // must transition to 'defeat' and surface a well-formed snapshot.
+    const player = makeTestPlayer({ str: 6, dex: 6, con: 6, int: 4, will: 4 });
+    const engine = new CombatEngine({ player, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(7100), playerHistory: new Set() });
+    engine.beginRound();
+    const rawE = engine as unknown as { player: { currentHP: number } };
+    rawE.player.currentHP = 0; // simulate a killing blow landing
+    let snap: { phase: string; playerHP: number };
+    try {
+      snap = engine.endPlayerPhase() as unknown as { phase: string; playerHP: number };
+    } catch (e) {
+      assert(false, `0 HP defeat path threw instead of resolving: ${(e as Error).message}`);
+      snap = { phase: 'defeat', playerHP: 0 };
+    }
+    assert(snap.phase === 'defeat', `0 HP yields defeat (got phase=${snap.phase})`);
+    assert(snap.playerHP === 0, `defeat snapshot reports playerHP=0 (got ${snap.playerHP})`);
+    ok('edge case: 0 HP -> defeat (no throw, well-formed snapshot)');
+  }
 }
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : `\n${failures} SMOKE TEST(S) FAILED`);
