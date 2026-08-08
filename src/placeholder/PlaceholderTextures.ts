@@ -196,6 +196,58 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     });
   }
 
+  // Board HUD action-row icons
+  shapeTexture(scene, 'icon_character', 56, (g) => {
+    g.fillStyle(PALETTE.boneMuted, 1);
+    g.fillCircle(28, 20, 11); // head
+    g.fillEllipse(28, 44, 26, 20); // shoulders
+  });
+  shapeTexture(scene, 'icon_codex', 56, (g) => {
+    g.fillStyle(PALETTE.boneMuted, 1);
+    g.fillRoundedRect(10, 10, 36, 36, 3);
+    g.lineStyle(2, PALETTE.stone, 1);
+    g.lineBetween(28, 12, 28, 44);
+    g.lineBetween(14, 20, 24, 20);
+    g.lineBetween(14, 28, 24, 28);
+    g.lineBetween(32, 20, 42, 20);
+    g.lineBetween(32, 28, 42, 28);
+  });
+  shapeTexture(scene, 'icon_skills', 56, (g) => {
+    g.lineStyle(5, PALETTE.boneMuted, 1);
+    g.lineBetween(12, 12, 44, 44);
+    g.lineBetween(44, 12, 12, 44);
+    g.fillStyle(PALETTE.boneMuted, 1);
+    g.fillTriangle(12, 12, 20, 12, 12, 20);
+    g.fillTriangle(44, 12, 36, 12, 44, 20);
+    g.fillTriangle(12, 44, 20, 44, 12, 36);
+    g.fillTriangle(44, 44, 36, 44, 44, 36);
+  });
+  shapeTexture(scene, 'icon_shop', 56, (g) => {
+    g.lineStyle(3, PALETTE.boneMuted, 1);
+    g.strokeRoundedRect(12, 20, 32, 26, 3);
+    g.beginPath();
+    g.arc(28, 20, 10, Math.PI, 0, false);
+    g.strokePath();
+  });
+  shapeTexture(scene, 'icon_menu', 56, (g) => {
+    g.lineStyle(3, PALETTE.boneMuted, 1);
+    for (let i = 0; i < 3; i++) {
+      g.strokeCircle(28, 28, 6 + i * 7);
+    }
+  });
+  shapeTexture(scene, 'icon_settings', 56, (g) => {
+    g.fillStyle(PALETTE.boneMuted, 1);
+    const cx = 28;
+    const cy = 28;
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI / 4) * i;
+      g.fillRect(cx + Math.cos(a) * 16 - 3, cy + Math.sin(a) * 16 - 3, 6, 6);
+    }
+    g.fillCircle(cx, cy, 12);
+    g.fillStyle(PALETTE.stone, 1);
+    g.fillCircle(cx, cy, 6);
+  });
+
   // UI chrome
   panelTexture(scene, 'panel_dialog', 800, 220, PALETTE.stone, PALETTE.gold);
   panelTexture(scene, 'panel_stat', 300, 165, PALETTE.stone, PALETTE.boneMuted);

@@ -8,7 +8,7 @@ const NODE_LABELS: Record<string, string> = {
   rest: 'A Place to Breathe',
   discovery: 'Something Left Behind',
   trap: 'Something Feels Wrong',
-  landmark: 'A Landmark Looms',
+  landmark: 'The Cave Mouth',
 };
 
 export interface NodePreviewCard {
@@ -17,19 +17,26 @@ export interface NodePreviewCard {
   destroy: () => void;
 }
 
-export function createNodePreview(scene: Phaser.Scene, x: number, y: number): NodePreviewCard {
-  const bg = scene.add.image(0, 0, 'panel_stat').setDisplaySize(250, 108);
-  const icon = scene.add.image(-92, 0, 'node_event').setDisplaySize(32, 32);
-  const label = scene.add.text(-60, -16, '', { fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5);
-  const sub = scene.add.text(-60, 12, '', { fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.boneMuted, wordWrap: { width: 170 } }).setOrigin(0, 0.5);
-  const container = scene.add.container(x, y, [bg, icon, label, sub]);
+/** A vertically-stacked "tile" card: badge icon, "TILE N" title, and a short description. */
+export function createNodePreview(scene: Phaser.Scene, x: number, y: number, width = 214): NodePreviewCard {
+  const badgeR = 30;
+  const badge = scene.add.circle(0, -46, badgeR, 0x22262c).setStrokeStyle(2, 0xc9a24b, 0.9);
+  const icon = scene.add.image(0, -46, 'node_event').setDisplaySize(28, 28);
+  const title = scene.add.text(0, -4, 'TILE —', {
+    fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.gold,
+  }).setOrigin(0.5);
+  const sub = scene.add.text(0, 22, '', {
+    fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.boneMuted,
+    align: 'center', wordWrap: { width: width - 24 },
+  }).setOrigin(0.5, 0);
+  const container = scene.add.container(x, y, [badge, icon, title, sub]);
 
   return {
     container,
     show: (node: BoardNode) => {
       icon.setTexture(`node_${node.type}`);
-      label.setText(NODE_LABELS[node.type] ?? node.type);
-      sub.setText(`Page ${node.page} · Node ${node.index}`);
+      title.setText(`TILE ${node.index}`);
+      sub.setText(NODE_LABELS[node.type] ?? node.type);
     },
     destroy: () => container.destroy(),
   };

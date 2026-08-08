@@ -12,9 +12,11 @@ import { MINOR_LANDMARKS } from '@data/minorLandmarks';
 import { DISCOVERABLE_SKILLS } from '@data/skills';
 import { shardsForNodeVisit, applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
-import { createStatPanel } from '@ui/StatPanel';
 import { createDiceRoller } from '@ui/DiceRoller';
 import { createNodePreview } from '@ui/NodePreview';
+import { createPlayerPanel } from '@ui/PlayerPanel';
+import { createFactionPanel } from '@ui/FactionPanel';
+import { createActionGrid } from '@ui/ActionGrid';
 import { createButton } from '@ui/Button';
 import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
 import { addResonanceEffects } from '@systems/ResonanceFX';
@@ -22,6 +24,8 @@ import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { influenceStatus } from '@data/factions';
+import { STAGE1_NODES } from '@data/paths/stage1Nodes';
+import stage1AdjustData from '@data/paths/stage1_adjust.json';
 
 const CHAPTER_PAGES = [1, 5, 9, 13, 17];
 const CHAPTER_NAMES: Record<number, string> = {
@@ -34,9 +38,6 @@ const CHAPTER_NAMES: Record<number, string> = {
 
 const NODES_PER_MAP = 40;
 const MAP_COUNT = 5;
-const MAP_TEXTURE_W = 1600;
-const MAP_TEXTURE_H = 900;
-const MAP_COVER_SCALE = Math.max(GAME_WIDTH / MAP_TEXTURE_W, GAME_HEIGHT / MAP_TEXTURE_H);
 
 function chapterForNode(index: number): number {
   return index <= 0 ? 1 : Math.min(MAP_COUNT, Math.ceil(index / NODES_PER_MAP));
@@ -46,12 +47,62 @@ function mapKeyForChapter(chapter: number): string {
   return `map_${Math.min(MAP_COUNT, Math.max(1, chapter))}`;
 }
 
-const COLS = 10;
-const ORIGIN_X = 90;
-const ORIGIN_Y = 236;
-const COL_SPACING = 108;
-const ROW_SPACING = 54;
-const VISIBILITY_RANGE = 4;
+/** Named location for each of the 20 pages — shown in the board's title bar and status log. */
+const PAGE_NAMES = [
+  'The Vestibule', 'Ashfall', 'The Warrens', 'The Archive Threshold', 'The Bone Gallery',
+  'The Resonant Hall', 'Deep Pages', 'The Deep Vault', 'The Court of Dust', 'The Loom Gate',
+  'The Echoing Passages', 'The Still Library', 'The Crystal Veins', 'The Sable Bastion', 'The Whispering Step',
+  'The Archive Depths', 'The Covenant Spire', 'The Ashen Tunnels', 'The Silver Gallery', 'The Final Chamber',
+];
+
+// ---- Board panel frame (left side) ----
+const BOARD_X = 24;
+const BOARD_Y = 24;
+const TITLE_H = 64;
+const MAP_SIZE = 688;
+const BOARD_W = MAP_SIZE;
+const BOARD_H = MAP_SIZE + TITLE_H;
+const MAP_AREA_X = BOARD_X;
+const MAP_AREA_Y = BOARD_Y + TITLE_H;
+const MAP_AREA_W = MAP_SIZE;
+const MAP_AREA_H = MAP_SIZE;
+
+/** Cover-fit scale for a map texture inside the square map area, read from the real texture size. */
+function mapCoverScale(scene: Phaser.Scene, mapKey: string): number {
+  const src = scene.textures.get(mapKey).getSourceImage();
+  const w = (src as { width?: number }).width ?? MAP_SIZE;
+  const h = (src as { height?: number }).height ?? MAP_SIZE;
+  return Math.max(MAP_SIZE / w, MAP_SIZE / h);
+}
+
+// ---- The circular path that rings the cave mouth at the board's centre ----
+const RING_CX = MAP_AREA_X + MAP_AREA_W / 2;
+const RING_CY = MAP_AREA_Y + MAP_AREA_H / 2;
+const RING_RX = 300;
+const RING_RY = 270;
+const RING_GAP_DEG = 46; // gap in the ring, centred at the bottom, where the path enters/exits
+const RING_START_DEG = 90 + RING_GAP_DEG / 2;
+const RING_END_DEG = RING_START_DEG + (360 - RING_GAP_DEG);
+
+// ---- Right-hand HUD columns ----
+const COL_GAP = 16;
+const COL2_X = BOARD_X + BOARD_W + COL_GAP;
+const COL_W = 256;
+const COL3_X = COL2_X + COL_W + COL_GAP;
+
+const DICE_PANEL_Y = 24;
+const DICE_PANEL_H = 196;
+const TILE_PANEL_Y = DICE_PANEL_Y + DICE_PANEL_H + COL_GAP;
+const TILE_PANEL_H = 180;
+const FACTION_PANEL_Y = TILE_PANEL_Y + TILE_PANEL_H + COL_GAP;
+const FACTION_PANEL_H = 44 + 4 * 30;
+const LOG_PANEL_Y = FACTION_PANEL_Y + FACTION_PANEL_H + COL_GAP;
+const LOG_PANEL_H = BOARD_Y + BOARD_H - LOG_PANEL_Y;
+
+const PLAYER_PANEL_Y = 24;
+const PLAYER_PANEL_H = 390;
+const ACTIONGRID_Y = PLAYER_PANEL_Y + PLAYER_PANEL_H + COL_GAP;
+
 const AMBUSH_CHANCE = 0.30;
 const REST_DISRUPT_CHANCE = 0.20;
 const AMBUSH_TABLE: Record<string, string[]> = {
@@ -65,11 +116,115 @@ function isAnyFactionHostile(faction: FactionState): boolean {
   return Object.values(faction).some((v) => influenceStatus(v) === 'Hostile');
 }
 
-function nodePosition(index: number): { x: number; y: number } {
-  const row = Math.floor((index - 1) / COLS);
-  const colInRow = (index - 1) % COLS;
-  const col = row % 2 === 0 ? colInRow : COLS - 1 - colInRow;
-  return { x: ORIGIN_X + col * COL_SPACING, y: ORIGIN_Y + row * ROW_SPACING };
+function degToRad(d: number): number {
+  return (d * Math.PI) / 180;
+}
+
+/** A point on the ring path, `relIndex` of `ringCount` evenly spaced around the sweep. */
+function ringPoint(relIndex: number, ringCount: number): { x: number; y: number } {
+  const t = ringCount <= 1 ? 0 : relIndex / (ringCount - 1);
+  const angle = degToRad(Phaser.Math.Linear(RING_START_DEG, RING_END_DEG, t));
+  return { x: RING_CX + RING_RX * Math.cos(angle), y: RING_CY + RING_RY * Math.sin(angle) };
+}
+
+function caveCenter(): { x: number; y: number } {
+  return { x: RING_CX, y: RING_CY };
+}
+
+/** Just off the ring, near its start — where the player stands before the run's first roll. */
+function entrancePoint(): { x: number; y: number } {
+  const angle = degToRad(RING_START_DEG - 16);
+  return { x: RING_CX + RING_RX * 1.12 * Math.cos(angle), y: RING_CY + RING_RY * 1.12 * Math.sin(angle) };
+}
+
+/** The final node of a page is a landmark only on chapter-boss pages (4, 8, 12, 16, 20). */
+function pageLandmarkIndex(page: number): number | null {
+  const idx = page * NODES_PER_PAGE;
+  return LANDMARK_INDICES.includes(idx) ? idx : null;
+}
+
+// ---- Stage path placement -------------------------------------------------
+// STAGE1_NODES were clicked over stage1_background.png in a 1920x1080 frame.
+// Fit that path's own bounding box into the board map area (with padding) so
+// the nodes land exactly where they were drawn, without cramping.
+const STAGE_PADDING = 40;
+const STAGE_Y_SHIFT = 10;
+
+const STAGE_BOUNDS = (() => {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of STAGE1_NODES) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY, spanX: Math.max(1, maxX - minX), spanY: Math.max(1, maxY - minY) };
+})();
+
+function stageMapTransform(): { scale: number; ox: number; oy: number; w: number; h: number } {
+  const availW = MAP_AREA_W - STAGE_PADDING * 2;
+  const availH = MAP_AREA_H - STAGE_PADDING * 2;
+  const scale = Math.min(availW / STAGE_BOUNDS.spanX, availH / STAGE_BOUNDS.spanY);
+  const fw = STAGE_BOUNDS.spanX * scale;
+  const fh = STAGE_BOUNDS.spanY * scale;
+  const ox = MAP_AREA_X + (MAP_AREA_W - fw) / 2;
+  const oy = MAP_AREA_Y + (MAP_AREA_H - fh) / 2;
+  return { scale, ox, oy, w: fw, h: fh };
+}
+
+/** Maps a stage-path point (in the 1920x1080 frame) to canvas coordinates. */
+function pathToCanvas(px: number, py: number): { x: number; y: number } {
+  const t = stageMapTransform();
+  const nx = (px - STAGE_BOUNDS.minX) / STAGE_BOUNDS.spanX;
+  const ny = (py - STAGE_BOUNDS.minY) / STAGE_BOUNDS.spanY;
+  return { x: t.ox + nx * t.w, y: t.oy + ny * t.h + STAGE_Y_SHIFT };
+}
+
+function isStagePathChapter(chapter: number): boolean {
+  return chapter === 1 && STAGE1_NODES.length > 0;
+}
+
+// ---- Stage path manual adjustments ----------------------------------------
+// Optional per-node fine-tuning, loaded from stage1_adjust.json. Offsets are in
+// the 1920x1080 source frame; they scale by `stageMapTransform().scale` to
+// canvas pixels. Enabled only when the URL has ?editpath=1.
+interface StageAdjust {
+  dx: number;
+  dy: number;
+}
+
+const STAGE_ADJUSTMENTS: Record<number, StageAdjust> = {};
+
+function loadStageAdjustments() {
+  for (const k in STAGE_ADJUSTMENTS) delete STAGE_ADJUSTMENTS[k];
+  const raw = (stage1AdjustData as { adjustments?: Array<{ index: number; dx: number; dy: number }> }).adjustments;
+  if (!raw) return;
+  for (const a of raw) {
+    if (a && typeof a.index === 'number' && Number.isFinite(a.dx) && Number.isFinite(a.dy)) {
+      STAGE_ADJUSTMENTS[a.index] = { dx: a.dx, dy: a.dy };
+    }
+  }
+}
+
+const EDIT_PATH_ENABLED =
+  typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('editpath');
+
+/** Landmark nodes sit at the cave mouth in the centre; every other node sits on the ring around it. */
+function positionForNode(node: BoardNode): { x: number; y: number } {
+  if (node.index >= 1 && node.index <= STAGE1_NODES.length) {
+    const p = STAGE1_NODES[node.index - 1];
+    if (p) {
+      const base = pathToCanvas(p.x, p.y);
+      const adj = STAGE_ADJUSTMENTS[node.index];
+      if (adj) return { x: base.x + adj.dx * stageMapTransform().scale, y: base.y + adj.dy * stageMapTransform().scale };
+      return base;
+    }
+  }
+  const landmarkIdx = pageLandmarkIndex(node.page);
+  if (node.type === 'landmark' || node.index === landmarkIdx) return caveCenter();
+  const relIndex = (node.index - 1) % NODES_PER_PAGE;
+  const ringCount = landmarkIdx ? NODES_PER_PAGE - 1 : NODES_PER_PAGE;
+  return ringPoint(relIndex, ringCount);
 }
 
 export class BoardScene extends Phaser.Scene {
@@ -77,13 +232,16 @@ export class BoardScene extends Phaser.Scene {
   private rollBtn?: ReturnType<typeof createButton>;
   private logText?: Phaser.GameObjects.Text;
   private logBg?: Phaser.GameObjects.Rectangle;
-  private statPanel?: ReturnType<typeof createStatPanel>;
+  private playerPanel?: ReturnType<typeof createPlayerPanel>;
+  private factionPanel?: ReturnType<typeof createFactionPanel>;
+  private actionGrid?: ReturnType<typeof createActionGrid>;
   private preview?: ReturnType<typeof createNodePreview>;
   private diceRoller?: ReturnType<typeof createDiceRoller>;
-  private depthLadder?: Phaser.GameObjects.GameObject[];
-  private pageLabel?: Phaser.GameObjects.Text;
+  private titleText?: Phaser.GameObjects.Text;
+  private titleSub?: Phaser.GameObjects.Text;
   private boardNodeLayer?: Phaser.GameObjects.Container;
   private mapImage?: Phaser.GameObjects.Image;
+  private boardMask?: Phaser.Display.Masks.GeometryMask;
   private ghostToken?: Phaser.GameObjects.Image;
   private busy = false;
   private firstNodeTooltips: Record<string, boolean> = {};
@@ -102,50 +260,100 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
 
-    this.mapImage = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, mapKeyForChapter(chapterForNode(game.currentNodeIndex)))
+    loadStageAdjustments();
+    if (EDIT_PATH_ENABLED) {
+      this.setupPathEditOverlay();
+      this.input.on('drag', (_p: unknown, gameObject: Phaser.GameObjects.GameObject, dragX: number, dragY: number) => {
+        const img = gameObject as Phaser.GameObjects.Image;
+        const idx = Number(img.getData('nodeIndex'));
+        if (!Number.isInteger(idx) || idx < 1 || idx > STAGE1_NODES.length) return;
+        img.x = dragX;
+        img.y = dragY;
+        for (const key of ['ring', 'glow', 'cpRing']) {
+          const sibling = img.getData(key) as Phaser.GameObjects.Arc | undefined;
+          if (sibling) {
+            sibling.x = dragX;
+            sibling.y = dragY;
+          }
+        }
+        const label = img.getData('numLabel') as Phaser.GameObjects.Text | undefined;
+        const labelOffset = img.getData('labelOffset') as { x: number; y: number } | undefined;
+        if (label && labelOffset) {
+          label.x = dragX + labelOffset.x;
+          label.y = dragY + labelOffset.y;
+        }
+        const base = img.getData('baseCanvas') as { x: number; y: number };
+        const scale = stageMapTransform().scale;
+        STAGE_ADJUSTMENTS[idx] = {
+          dx: (img.x - base.x) / scale,
+          dy: (img.y - base.y) / scale,
+        };
+        const p = STAGE1_NODES[idx - 1];
+        if (p) this.redrawToken(idx);
+        const node = useGameStore.getState().game?.nodes[idx - 1];
+        if (node) this.preview?.show(node);
+      });
+    }
+
+    this.buildBoardFrame();
+
+    const maskShape = this.make.graphics({});
+    maskShape.fillStyle(0xffffff);
+    maskShape.fillRect(MAP_AREA_X, MAP_AREA_Y, MAP_AREA_W, MAP_AREA_H);
+    this.boardMask = maskShape.createGeometryMask();
+
+    this.mapImage = this.add.image(MAP_AREA_X + MAP_AREA_W / 2, MAP_AREA_Y + MAP_AREA_H / 2, mapKeyForChapter(chapterForNode(game.currentNodeIndex)))
       .setOrigin(0.5)
-      .setScale(MAP_COVER_SCALE)
-      .setDepth(0);
+      .setScale(mapCoverScale(this, mapKeyForChapter(chapterForNode(game.currentNodeIndex))))
+      .setDepth(0)
+      .setMask(this.boardMask);
     this.boardNodeLayer = this.add.container(0, 0).setDepth(1);
-    this.drawBoard(game.nodes, game.currentNodeIndex + VISIBILITY_RANGE);
-    this.playerToken = this.add.image(0, 0, 'tok_player').setDisplaySize(30, 30).setDepth(20);
+    this.drawBoard(game.nodes, game.currentPage);
+    this.playerToken = this.add.image(0, 0, 'player_pin').setScale(0.24).setOrigin(0.5, 1).setDepth(20);
     this.placeTokenAt(game.currentNodeIndex);
 
     addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT);
 
-    this.statPanel = createStatPanel(this, 16, 16, 300);
-    this.statPanel.update(player);
+    this.playerPanel = createPlayerPanel(this, COL3_X, PLAYER_PANEL_Y, COL_W, PLAYER_PANEL_H);
+    this.playerPanel.update(player);
 
-    this.preview = createNodePreview(this, GAME_WIDTH - 160, 44);
-    if (game.currentNodeIndex > 0) this.preview.show(game.nodes[game.currentNodeIndex - 1]);
+    this.actionGrid = createActionGrid(this, COL3_X, ACTIONGRID_Y, [
+      { icon: 'icon_character', label: 'Character', onClick: () => fadeToScene(this, 'Inventory') },
+      { icon: 'icon_codex', label: 'Codex', onClick: () => fadeToScene(this, 'LoreCodex') },
+      {
+        icon: 'icon_skills', label: 'Skills', onClick: () => fadeToScene(this, 'SkillTree'),
+        badge: () => { const p = useGameStore.getState().player; return p && p.skillPoints > 0 ? String(p.skillPoints) : null; },
+      },
+      { icon: 'icon_shop', label: 'Shop', onClick: () => fadeToScene(this, 'ShardShop') },
+      { icon: 'icon_menu', label: 'Menu', onClick: () => fadeToScene(this, 'Menu') },
+      { icon: 'icon_settings', label: 'Settings', onClick: () => fadeToScene(this, 'Settings') },
+    ], COL_W);
 
-    const rightX = GAME_WIDTH - 120;
-    createButton(this, rightX, 150, 'Bag', () => fadeToScene(this, 'Inventory'), { width: 80, height: 32, fontSize: '14px' });
+    this.add.rectangle(COL2_X + COL_W / 2, DICE_PANEL_Y + DICE_PANEL_H / 2, COL_W, DICE_PANEL_H, 0x16191d, 0.94)
+      .setStrokeStyle(1, 0xc9a24b, 0.6);
+    this.diceRoller = createDiceRoller(this, COL2_X + COL_W / 2, DICE_PANEL_Y + 70);
+    this.diceRoller.container.setDepth(6);
+    this.rollBtn = createButton(this, COL2_X + COL_W / 2, DICE_PANEL_Y + DICE_PANEL_H - 30, 'Roll (1d6)', () => this.handleRoll(), { width: COL_W - 24, height: 44, fontSize: '16px', depth: 6 });
 
-    this.add.text(rightX, 190, `Skills (${player.skillPoints})`, {
-      fontFamily: FONT_MONO, fontSize: '13px', color: player.skillPoints > 0 ? PALETTE_HEX.gold : '#555555',
-    }).setOrigin(0.5).setDepth(5);
-    createButton(this, rightX, 212, 'Skills', () => fadeToScene(this, 'SkillTree'), { width: 80, height: 30, fontSize: '12px' });
+    this.add.rectangle(COL2_X + COL_W / 2, TILE_PANEL_Y + TILE_PANEL_H / 2, COL_W, TILE_PANEL_H, 0x16191d, 0.94)
+      .setStrokeStyle(1, 0xc9a24b, 0.6);
+    this.preview = createNodePreview(this, COL2_X + COL_W / 2, TILE_PANEL_Y + 84, COL_W);
+    this.preview.container.setDepth(6);
+    this.preview.show(game.nodes[Math.max(0, game.currentNodeIndex - 1)]);
 
-    this.pageLabel = this.add.text(GAME_WIDTH / 2, 18, `Page ${game.currentPage} / 20`, {
-      fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.gold,
-    }).setOrigin(0.5, 0).setDepth(5);
+    this.factionPanel = createFactionPanel(this, COL2_X, FACTION_PANEL_Y, COL_W);
+    this.factionPanel.update(player.faction);
 
-    this.buildDepthLadder(game.currentPage);
-
-    const logY = GAME_HEIGHT - 40;
-    this.logBg = this.add.rectangle(GAME_WIDTH / 2, logY, GAME_WIDTH - 40, 44, 0x16191d, 0.7)
-      .setStrokeStyle(1, 0xc9a24b, 0.3).setDepth(5);
-    this.logText = this.add.text(GAME_WIDTH / 2, logY + 2, this.pageFlavor(game.currentPage), {
+    this.logBg = this.add.rectangle(COL2_X + COL_W / 2, LOG_PANEL_Y + LOG_PANEL_H / 2, COL_W, LOG_PANEL_H, 0x16191d, 0.9)
+      .setStrokeStyle(1, 0xc9a24b, 0.5);
+    this.logText = this.add.text(COL2_X + 14, LOG_PANEL_Y + 14, this.pageFlavor(game.currentPage), {
       fontFamily: FONT_BODY,
-      fontSize: '15px',
+      fontSize: '14px',
       color: PALETTE_HEX.boneMuted,
-      align: 'center',
-      wordWrap: { width: GAME_WIDTH - 60 },
-    }).setOrigin(0.5).setDepth(6);
+      wordWrap: { width: COL_W - 28 },
+    }).setDepth(6);
 
-    this.diceRoller = createDiceRoller(this, GAME_WIDTH / 2 - 90, GAME_HEIGHT - 210);
-    this.rollBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 110, 'Roll (1d6)', () => this.handleRoll(), { width: 200 });
+    this.updateBoardTitle(game.currentPage);
 
     if (game.currentNodeIndex >= TOTAL_NODES) {
       this.rollBtn.setEnabled(false);
@@ -159,73 +367,259 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
+  private buildBoardFrame() {
+    this.add.rectangle(BOARD_X + BOARD_W / 2, BOARD_Y + BOARD_H / 2, BOARD_W, BOARD_H, 0x000000, 0)
+      .setStrokeStyle(2, 0xc9a24b, 0.85).setDepth(30);
+    this.add.rectangle(BOARD_X + BOARD_W / 2, BOARD_Y + TITLE_H / 2, BOARD_W, TITLE_H, 0x0e1013, 0.92).setDepth(4);
+    this.add.rectangle(BOARD_X + BOARD_W / 2, BOARD_Y + TITLE_H, BOARD_W - 4, 2, 0xc9a24b, 0.6).setDepth(4);
+    this.titleText = this.add.text(BOARD_X + 20, BOARD_Y + 12, '', {
+      fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold,
+    }).setDepth(5);
+    this.titleSub = this.add.text(BOARD_X + BOARD_W - 20, BOARD_Y + 22, '', {
+      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted,
+    }).setOrigin(1, 0).setDepth(5);
+  }
+
+  private updateBoardTitle(page: number) {
+    this.titleText?.setText(PAGE_NAMES[Math.min(19, Math.max(0, page - 1))] ?? 'The Threshold');
+    this.titleSub?.setText(`Page ${page} / ${PAGES}`);
+  }
+
   private pageFlavor(page: number): string {
     if (page <= 0) return 'The stair down is behind you now. Ahead: two hundred pages of a book that was never meant to be read twice.';
-    const NAMES = [
-      'The Vestibule', 'Ashfall', 'The Warrens', 'The Archive Threshold', 'The Bone Gallery',
-      'The Resonant Hall', 'Deep Pages', 'The Deep Vault', 'The Court of Dust', 'The Loom Gate',
-      'The Echoing Passages', 'The Still Library', 'The Crystal Veins', 'The Sable Bastion', 'The Whispering Step',
-      'The Archive Depths', 'The Covenant Spire', 'The Ashen Tunnels', 'The Silver Gallery', 'The Final Chamber',
-    ];
-    return `Page ${page} / 20 — ${NAMES[Math.min(19, page - 1)]}`;
+    return `Page ${page} / 20 — ${PAGE_NAMES[Math.min(19, page - 1)]}`;
   }
 
-  private buildDepthLadder(currentPage: number) {
-    if (this.depthLadder) { this.depthLadder.forEach((o) => o.destroy()); }
-    const ladder: Phaser.GameObjects.GameObject[] = [];
-    const lx = GAME_WIDTH - 20;
-    const topY = 210;
-    const bottomY = GAME_HEIGHT - 90;
-    const stepH = (bottomY - topY) / (PAGES - 1);
-    for (let i = 0; i < PAGES; i++) {
-      const y = Math.round(topY + i * stepH);
-      const isCurrent = i + 1 === currentPage;
-      const dot = this.add.circle(lx, y, isCurrent ? 6 : 4, isCurrent ? 0xc9a24b : 0x2a2e33)
-        .setStrokeStyle(1, isCurrent ? 0xe9c876 : 0x9a9488, isCurrent ? 1 : 0.4);
-      const label = this.add.text(lx - 16, y, `${i + 1}`, {
-        fontFamily: FONT_MONO, fontSize: '11px', color: isCurrent ? '#c9a24b' : '#555555',
-      }).setOrigin(1, 0.5);
-      ladder.push(dot, label);
+  private drawRingPath() {
+    if (!this.boardNodeLayer) return;
+    const g = this.add.graphics();
+
+    const chapter = chapterForNode(useGameStore.getState().game?.currentNodeIndex ?? 1);
+    if (isStagePathChapter(chapter) && STAGE1_NODES.length > 1) {
+      g.lineStyle(5, 0x8f6a27, 0.7);
+      const base = { index: 1, page: 1, type: 'event', subtype: '', resolved: false } as BoardNode;
+      const p0 = positionForNode({ ...base, index: 1 });
+      g.lineBetween(p0.x, p0.y, p0.x, p0.y);
+      for (let i = 2; i <= STAGE1_NODES.length; i++) {
+        const p1 = positionForNode({ ...base, index: i });
+        const p2 = positionForNode({ ...base, index: i - 1 });
+        g.lineBetween(p2.x, p2.y, p1.x, p1.y);
+      }
+      this.boardNodeLayer.add(g);
+      return;
     }
-    this.depthLadder = ladder;
+
+    g.lineStyle(3, 0xc9a24b, 0.35);
+    const steps = 120;
+    for (let i = 0; i < steps; i++) {
+      if (i % 4 >= 2) continue; // dashed
+      const a0 = degToRad(Phaser.Math.Linear(RING_START_DEG, RING_END_DEG, i / steps));
+      const a1 = degToRad(Phaser.Math.Linear(RING_START_DEG, RING_END_DEG, (i + 1) / steps));
+      const p0 = { x: RING_CX + RING_RX * Math.cos(a0), y: RING_CY + RING_RY * Math.sin(a0) };
+      const p1 = { x: RING_CX + RING_RX * Math.cos(a1), y: RING_CY + RING_RY * Math.sin(a1) };
+      g.lineBetween(p0.x, p0.y, p1.x, p1.y);
+    }
+    this.boardNodeLayer.add(g);
   }
 
-  private drawBoard(nodes: BoardNode[], visibleLimit: number) {
+  private drawBoard(nodes: BoardNode[], page: number) {
     if (!this.boardNodeLayer) return;
     this.boardNodeLayer.removeAll(true);
-    for (const node of nodes) {
-      const { x, y } = nodePosition(node.index);
-      const isLandmark = LANDMARK_INDICES.includes(node.index);
-      const isVisible = node.index <= visibleLimit;
-      const icon = this.add.image(x, y, `node_${node.type}`).setDisplaySize(isLandmark ? 26 : 16, isLandmark ? 26 : 16);
-      icon.setName(`node_${node.index}`).setData('resolved', node.resolved);
-      const baseAlpha = isVisible ? (node.resolved && !isLandmark ? 0.35 : 0.9) : 0;
-      icon.setAlpha(baseAlpha);
-      if (!isVisible) icon.setTint(0x000000);
-      this.boardNodeLayer.add(icon);
-      if (CHECKPOINTS.includes(node.index)) {
-        const ring = this.add.circle(x, y, 16, 0x000000, 0).setStrokeStyle(1, isVisible ? 0xc9a24b : 0x222222, isVisible ? 0.5 : 0.15);
+
+    this.drawRingPath();
+
+    const cave = caveCenter();
+    const store = useGameStore.getState();
+    const pageNodes = nodes.filter((n) => n.page === page);
+    const chapter = chapterForNode(Math.max(1, page * NODES_PER_PAGE));
+    const isStagePath = isStagePathChapter(chapter);
+
+    // On stage maps show the whole chapter (all 40 nodes); elsewhere only the current page's 10.
+    const renderNodes = isStagePath
+      ? nodes.filter((n) => n.index >= 1 && n.index <= STAGE1_NODES.length)
+      : pageNodes;
+
+    const hasCaveNode = renderNodes.some((n) => n.type === 'landmark');
+    if (!isStagePath) {
+      const caveGlyph = this.add.image(cave.x, cave.y, 'node_landmark').setDisplaySize(hasCaveNode ? 40 : 26, hasCaveNode ? 40 : 26);
+      caveGlyph.setAlpha(hasCaveNode ? 0.95 : 0.22);
+      if (!hasCaveNode) caveGlyph.setTint(0x000000);
+      this.boardNodeLayer.add(caveGlyph);
+    }
+
+    for (const node of renderNodes) {
+      if (node.type === 'landmark' && isStagePath) {
+        const { x, y } = positionForNode(node);
+        const ring = this.add.circle(x, y, 14, 0x000000, 0.35).setStrokeStyle(2, 0xc9a24b, 0.9);
+        const icon = this.add.image(x, y, 'node_landmark').setDisplaySize(26, 26);
+        icon.setName(`node_${node.index}`).setData('resolved', node.resolved);
+        if (EDIT_PATH_ENABLED) {
+          icon.setData('baseCanvas', pathToCanvas(STAGE1_NODES[node.index - 1].x, STAGE1_NODES[node.index - 1].y));
+          icon.setData('nodeIndex', node.index);
+          icon.setData('ring', ring);
+          const label = this.add.text(x + 16, y - 22, String(node.index), {
+            fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
+            backgroundColor: '#0d0f13', padding: { x: 4, y: 2 },
+          }).setStroke('#c9a24b', 1).setDepth(10);
+          icon.setData('numLabel', label);
+          icon.setData('labelOffset', { x: 16, y: -22 });
+          this.boardNodeLayer.add(label);
+          icon.setInteractive({ useHandCursor: true, draggable: true });
+          this.input.setDraggable(icon);
+        }
         this.boardNodeLayer.add(ring);
+        this.boardNodeLayer.add(icon);
+        continue;
+      }
+      if (node.type === 'landmark') continue; // already represented by caveGlyph above
+      const { x, y } = positionForNode(node);
+      const isCurrent = store.game?.currentNodeIndex === node.index;
+      const size = isStagePath ? 18 : 24;
+      const ring = this.add.circle(x, y, size / 2 + 4, 0x000000, 0.35).setStrokeStyle(1, 0x000000, 0.45);
+      const icon = this.add.image(x, y, `node_${node.type}`).setDisplaySize(size, size);
+      icon.setName(`node_${node.index}`).setData('resolved', node.resolved);
+      icon.setAlpha(node.resolved ? 0.55 : 1);
+      if (EDIT_PATH_ENABLED && isStagePath && node.index >= 1 && node.index <= STAGE1_NODES.length) {
+        icon.setData('baseCanvas', pathToCanvas(STAGE1_NODES[node.index - 1].x, STAGE1_NODES[node.index - 1].y));
+        icon.setData('nodeIndex', node.index);
+        icon.setData('ring', ring);
+        const label = this.add.text(x + 12, y - 18, String(node.index), {
+          fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
+          backgroundColor: '#0d0f13', padding: { x: 4, y: 2 },
+        }).setStroke('#c9a24b', 1).setDepth(10);
+        icon.setData('numLabel', label);
+        icon.setData('labelOffset', { x: 12, y: -18 });
+        this.boardNodeLayer.add(label);
+        icon.setInteractive({ useHandCursor: true, draggable: true });
+        this.input.setDraggable(icon);
+      }
+      this.boardNodeLayer.add(ring);
+      this.boardNodeLayer.add(icon);
+      if (isCurrent) {
+        const glow = this.add.circle(x, y, size / 2 + 10, 0x000000, 0).setStrokeStyle(2, 0xe9c876, 0.95);
+        this.boardNodeLayer.add(glow);
+        if (EDIT_PATH_ENABLED && isStagePath) icon.setData('glow', glow);
+      }
+      if (CHECKPOINTS.includes(node.index)) {
+        const cpRing = this.add.circle(x, y, size / 2 + 6, 0x000000, 0).setStrokeStyle(2, 0xc9a24b, 0.8);
+        this.boardNodeLayer.add(cpRing);
+        if (EDIT_PATH_ENABLED && isStagePath) icon.setData('cpRing', cpRing);
       }
     }
-    const store = useGameStore.getState();
+
     if (this.ghostToken) { this.ghostToken.destroy(); this.ghostToken = undefined; }
     if (store.game?.deathNodeIndex != null) {
-      const pos = nodePosition(store.game.deathNodeIndex);
-      this.ghostToken = this.add.image(pos.x, pos.y - 24, 'tok_player').setDisplaySize(30, 30).setAlpha(0.35)
-        .setTint(0x666666);
+      const deathNode = store.game.nodes[store.game.deathNodeIndex - 1];
+      const pos = deathNode ? positionForNode(deathNode) : cave;
+      this.ghostToken = this.add.image(pos.x, pos.y - 24, 'tok_player').setDisplaySize(30, 30).setAlpha(0.35).setTint(0x666666).setDepth(19);
     }
+  }
+
+  // ---- Path edit tool (dev, ?editpath=1) --------------------------------
+  private pathEditRoot: HTMLElement | null = null;
+
+  private setupPathEditOverlay() {
+    this.destroyPathEditOverlay();
+    const root = document.createElement('div');
+    root.style.cssText = `
+      position: fixed; top: 10px; left: 10px; z-index: 10000;
+      display: flex; gap: 6px; align-items: center;
+      background: rgba(0,0,0,0.78); padding: 8px; border-radius: 6px;
+      font-family: sans-serif;
+    `;
+    const label = document.createElement('span');
+    label.style.cssText = 'color:#0ff; font-size:13px; padding:0 8px;';
+    label.textContent = 'Drag nodes to adjust';
+    const make = (t: string, bg: string, fn: () => void) => {
+      const b = document.createElement('button');
+      b.textContent = t;
+      b.style.cssText = `padding:6px 10px; font-size:13px; cursor:pointer; background:${bg}; color:#fff; border:1px solid #666; border-radius:4px;`;
+      b.addEventListener('click', (e) => { e.stopPropagation(); fn(); });
+      return b;
+    };
+    const saveBtn = make('Save JSON', '#2a6b2a', () => this.savePathAdjustments());
+    const resetBtn = make('Reset', '#663333', () => { this.clearPathAdjustments(); this.redrawBoard(); });
+    const doneBtn = make('Done', '#333', () => {
+      this.destroyPathEditOverlay();
+      const url = new URL(window.location.href);
+      url.searchParams.delete('editpath');
+      window.history.replaceState({}, '', url.toString());
+      this.scene.restart();
+    });
+    root.appendChild(label);
+    root.appendChild(saveBtn);
+    root.appendChild(resetBtn);
+    root.appendChild(doneBtn);
+    document.body.appendChild(root);
+    this.pathEditRoot = root;
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.destroyPathEditOverlay());
+    this.events.once(Phaser.Scenes.Events.DESTROY, () => this.destroyPathEditOverlay());
+  }
+
+  private destroyPathEditOverlay() {
+    this.pathEditRoot?.remove();
+    this.pathEditRoot = null;
+  }
+
+  private savePathAdjustments() {
+    const scale = stageMapTransform().scale;
+    const entries: Array<{ index: number; dx: number; dy: number }> = [];
+    for (const key of Object.keys(STAGE_ADJUSTMENTS)) {
+      const a = STAGE_ADJUSTMENTS[Number(key)];
+      if (!a || (Math.abs(a.dx) < 0.001 && Math.abs(a.dy) < 0.001)) continue;
+      entries.push({ index: Number(key), dx: Math.round(a.dx * 10) / 10, dy: Math.round(a.dy * 10) / 10 });
+    }
+    const payload = { stage: 'stage1-bg', adjustments: entries };
+    const json = JSON.stringify(payload, null, 2);
+    // eslint-disable-next-line no-console
+    console.log('=== STAGE PATH ADJUSTMENTS ===', json);
+    try {
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'stage1_adjust.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch { /* fallback to console copy */ }
+  }
+
+  private clearPathAdjustments() {
+    for (const key of Object.keys(STAGE_ADJUSTMENTS)) delete STAGE_ADJUSTMENTS[Number(key)];
+    this.redrawBoard();
+    this.preview?.show(useGameStore.getState().game?.nodes[Math.max(0, (useGameStore.getState().game?.currentNodeIndex ?? 1) - 1)] ?? { index: 1, page: 1, type: 'event', subtype: '', resolved: false });
+  }
+
+  private redrawBoard() {
+    const { game } = useGameStore.getState();
+    if (game) this.drawBoard(game.nodes, game.currentPage);
+  }
+
+  private redrawToken(index: number) {
+    const current = useGameStore.getState().game?.currentNodeIndex;
+    if (current === index) this.placeTokenAt(current);
   }
 
   private placeTokenAt(index: number) {
     if (!this.playerToken) return;
-    const pos = index <= 0 ? { x: ORIGIN_X - 60, y: ORIGIN_Y } : nodePosition(index);
-    this.playerToken.setPosition(pos.x, pos.y - 24);
+    if (index <= 0) {
+      const pos = isStagePathChapter(chapterForNode(1)) && STAGE1_NODES[0]
+        ? positionForNode({ index: 1, page: 1, type: 'event', subtype: '', resolved: false })
+        : entrancePoint();
+      this.playerToken.setPosition(pos.x, pos.y);
+      return;
+    }
+    const { game } = useGameStore.getState();
+    const node = game?.nodes[index - 1];
+    const pos = node ? positionForNode(node) : caveCenter();
+    this.playerToken.setPosition(pos.x, pos.y);
   }
 
   private log(msg: string) {
     this.logText?.setText(msg);
-    this.logBg?.setAlpha(0.85);
+    this.logBg?.setAlpha(0.9);
   }
 
   private handleRoll() {
@@ -287,9 +681,17 @@ export class BoardScene extends Phaser.Scene {
     const { player, game } = useGameStore.getState();
     if (!player || !game) return;
 
-    this.placeTokenAt(target);
+    const node = game.nodes[target - 1];
+    const dest = node ? positionForNode(node) : caveCenter();
     audio.moveStep();
-    this.finishMove(target);
+    if (this.playerToken) {
+      this.tweens.add({
+        targets: this.playerToken, x: dest.x, y: dest.y, duration: 260, ease: 'Sine.easeInOut',
+        onComplete: () => this.finishMove(target),
+      });
+    } else {
+      this.finishMove(target);
+    }
   }
 
   private showChapterCard(page: number, node: BoardNode) {
@@ -353,11 +755,12 @@ export class BoardScene extends Phaser.Scene {
     useGameStore.setState({
       game: { ...game, currentNodeIndex: target, currentPage: page, path: [...game.path, target], landings: game.landings + 1, nodes: updatedNodes, deathNodeIndex: null },
     });
-    this.drawBoard(updatedNodes, target + VISIBILITY_RANGE);
-    this.statPanel?.update(player);
+    this.drawBoard(updatedNodes, page);
+    this.playerPanel?.update(player);
+    this.factionPanel?.update(player.faction);
+    this.actionGrid?.refresh();
     this.preview?.show(node);
-    this.pageLabel?.setText(`Page ${page} / ${PAGES}`);
-    this.buildDepthLadder(page);
+    this.updateBoardTitle(page);
 
     const showChapterOrResolve = () => {
       if (page !== prevPage && CHAPTER_PAGES.includes(page)) {
@@ -384,16 +787,18 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
 
-    const newMap = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, mapKeyForChapter(chapter))
+    const newMap = this.add.image(MAP_AREA_X + MAP_AREA_W / 2, MAP_AREA_Y + MAP_AREA_H / 2, mapKeyForChapter(chapter))
       .setOrigin(0.5)
-      .setScale(MAP_COVER_SCALE)
-      .setDepth(0);
+      .setScale(mapCoverScale(this, mapKeyForChapter(chapter)))
+      .setDepth(0)
+      .setMask(this.boardMask!);
     this.mapImage = newMap;
 
-    const page = this.add.image(0, GAME_HEIGHT / 2, oldMap.texture.key)
+    const page = this.add.image(MAP_AREA_X, MAP_AREA_Y + MAP_AREA_H / 2, oldMap.texture.key)
       .setOrigin(0, 0.5)
-      .setScale(MAP_COVER_SCALE)
-      .setDepth(2);
+      .setScale(mapCoverScale(this, oldMap.texture.key))
+      .setDepth(2)
+      .setMask(this.boardMask!);
     audio.pageTurn();
 
     this.tweens.add({
@@ -681,7 +1086,9 @@ export class BoardScene extends Phaser.Scene {
         targets: tx, alpha: 0, y: 280, duration: 3000, ease: 'Power2', onComplete: () => tx.destroy(),
       });
     }
-    this.statPanel?.update(player);
+    this.playerPanel?.update(player);
+    this.factionPanel?.update(player.faction);
+    this.actionGrid?.refresh();
 
     if (player.currentHP <= 0) {
       this.handleDeathFlow();

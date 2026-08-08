@@ -17,6 +17,8 @@ import { SettingsScene } from '@scenes/SettingsScene';
 import { InventoryScene } from '@scenes/InventoryScene';
 import { SkillTreeScene } from '@scenes/SkillTreeScene';
 import { TutorialScene } from '@scenes/TutorialScene';
+import { PathPointPickerScene } from '@scenes/PathPointPickerScene';
+import { NodePreviewScene } from '@scenes/dev/NodePreviewScene';
 
 window.addEventListener('error', (e) => {
   console.error('GLOBAL ERROR:', e.error ?? e.message, e);
@@ -49,7 +51,10 @@ const config: Phaser.Types.Core.GameConfig = {
     SettingsScene,
     InventoryScene,
     SkillTreeScene,
+    PathPointPickerScene,
+    NodePreviewScene,
   ],
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+(window as any).game = game; // dev convenience — remove before shipping
