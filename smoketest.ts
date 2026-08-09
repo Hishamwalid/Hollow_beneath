@@ -31,6 +31,7 @@ import { resolveReaction } from '@systems/combat/ElementalReactionSystem';
 import { matchCombo } from '@systems/combat/ComboSystem';
 import { battlefieldDamageMod, BATTLEFIELD_STATES } from '@systems/combat/BattlefieldStateSystem';
 import { POSITION_META, ROW_ORDER, defaultRowFor } from '@systems/combat/PositionSystem';
+import { DIFFICULTIES, difficultyMods } from '@systems/combat/DifficultySystem';
 import { CRISES, type CrisisId } from '@systems/combat/CrisisSystem';
 import { fearModifiers } from '@systems/combat/FearSystem';
 import { hasStatus, getStatus, tickDurations } from '@systems/StatusEffectSystem';
@@ -894,6 +895,28 @@ assert(bossChargeSeen !== '', 'boss charge cycle seen in simulation');
     assert(snap3.playerRow === 'back' && snap3.guarding, `fallBack drops to back + guards (row=${snap3.playerRow}, guarding=${snap3.guarding})`);
     assert(snap3.playerAP === apBefore3 - 1, `fallBack costs 1 AP (was ${apBefore3}, now ${snap3.playerAP})`);
     ok('falling back: drop 2 rows + guard (falls from middle to back)');
+  }
+
+  // ---- 21. Phase 6d: Difficulty Modes (neutral normal; stats adjust) ----------
+  {
+    // Unit: normal is fully neutral; easy softens, ironman is permadeath.
+    assert(DIFFICULTIES.normal.playerDmgMult === 1 && DIFFICULTIES.normal.incomingMult === 1, 'normal: neutral incoming/output');
+    assert(DIFFICULTIES.normal.enemyHpMult === 1 && DIFFICULTIES.normal.permadeath === false, 'normal: neutral enemy stats, no permadeath');
+    assert(DIFFICULTIES.easy.enemyHpMult < 1 && DIFFICULTIES.easy.playerDmgMult > 1, 'easy: foes softer, you hit harder');
+    assert(DIFFICULTIES.hard.enemyHpMult > 1 && DIFFICULTIES.hard.incomingMult > 1, 'hard: foes tougher, you take more');
+    assert(DIFFICULTIES.ironman.permadeath === true && difficultyMods('hard').permadeath === false, 'ironman is a true permadeath mode');
+
+    // Integration: enemy stat scaling is applied at build time.
+    const p1 = makeTestPlayer({ str: 6, dex: 6, con: 10, int: 8, will: 6 });
+    const normalEng = new CombatEngine({ player: p1, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(5001), playerHistory: new Set() });
+    normalEng.beginRound();
+    const normalHp = normalEng.snapshot().enemies[0].maxHp;
+    const hardEng = new CombatEngine({ player: makeTestPlayer({ str: 6, dex: 6, con: 10, int: 8, will: 6 }), enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(5101), playerHistory: new Set(), difficulty: 'hard' });
+    hardEng.beginRound();
+    const hardHp = hardEng.snapshot().enemies[0].maxHp;
+    assert(hardHp > normalHp, `hard enemies have more HP (normal ${normalHp} vs hard ${hardHp})`);
+    assert(hardEng.snapshot().difficulty === 'hard', 'snapshot exposes the active difficulty');
+    ok('difficulty modes: neutral base, enemy scaling applied, snapshot surfaces mode');
   }
 }
 

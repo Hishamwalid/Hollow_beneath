@@ -101,6 +101,7 @@ export class CombatScene extends Phaser.Scene {
       precombatFlags: data.precombatFlags,
       playerHistory: new Set(player.history),
       allies: player.companions ?? [],
+      difficulty: settingsManager.get().difficulty,
     });
 
     this.add

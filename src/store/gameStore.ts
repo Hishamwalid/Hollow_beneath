@@ -10,6 +10,7 @@ import { mulberry32, randomSeed } from '@systems/rng';
 import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } from '@systems/SaveManager';
 import { applyUnlocksToNewRun, deathRefund, shardsForEnding } from '@systems/EchoShardSystem';
 import { computeLevelUp, MAX_LEVEL } from '@systems/LevelSystem';
+import { settingsManager } from '@systems/SettingsManager';
 import { SKILL_TREES } from '@data/skillTree';
 import { CLASSES } from '@data/classes';
 import { TOTAL_MAJOR_BOSSES } from '@data/bosses';
@@ -192,7 +193,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loreFragmentsSeen: Array.from(new Set([...meta.loreFragmentsSeen, ...player.loreFragments])),
       lastRunStats: runStats,
     };
-    if (game.checkpointPage === 0) {
+    // Phase 6d: Ironman mode is permadeath — a death ends the run outright,
+    // with no checkpoint mercy, even if a checkpoint exists.
+    const ironman = settingsManager.get().difficulty === 'ironman';
+    if (ironman || game.checkpointPage === 0) {
       set({ meta: newMeta, player: null, game: null });
       get().persist();
       return;

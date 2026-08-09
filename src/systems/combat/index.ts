@@ -5,3 +5,4 @@ export * from './ElementalReactionSystem';
 export * from './ComboSystem';
 export * from './BattlefieldStateSystem';
 export * from './PositionSystem';
+export * from './DifficultySystem';

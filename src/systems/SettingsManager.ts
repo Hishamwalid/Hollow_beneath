@@ -2,6 +2,8 @@ export interface GameSettings {
   masterVolume: number;
   textSpeed: number;
   screenShake: boolean;
+  /** Phase 6d: difficulty mode ('easy'|'normal'|'hard'|'ironman'). */
+  difficulty: 'easy' | 'normal' | 'hard' | 'ironman';
 }
 
 const STORAGE_KEY = 'hollow_beneath_settings';
@@ -10,6 +12,7 @@ const DEFAULTS: GameSettings = {
   masterVolume: 100,
   textSpeed: 100,
   screenShake: true,
+  difficulty: 'normal',
 };
 
 class SettingsManager {

@@ -105,6 +105,8 @@ import { chargeBanner, chargeLabel, chargeLog, unleashBanner, unleashLog, adapta
 import { BATTLEFIELD_STATES, BattlefieldState, battlefieldDamageMod, tickBattlefieldState, type BattlefieldStateId } from './combat/BattlefieldStateSystem';
 // ---- Phase 6b: positioning (rows on the battlefield) ----
 import { POSITION_META, ROW_ORDER, defaultRowFor, stepRow } from './combat/PositionSystem';
+// ---- Phase 6d: difficulty modes (easy/normal/hard/ironman) ----
+import { difficultyMods, type DifficultyId } from './combat/DifficultySystem';
 
 const ALL_ENEMY_DEFS = { ...ENEMIES, ...SUMMON_ENEMIES };
 
@@ -120,6 +122,8 @@ export interface CombatSetup {
   playerHistory: Set<string>;
   /** Phase 5: companions accompanying the player into this fight. */
   allies?: AllySaveState[];
+  /** Phase 6d: difficulty mode (defaults to 'normal' — fully neutral). */
+  difficulty?: DifficultyId;
 }
 
 export interface EnemyView {
@@ -189,6 +193,8 @@ export interface CombatSnapshot {
   battlefieldState?: { id: BattlefieldStateId; turns: number } | null;
   /** Phase 6b: player's battlefield row ('front'|'middle'|'back'). */
   playerRow: Row;
+  /** Phase 6d: active difficulty label ('easy'|'normal'|'hard'|'ironman'). */
+  difficulty: DifficultyId;
 }
 
 /** Phase 5: the boss's live read on the player, exported for the HUD. */
@@ -221,6 +227,9 @@ export class CombatEngine {
   private enemies: InternalEnemy[] = [];
   /** Phase 6b: player's battlefield row (front trades defense for damage, back the reverse). */
   private playerRow: Row = 'middle';
+  /** Phase 6d: difficulty mode + its stat multipliers (normal is fully neutral). */
+  private difficulty: DifficultyId = 'normal';
+  private diff = difficultyMods('normal');
   private playerStatuses: StatusInstance[] = [];
   private flags: Record<string, number> = {};
   private playerHistorySet: Set<string>;
@@ -409,6 +418,8 @@ export class CombatEngine {
     this.flags = { ...(setup.precombatFlags ?? {}) };
     this.playerHistorySet = setup.playerHistory;
     this.allyStates = (setup.allies ?? []).map((a) => ({ ...a }));
+    this.difficulty = setup.difficulty ?? 'normal';
+    this.diff = difficultyMods(this.difficulty);
 
     if (this.player.skillsKnown.includes('chorus_echo')) {
       this.player.momentum = Math.max(this.player.momentum, 1);
@@ -436,16 +447,17 @@ export class CombatEngine {
     const scale = pageScaling(this.page);
     const resHp = resonanceEnemyHpMultiplier(this.player.resonance);
     const resAtk = resonanceEnemyAtkMultiplier(this.player.resonance);
-    const maxHp = hpOverride ?? Math.round(def.hp * scale.hp * resHp);
+    const d = this.diff;
+    const maxHp = hpOverride ?? Math.round(def.hp * scale.hp * resHp * d.enemyHpMult);
     return {
       defId: id,
       name: def.name,
       hp: maxHp,
       maxHp,
-      atk: Math.round(def.atk * scale.atk * resAtk),
-      matk: Math.round(def.matk * scale.atk * resAtk),
-      def: Math.round(def.def * scale.def),
-      mdef: Math.round(def.mdef * scale.def),
+      atk: Math.round(def.atk * scale.atk * resAtk * d.enemyAtkMult),
+      matk: Math.round(def.matk * scale.atk * resAtk * d.enemyAtkMult),
+      def: Math.round(def.def * scale.def * d.enemyDefMult),
+      mdef: Math.round(def.mdef * scale.def * d.enemyDefMult),
       spd: def.spd,
       accuracy: def.accuracy ?? 80,
       dodge: def.dodge ?? 10,
@@ -467,12 +479,12 @@ export class CombatEngine {
     return {
       defId: boss.id,
       name: boss.name,
-      hp: s.hp,
-      maxHp: s.hp,
-      atk: s.atk,
-      matk: s.matk,
-      def: s.def,
-      mdef: s.mdef,
+      hp: Math.round(s.hp * this.diff.enemyHpMult),
+      maxHp: Math.round(s.hp * this.diff.enemyHpMult),
+      atk: Math.round(s.atk * this.diff.enemyAtkMult),
+      matk: Math.round(s.matk * this.diff.enemyAtkMult),
+      def: Math.round(s.def * this.diff.enemyDefMult),
+      mdef: Math.round(s.mdef * this.diff.enemyDefMult),
       spd: s.spd,
       accuracy: 85,
       dodge: 5,
@@ -1263,6 +1275,8 @@ export class CombatEngine {
     // Phase 6b: the player's own row bears the incoming damage (front exposed, back shielded).
     const rowDefMult = POSITION_META[this.playerRow].defMult;
     if (attackerRowMult !== 1 || rowDefMult !== 1) amount = Math.round(amount * attackerRowMult * rowDefMult);
+    // Phase 6d: difficulty scales damage and fatigue taken by the player (normal = 1, no-op).
+    if (this.diff.incomingMult !== 1) amount = Math.round(amount * this.diff.incomingMult);
     let dodge = this.player.derived.dodge + (this.player.skillsKnown.includes('chorus_step') ? 10 : 0);
     // Phase 6b: rows are harder to hit from the back (+10 dodge).
     dodge += POSITION_META[this.playerRow].evadeBonus;
@@ -1286,7 +1300,7 @@ export class CombatEngine {
       this.log.push(`You dodge ${label}.`);
       this.gainMomentum(1);
       this.applyTokenDelta(1, 'Graceful dodge — +1 token.');
-      this.player.fatigue = clampFatigue(this.player.fatigue + 5);
+      this.gainFatigue(5);
       if (this.player.skillsKnown.includes('precision')) {
         this.precisionStacks = Math.min(3, this.precisionStacks + 1);
         this.log.push('Precision — you read the blow; crit chance rises.');
@@ -1332,7 +1346,7 @@ export class CombatEngine {
       this.log.push('The boss drains your momentum — −1 Momentum.');
     }
     if (dmg > 0) {
-      this.player.fatigue = clampFatigue(this.player.fatigue + Math.floor(dmg / 10) * 2);
+      this.gainFatigue(Math.floor(dmg / 10) * 2);
       if (this.player.skillsKnown.includes('rage')) {
         const lostPct = (dmg / this.player.derived.maxHP) * 100;
         const gained = Math.max(1, Math.floor(lostPct / 10));
@@ -1428,7 +1442,7 @@ export class CombatEngine {
     recordAction(this.profile);
     this.actionRepeatCounts[id] = (this.actionRepeatCounts[id] ?? 0) + 1;
     if (this.actionRepeatCounts[id] >= 3) {
-      this.player.fatigue = clampFatigue(this.player.fatigue + 10);
+      this.gainFatigue(10);
     }
     if (this.actionRepeatCounts[id] === 3 && !this.repeatPenaltyApplied) {
       this.repeatPenaltyApplied = true;
@@ -1466,6 +1480,12 @@ export class CombatEngine {
     if (sd) shockMiss = 15 * sd.stacks;
     const chance = Math.max(5, Math.min(99, acc - target.dodge - shockMiss));
     return this.rng() * 100 < chance;
+  }
+
+  /** Phase 6d: fatigue gained is scaled by difficulty (normal = no-op). */
+  private gainFatigue(n: number): void {
+    const amt = this.diff.fatigueMult !== 1 ? Math.round(n * this.diff.fatigueMult) : n;
+    this.player.fatigue = clampFatigue(this.player.fatigue + amt);
   }
 
   private rollCrit(): boolean {
@@ -1553,6 +1573,8 @@ export class CombatEngine {
     const posDmgMult = POSITION_META[this.playerRow].dmgMult;
     const posDefMult = POSITION_META[target.row].defMult;
     if (posDmgMult !== 1 || posDefMult !== 1) dmg = Math.round(dmg * posDmgMult * posDefMult);
+    // Phase 6d: difficulty scales player output (normal = 1, no-op).
+    if (this.diff.playerDmgMult !== 1 && !isAlly) dmg = Math.round(dmg * this.diff.playerDmgMult);
     dmg = Math.round(dmg * windowDamageMult(state));
     if (crit) dmg = Math.round(dmg * 1.5);
     if (hasStatus(this.playerStatuses, 'echo_surge')) dmg = Math.round(dmg * 1.2);
@@ -1618,7 +1640,9 @@ export class CombatEngine {
     const mitigated = applyBarrier(target.statuses, dmg);
     if (mitigated < dmg) this.log.push(`${target.name}'s Barrier absorbs part of the blow.`);
     if (dmg > 0 && mitigated === 0 && !isAlly) {
-      const lost = Math.floor(this.playerAP / 2);
+      let lost = Math.floor(this.playerAP / 2);
+      // Phase 6d: difficulty scales how many tokens a fully-absorbed blow costs.
+      if (this.diff.tokenLoseMult !== 1) lost = Math.round(lost * this.diff.tokenLoseMult);
       this.applyTokenDelta(-lost, `The blow was fully absorbed — you lose ${lost} token(s).`);
     }
     target.hp = Math.max(0, target.hp - mitigated);
@@ -1866,7 +1890,7 @@ export class CombatEngine {
     this.actionsTakenThisRound += 1;
     if (mpCost > 0) {
       this.player.currentMP = Math.max(0, this.player.currentMP - mpCost);
-      this.player.fatigue = clampFatigue(this.player.fatigue + Math.floor(mpCost / 10) * 5);
+      this.gainFatigue(Math.floor(mpCost / 10) * 5);
     }
     this.recordAction(`skill:${skillId}`);
     this.pushComboTags(tagsForSkill(skill), this.pickTarget(targetKey));
@@ -3012,6 +3036,7 @@ export class CombatEngine {
       bossIntel: this.bossIntelView() ?? undefined,
       battlefieldState: this.battlefieldState,
       playerRow: this.playerRow,
+      difficulty: this.difficulty,
       allies: this.allyStates
         .filter((s) => accompaniesIn(s.loyalty))
         .map((s) => ({
