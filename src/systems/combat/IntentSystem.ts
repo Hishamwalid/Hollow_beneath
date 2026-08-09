@@ -21,6 +21,23 @@ export function tendencyGlyph(id?: EnemyTendency): string {
   return id ? TENDENCY_META[id].glyph : '';
 }
 
+/** Phase 7: a flavourful "thought" explaining why an enemy took its declared intent. */
+export function enemyThoughtFor(tendency: EnemyTendency | undefined, intentLabel: string): string {
+  const thoughts: Record<EnemyTendency, string> = {
+    aggressor: `presses the attack, choosing to ${intentLabel.toLowerCase()}`,
+    tactician: `counters your play — ${intentLabel.toLowerCase()}`,
+    berserker: `snarls and chooses ${intentLabel.toLowerCase()}, reckless and cold`,
+    guardian: `plants itself, ready to ${intentLabel.toLowerCase()}`,
+    caster: `humms its way into ${intentLabel.toLowerCase()}`,
+    hunter: `sights the fravest of you and resolves to ${intentLabel.toLowerCase()}`,
+    sage: `steps back to ${intentLabel.toLowerCase()}, steadying itself`,
+    coward: `edging away, it ${intentLabel.toLowerCase()} in desperation`,
+    fanatic: `commits with both hands — ${intentLabel.toLowerCase()}`,
+    manipulator: `plots, choosing ${intentLabel.toLowerCase()}`,
+  };
+  return tendency ? thoughts[tendency] : `chooses ${intentLabel.toLowerCase()}`;
+}
+
 export function tendencyHint(id?: EnemyTendency): string {
   return id ? TENDENCY_META[id].hint : '';
 }
@@ -44,10 +61,22 @@ const CONFIDENCE_MARKER: Record<IntentConfidence, string> = {
   certain: 'certain',
 };
 
+/** Phase 7 (doc Part 14): numeric confidence shown on the enemy card. */
+export function confidencePct(layer: number): number {
+  if (layer <= 0) return 0;
+  if (layer === 1) return 75;
+  if (layer === 2) return 85;
+  if (layer === 3) return 92;
+  return 100;
+}
+
 export function intentLine(label: string | undefined, layer: number, alreadyActed: boolean, actedLabel?: string): string {
   if (alreadyActed) return `(acted — ${actedLabel ?? ''})`;
   if (!label) return 'intentions unreadable';
-  return `${CONFIDENCE_MARKER[confidenceFor(layer)]}. ${label}`;
+  const pct = confidencePct(layer);
+  return pct >= 100
+    ? `certain. ${label}`
+    : `${CONFIDENCE_MARKER[confidenceFor(layer)]} (${pct}%). ${label}`;
 }
 
 /** Weighted pick among eligible intents. Conditions are evaluated against the supplied context. */

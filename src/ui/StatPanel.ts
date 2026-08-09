@@ -97,7 +97,16 @@ export function createStatPanel(scene: Phaser.Scene, x: number, y: number, point
       mpBar.setPct(player.currentMP / Math.max(1, player.derived.maxMP));
       mpText.setText(`${player.currentMP}/${player.derived.maxMP}`);
       resBar.setPct(Math.max(0, Math.min(1, player.resonance / 100)));
-      resTierText.setText(resonanceTier(player.resonance));
+      const tier = resonanceTier(player.resonance);
+      if (resTierText.text !== tier) {
+        resTierText.setText(tier);
+        // Phase 7: resonance tier glow — pulse the label when the tier changes upward.
+        scene.tweens.killTweensOf(resTierText);
+        resTierText.setScale(1).setAlpha(1);
+        scene.tweens.add({ targets: resTierText, scale: { from: 1.25, to: 1 }, duration: 300, ease: 'Sine.easeOut' });
+      } else {
+        resTierText.setText(tier);
+      }
       momentumDots.forEach((d, i) => d.setFillStyle(i < Math.max(0, Math.min(3, player.momentum)) ? 0xc9a24b : 0x2a2e33));
       fatigueBar.setPct(player.fatigue / 100);
       const fat = player.fatigue;

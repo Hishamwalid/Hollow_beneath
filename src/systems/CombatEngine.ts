@@ -41,6 +41,7 @@ import { clampFear, FEAR_MASSIVE_GAIN, FEAR_MASSIVE_PCT, FEAR_CRIT_GAIN, FEAR_UL
 import { DESPERATIONS, pickDesperation, rollDesperation, DESPERATION_HP_PCT, type DesperationId } from './combat/DesperationSystem';
 import {
   confidenceFor,
+  enemyThoughtFor,
   intentLine,
   pickBossIntent,
   pickEnemyIntent,
@@ -180,6 +181,8 @@ export interface CombatSnapshot {
   guarding: boolean;
   fatigue: number;
   insight: number;
+  /** Phase 4 plot: current Resonance for HUD/audio tier cues. */
+  playerResonance: number;
   enemies: EnemyView[];
   initiativeOrder: string[];
   playerHitEnemyKeys: string[];
@@ -839,6 +842,12 @@ export class CombatEngine {
     const intentId = this.pendingIntents.get(enemy._key);
     const intent = def.intents?.find((i) => i.id === intentId);
     this.pendingIntents.delete(enemy._key);
+    // Phase 7: enemy "thoughts" — surface why the intent was chosen from its tendency.
+    if (intent?.description) {
+      const tendency = this.tendencyFor(enemy);
+      const thought = enemyThoughtFor(tendency, intent.label);
+      if (thought) this.log.push(`${enemy.name} ${thought} (${intent.label}).`);
+    }
     const line = intent ? intent.resolve(ctx) : def.act ? def.act(ctx) : '';
     if (line) this.log.push(line);
     this.checkOutcome();
@@ -1716,7 +1725,21 @@ export class CombatEngine {
     }
 
     const weak = weakness > 1;
-    this.log.push(`${label} hits ${target.name} for ${mitigated} damage${crit ? ' (Critical!)' : ''}${weak ? ' — weakness exploited!' : ''}.`);
+    // Phase 7: damage breakdown — the notable multipliers that shaped the blow.
+    const breakdown: string[] = [];
+    if (weak) breakdown.push('weakness');
+    if (crit) breakdown.push('crit');
+    if (stateMod !== 1) breakdown.push(`${BATTLEFIELD_STATES[this.battlefieldState!.id].label}`);
+    const posMult = POSITION_META[this.playerRow].dmgMult * POSITION_META[target.row].defMult;
+    if (posMult !== 1) breakdown.push('positioning');
+    if (archiveMult !== 1) breakdown.push('archive');
+    if (this.lastStandTurns > 0) breakdown.push('last-stand');
+    if (this.marked.has(target._key)) breakdown.push('marked');
+    if (this.exposed.has(target._key)) breakdown.push('exposed');
+    if (comboMult !== 1) breakdown.push('combo');
+    if (reaction) breakdown.push(reaction.label);
+    const breakdownSuffix = breakdown.length > 0 ? ` [${breakdown.join(', ')}]` : '';
+    this.log.push(`${label} hits ${target.name} for ${mitigated} damage${crit ? ' (Critical!)' : ''}${weak ? ' — weakness exploited!' : ''}${breakdownSuffix}.`);
     // Phase 4d: the first time you exploit a weakness, Revelation is no longer pending on the trigger.
     if (weak && !isAlly) this.firstWeaknessRevealed = true;
     if (weak) {
@@ -3052,6 +3075,7 @@ export class CombatEngine {
       momentum: this.player.momentum,
       guarding: this.guarding,
       fatigue: this.player.fatigue,
+      playerResonance: this.player.resonance,
       insight: this.player.insight,
       enemies: this.enemies
         .filter((e) => e.hp > 0 || this.phase === 'victory')

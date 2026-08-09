@@ -31,6 +31,30 @@ export const TUTORIAL_SCREENS: TutorialScreen[] = [
     body: 'You have 2 Action Points (AP) per turn. Attack costs 1 AP. Skills cost 1-2 AP. Guard halves incoming damage for the round.\n\nHit enemy weaknesses to build Momentum. At 3 Momentum, choose a bonus: extra turn, heal, restore MP, free skill, or big hit.\n\nIf you die, you return to the last checkpoint with 50% HP and MP.',
   },
   {
+    id: 'tokens_and_fatigue',
+    title: 'Tokens & Fatigue',
+    icons: ['tok_player'],
+    body: 'Every hit you land generates a TOKEN — spend them the same turn as AP. Weakness hits, criticals, dodges and kills all forge tokens; repeating the same move over and over burns them.\n\nWatch your FATIGUE bar (purple, under MP). At 26% accuracy drops. At 51% you bleed damage too and start rounds down an AP. Above 76% you may even lose a turn. Rest heals it.',
+  },
+  {
+    id: 'investigate',
+    title: 'Investigate',
+    icons: ['node_combat', 'node_discovery'],
+    body: 'Knowledge is the real weapon. SCAN (1 AP) reveals exact HP and resistances. PROBE (1 AP) digs into body, mind, weapon, memory or behavior. DEEP ANALYSIS (2 AP) lays out the entire move pool.\n\nCombat starts fuzzy — "intentions unreadable". Every layer you unlock sharpens the readings until a foe\'s next move is 100% certain.',
+  },
+  {
+    id: 'intents',
+    title: 'Intents & Tells',
+    icons: ['node_combat'],
+    body: 'Enemies DECLARE their move at the start of every round. Read what they intend, then hit the opening it leaves.\n\nBosses telegraph their deadliest attacks a full turn ahead — when you see ⚡ CHARGING on the card, Guard, Sunder, or slip away before the blast lands.',
+  },
+  {
+    id: 'classes',
+    title: 'Your Class',
+    icons: ['node_landmark'],
+    body: 'Six disciplines, one truth below the world: Warrior, Ranger, Scholar, Guardian, Shadow, Balanced.\n\nEach class locks in a PASSIVE, a SIGNATURE skill — and a four-deep skill tree you spend Skill Points on between fights. Your class defines how you fight: The Scholar studies, the Shadow kills from the dark, the Guardian refuses to fall.',
+  },
+  {
     id: 'your_goal',
     title: 'Your Goal',
     icons: ['node_landmark'],

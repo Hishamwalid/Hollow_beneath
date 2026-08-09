@@ -37,7 +37,7 @@ This is the step-by-step execution plan for implementing the full system into th
 | 4 Classes & Crisis | ✅ | classes.ts (6×6 skills), class-locked trees, SkillEffect resolver, 5 crises × 15 options all live, fear/bravery wired, desperation applies real effects, boss-ultimate fear, smoketest §13 |
 | 5 Boss Intelligence | ✅ | ProfileSystem/StressSystem/AdaptationSystem/TellSystem wired in CombatEngine; adaptations every 3rd boss turn; stress bands + flavor; band-based intent weights; charged-ultimate tells; 5e: all 5 personalities with **intentBias** weight multipliers (Chorus gained its missing Echo persona) |
 | 6 States, Position, Meta | ✅ | 6a battlefield states: enemy intent (Ash Seer Shadow Veil), Scholar Sacred Ground (Unwritten Page rider), item effect kind + inverters in both damage paths, HUD banner under title; 6b positioning (row pips + 4 reposition actions); 6c archive (Codex Enemy Archive tab, Archive: Expose Weakness exploit + snapshot flag); 6d difficulty (4 modes selectable in Settings + effective in engine) |
-| 7 Polish & Balance | ☐ | |
+| 7 Polish & Balance | ✅ | Audio cues (weakness crunch, adaptation warning, combo ding, AP ding, fatigue gasp, resonance chime) wired in CombatScene; intent confidence % on cards; combat-log damage breakdown + enemy "thoughts" + color coding; crisis flash/shake; resonance tier glow; tutorial teaches tokens/investigation/intents/classes; balance pass deferred to playtest notes |
 
 ---
 
@@ -338,10 +338,18 @@ Full doc Part 8 — each class: passive + signature (1 AP) + 4 progression skill
 - Balance pass against doc Part 20 principles; tune numbers after playtests; update this file's notes.
 
 ### Done criteria
-- Full doc coverage confirmed against the checklist; manual playtest of 3+ fights and 1 boss.
+- ✅ Intent confidence % shown per investigation layer (75/85/92/100).
+- ✅ Crisis triggers the drum cue + red flash + screen shake; adaptation/charge/ultimate banners flash.
+- ✅ Resonance tier label pulses on climb; new audio cues wired (weakness crunch, combo ding, AP ding, fatigue gasp, resonance chime, adaptation warning).
+- ✅ Combat log: notable-damage breakdown tags [weakness, crit, positioning, archive, marked, combo, reaction…], tendency-flavoured enemy "thoughts" before each intent resolve, color-coded log text.
+- ✅ Tutorial expanded (tokens/fatigue, investigation, intents & tells, classes).
+- ⏳ Balance tuning vs Part 20 deferred to manual playtests — note numbers after real fights.
 
 ---
 
 ## Final Definition of Done
 
 All 20 doc parts implemented or explicitly adapted (2 reactions dropped for type-lock, team-only effects adapted to single player). Game remains save-compatible via v3 migration. typecheck + build green.
+
+### Remaining for full DoD
+- Manual playtest of 3+ fights and 1 boss, then tune balance per doc Part 20.

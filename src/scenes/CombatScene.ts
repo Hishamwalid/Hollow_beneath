@@ -52,6 +52,10 @@ export class CombatScene extends Phaser.Scene {
   private enemyKeyMap: Map<string, EnemyDisplay> = new Map();
   private selectedTarget: string | null = null;
   private lastPlayerHP = 0;
+  private lastFatigue = 0;
+  private lastResonance = 0;
+  private lastAP = 0;
+  private lastAPSet = false;
   private statPanel?: ReturnType<typeof createStatPanel>;
   private apPips?: ReturnType<typeof createApPips>;
   private insightText?: Phaser.GameObjects.Text;
@@ -82,6 +86,8 @@ export class CombatScene extends Phaser.Scene {
     const store = useGameStore.getState();
     const player = store.player;
     this.lastPlayerHP = player?.currentHP ?? 0;
+    this.lastFatigue = player?.fatigue ?? 0;
+    this.lastResonance = player?.resonance ?? 0;
     if (!player) {
       fadeToScene(this, 'Board');
       return;
@@ -220,6 +226,14 @@ export class CombatScene extends Phaser.Scene {
     if (!this.logText) return;
     const recent = lines.slice(-2);
     this.logText.setText(recent.join('\n'));
+    // Phase 7: color-code the combat log by what just happened.
+    const last = recent[recent.length - 1] ?? '';
+    let color = PALETTE_HEX.bone;
+    if (/weakness exploited|WEAKNESS WINDOW|WINDOW —/i.test(last)) color = PALETTE_HEX.goldBright;
+    else if (/critical/i.test(last)) color = '#e1665c';
+    else if (/absorbed|dampened|dodge/i.test(last)) color = PALETTE_HEX.boneMuted;
+    else if (/ARCHIVE|ADAPTATION|CHARGE|ULTIMATE/i.test(last)) color = PALETTE_HEX.gold;
+    this.logText.setColor(color);
   }
 
   private refresh(snap: CombatSnapshot) {
@@ -508,6 +522,22 @@ export class CombatScene extends Phaser.Scene {
       this.floatingText(250, 560, `-${dmg}`, PALETTE_HEX.danger);
     }
     this.lastPlayerHP = snap.playerHP;
+
+    // Phase 7: fatigue gasp when exhaustion crosses a band (51 soft, 76 hard).
+    const fatigueCrossed = (this.lastFatigue < 51 && snap.fatigue >= 51) || (this.lastFatigue < 76 && snap.fatigue >= 76);
+    if (fatigueCrossed) audio.fatigueGasp();
+    this.lastFatigue = snap.fatigue;
+    // Phase 7: resonance chime when Resonance climbs into a new tier mid-fight.
+    if (snap.playerResonance && snap.playerResonance !== this.lastResonance && snap.playerResonance > this.lastResonance) {
+      audio.resonanceChime();
+    }
+    this.lastResonance = snap.playerResonance ?? 0;
+    // Phase 7: AP ding when tokens are gained (a natural +delta from weakness/crit/etc.).
+    if (snap.playerAP > this.lastAP && this.lastAPSet) {
+      audio.apDing();
+    }
+    this.lastAP = snap.playerAP;
+    this.lastAPSet = true;
   }
 
   private flashTarget(container: Phaser.GameObjects.Container, color: number): void {
@@ -573,6 +603,11 @@ export class CombatScene extends Phaser.Scene {
       const isCharge = banner.startsWith('CHARGE');
       const isUlt = banner.startsWith('ULTIMATE');
       const isAdapt = banner.startsWith('ADAPTATION');
+      // Phase 7 audio cues (doc Part 18).
+      if (isCombo) audio.comboDing();
+      else if (isAdapt) { audio.adaptationWarning(); this.cameras.main.flash(140, 76, 10, 10); }
+      else if (isWindow) audio.weaknessCrunch();
+      else if (isCharge || isUlt) { audio.critHit(); this.cameras.main.flash(160, 120, 0, 0); }
       const color = isCharge ? '#c9a24b' : isUlt ? '#e1665c' : isAdapt ? '#8e5fd9' : isWindow ? '#e9c876' : isCombo ? '#9b59b6' : '#5dade2';
       const label = banner.replace(/^(COMBO |REACTION |WEAKNESS WINDOW — |CHARGE — |ULTIMATE — |ADAPTATION — )/, '');
       const title = isCharge ? 'CHARGE' : isUlt ? 'ULTIMATE' : isAdapt ? 'ADAPTATION' : isWindow ? 'WEAKNESS WINDOW' : isCombo ? 'COMBO' : 'REACTION';
@@ -738,6 +773,7 @@ export class CombatScene extends Phaser.Scene {
     if (this.overlayBg) return;
     this.closeOverlay();
     this.cameras.main.flash(180, 138, 0, 0);
+    if (settingsManager.get().screenShake) this.cameras.main.shake(260, 0.008);
     audio.crisis();
     this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.78).setDepth(35);
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 180, crisis.title, { fontFamily: FONT_SERIF, fontSize: '28px', color: PALETTE_HEX.danger }).setOrigin(0.5).setDepth(36);
