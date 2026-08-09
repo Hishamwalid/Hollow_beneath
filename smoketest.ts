@@ -30,6 +30,7 @@ import {
 import { resolveReaction } from '@systems/combat/ElementalReactionSystem';
 import { matchCombo } from '@systems/combat/ComboSystem';
 import { battlefieldDamageMod, BATTLEFIELD_STATES } from '@systems/combat/BattlefieldStateSystem';
+import { POSITION_META, ROW_ORDER, defaultRowFor } from '@systems/combat/PositionSystem';
 import { CRISES, type CrisisId } from '@systems/combat/CrisisSystem';
 import { fearModifiers } from '@systems/combat/FearSystem';
 import { hasStatus, getStatus, tickDurations } from '@systems/StatusEffectSystem';
@@ -822,6 +823,77 @@ assert(bossChargeSeen !== '', 'boss charge cycle seen in simulation');
     assert(snap.battlefieldState === null, `state expires after its duration (got ${snap.battlefieldState})`);
     assert(snap.log.some((l) => l.includes('battlefield state fades')), 'expiry produces a log line');
     ok('battlefield states: apply -> tick -> expire (truth_aura, 2 turns)');
+  }
+
+  // ---- 20. Phase 6b: Positioning (rows affect combat) -------------------------
+  {
+    // Unit: row meta is correct, defaults derive from tendency.
+    assert(POSITION_META.front.dmgMult === 1.15 && POSITION_META.front.defMult === 1.1, 'front: +15% dmg, takes +10%');
+    assert(POSITION_META.back.dmgMult === 0.9 && POSITION_META.back.defMult === 0.85 && POSITION_META.back.evadeBonus === 10, 'back: -10% dmg, shields 15%, +10 dodge');
+    assert(POSITION_META.middle.dmgMult === 1 && POSITION_META.middle.defMult === 1, 'middle is neutral');
+    assert(ROW_ORDER.length === 3 && ROW_ORDER[1] === 'middle', 'row ladder back/middle/front');
+    assert(defaultRowFor('aggressor') === 'front' && defaultRowFor('berserker') === 'front', 'aggressors stand front');
+    assert(defaultRowFor('caster') === 'back' && defaultRowFor('sage') === 'back', 'casters hang back');
+    assert(defaultRowFor('tactician') === 'middle' && defaultRowFor(undefined) === 'middle', 'neutral tendency defaults middle');
+
+    // Integration: enemy rows come from tendency; player starts middle.
+    const player = makeTestPlayer({ str: 6, dex: 6, con: 10, int: 8, will: 6 });
+    const engine = new CombatEngine({
+      player,
+      enemyIds: ['dust_road_raider', 'echo_skeleton'],
+      page: 1,
+      rng: mulberry32(4601),
+      playerHistory: new Set(),
+    });
+    engine.beginRound();
+    let snap = engine.snapshot();
+    assert(snap.playerRow === 'middle', `player starts middle (got ${snap.playerRow})`);
+    assert(snap.enemies.some((e) => e.row === 'front'), 'an aggressor stands front');
+    assert(snap.enemies.some((e) => e.row === 'back'), 'a hunter hangs back');
+
+    // advance (free) steps toward front; at front it idles.
+    snap = engine.advance();
+    assert(snap.playerRow === 'front', `advance -> front (got ${snap.playerRow})`);
+    snap = engine.advance();
+    assert(snap.playerRow === 'front' && snap.log.some((l) => l.includes('already at the vanguard')), 'advance idles at front');
+    // retreat steps back to middle.
+    snap = engine.retreat();
+    assert(snap.playerRow === 'middle', `retreat -> middle (got ${snap.playerRow})`);
+    snap = engine.retreat();
+    assert(snap.playerRow === 'back', `retreat -> back (got ${snap.playerRow})`);
+    ok('positioning: defaults, advance, retreat');
+
+    // charge: 1 AP, surges forward, strikes. fallBack: 1 AP, drops back and guards.
+    const engine2 = new CombatEngine({
+      player,
+      enemyIds: ['dust_road_raider'],
+      page: 1,
+      rng: mulberry32(4701),
+      playerHistory: new Set(),
+    });
+    engine2.beginRound();
+    const apBefore2 = engine2.snapshot().playerAP;
+    snap = engine2.charge();
+    assert(snap.playerRow === 'front', `charge surges forward (got ${snap.playerRow})`);
+    assert(snap.playerAP <= apBefore2 - 1, `charge costs 1 AP (was ${apBefore2}, now ${snap.playerAP})`);
+    ok('charging: surge forward + strike; repositioning costs AP');
+  }
+  // repositioning that can neither miss nor cost AP: fallBack drops back and guards.
+  {
+    const playerB = makeTestPlayer({ str: 6, dex: 6, con: 10, int: 8, will: 6 });
+    const engine3 = new CombatEngine({
+      player: playerB,
+      enemyIds: ['echo_skeleton'],
+      page: 1,
+      rng: mulberry32(4801),
+      playerHistory: new Set(),
+    });
+    engine3.beginRound();
+    const apBefore3 = engine3.snapshot().playerAP;
+    const snap3 = engine3.fallBack();
+    assert(snap3.playerRow === 'back' && snap3.guarding, `fallBack drops to back + guards (row=${snap3.playerRow}, guarding=${snap3.guarding})`);
+    assert(snap3.playerAP === apBefore3 - 1, `fallBack costs 1 AP (was ${apBefore3}, now ${snap3.playerAP})`);
+    ok('falling back: drop 2 rows + guard (falls from middle to back)');
   }
 }
 

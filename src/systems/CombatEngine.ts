@@ -6,11 +6,12 @@ import type {
   BossTurnContext,
   CombatState_Enemy,
   DamageType,
-  EnemyTendency,
-  EnemyTurnContext,
-  IntentDef,
-  PlayerState,
-  SkillDef,
+   EnemyTendency,
+   EnemyTurnContext,
+   IntentDef,
+   PlayerState,
+   Row,
+   SkillDef,
   StatusId,
   StatusInstance,
   StressBand,
@@ -102,6 +103,8 @@ import { ADAPTATION_META, evaluateAdaptation } from './combat/AdaptationSystem';
 import { chargeBanner, chargeLabel, chargeLog, unleashBanner, unleashLog, adaptationBanner } from './combat/TellSystem';
 // ---- Phase 6a: battlefield states (global damage modifiers) ----
 import { BATTLEFIELD_STATES, BattlefieldState, battlefieldDamageMod, tickBattlefieldState, type BattlefieldStateId } from './combat/BattlefieldStateSystem';
+// ---- Phase 6b: positioning (rows on the battlefield) ----
+import { POSITION_META, ROW_ORDER, defaultRowFor, stepRow } from './combat/PositionSystem';
 
 const ALL_ENEMY_DEFS = { ...ENEMIES, ...SUMMON_ENEMIES };
 
@@ -142,6 +145,8 @@ export interface EnemyView {
   weakHitStreak: number;
   /** Last damage type to land on this enemy's body (for reaction pairing / HUD color). */
   lastHitType?: DamageType;
+  /** Phase 6b: battlefield row this enemy occupies ('front'|'middle'|'back'). */
+  row: Row;
   /** Combo banner text (from the most recent activation) — engine-accumulated, cleared per snapshot pick. */
   comboBanner?: string;
   /** Reaction banner text — engine-accumulated, cleared per snapshot pick. */
@@ -182,6 +187,8 @@ export interface CombatSnapshot {
   bossIntel?: BossIntelView;
   /** Phase 6a: active global battlefield state (null when none). */
   battlefieldState?: { id: BattlefieldStateId; turns: number } | null;
+  /** Phase 6b: player's battlefield row ('front'|'middle'|'back'). */
+  playerRow: Row;
 }
 
 /** Phase 5: the boss's live read on the player, exported for the HUD. */
@@ -197,6 +204,8 @@ interface InternalEnemy extends CombatState_Enemy {
   _key: string;
   _revealed: boolean;
   _isBoss: boolean;
+  /** Phase 6b: battlefield row this enemy holds (default from tendency). */
+  row: Row;
 }
 
 const MOMENTUM_CHOICES = ['flow', 'harmony', 'archive', 'forgotten_technique', 'unravel', 'echo_surge', 'phase_shift', 'desperate_strike', 'overclock'] as const;
@@ -210,6 +219,8 @@ export class CombatEngine {
   private page: number;
   private bossDef?: BossDef;
   private enemies: InternalEnemy[] = [];
+  /** Phase 6b: player's battlefield row (front trades defense for damage, back the reverse). */
+  private playerRow: Row = 'middle';
   private playerStatuses: StatusInstance[] = [];
   private flags: Record<string, number> = {};
   private playerHistorySet: Set<string>;
@@ -447,6 +458,7 @@ export class CombatEngine {
       _key: id,
       _revealed: false,
       _isBoss: false,
+      row: def.position ?? defaultRowFor(def.tendency),
     };
   }
 
@@ -473,6 +485,7 @@ export class CombatEngine {
       _key: boss.id,
       _revealed: false,
       _isBoss: true,
+      row: boss.position ?? 'middle',
     };
   }
 
@@ -1244,7 +1257,15 @@ export class CombatEngine {
     if (this.enemyDmgReduceTurns > 0) {
       amount = Math.round(amount * 0.7);
     }
+    // Phase 6b: incoming damage scales with the attacker's row.
+    const attacker = attackerKey ? this.enemies.find((e) => e._key === attackerKey) : undefined;
+    const attackerRowMult = attacker ? POSITION_META[attacker.row].dmgMult : POSITION_META[this.playerRow].dmgMult;
+    // Phase 6b: the player's own row bears the incoming damage (front exposed, back shielded).
+    const rowDefMult = POSITION_META[this.playerRow].defMult;
+    if (attackerRowMult !== 1 || rowDefMult !== 1) amount = Math.round(amount * attackerRowMult * rowDefMult);
     let dodge = this.player.derived.dodge + (this.player.skillsKnown.includes('chorus_step') ? 10 : 0);
+    // Phase 6b: rows are harder to hit from the back (+10 dodge).
+    dodge += POSITION_META[this.playerRow].evadeBonus;
     if (this.player.skillsKnown.includes('risk') && this.player.currentHP / this.player.derived.maxHP < 0.25) {
       dodge += 15;
     }
@@ -1528,6 +1549,10 @@ export class CombatEngine {
     let dmg = Math.max(3, Math.round((sourcePower - effDef / 2) * weakness * variance * unravelMult * comboMult));
     const stateMod = battlefieldDamageMod(this.battlefieldState, damageType);
     if (stateMod !== 1) dmg = Math.round(dmg * stateMod);
+    // Phase 6b: positioning — attacker power (player row) vs target's defensive row.
+    const posDmgMult = POSITION_META[this.playerRow].dmgMult;
+    const posDefMult = POSITION_META[target.row].defMult;
+    if (posDmgMult !== 1 || posDefMult !== 1) dmg = Math.round(dmg * posDmgMult * posDefMult);
     dmg = Math.round(dmg * windowDamageMult(state));
     if (crit) dmg = Math.round(dmg * 1.5);
     if (hasStatus(this.playerStatuses, 'echo_surge')) dmg = Math.round(dmg * 1.2);
@@ -2513,6 +2538,78 @@ export class CombatEngine {
     return this.snapshot();
   }
 
+  // ---- Phase 6b: repositioning actions ----------------------------------------
+
+  private moveRowBy(delta: number): Row {
+    const idx = stepRow(ROW_ORDER.indexOf(this.playerRow), delta);
+    return ROW_ORDER[idx];
+  }
+
+  /** Free: step one row toward the front. */
+  advance(): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    if (this.playerRow === 'front') {
+      this.log.push('You are already at the vanguard.');
+      return this.snapshot();
+    }
+    this.playerRow = this.moveRowBy(1);
+    this.log.push(`You advance — now at ${POSITION_META[this.playerRow].label}.`);
+    this.actionsTakenThisRound += 1;
+    this.lastActionId = 'advance';
+    this.lastActionType = null;
+    return this.snapshot();
+  }
+
+  /** Free: one row back, toward safety. */
+  retreat(): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    if (this.playerRow === 'back') {
+      this.log.push('You are already at the rear line.');
+      return this.snapshot();
+    }
+    this.playerRow = this.moveRowBy(-1);
+    this.log.push(`You withdraw a step — now at ${POSITION_META[this.playerRow].label}.`);
+    this.actionsTakenThisRound += 1;
+    this.lastActionId = 'retreat';
+    this.lastActionType = null;
+    return this.snapshot();
+  }
+
+  /** 1 AP: surge two steps forward and strike. */
+  charge(): CombatSnapshot {
+    if (this.phase !== 'player' || (this.playerAP < 1 && this.freeActionCharges < 1)) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : 1;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
+    this.recordAction('charge');
+    this.playerRow = this.moveRowBy(2);
+    this.log.push(`You charge forward — now at ${POSITION_META[this.playerRow].label}.`);
+    const atk = this.player.derived.attack * statMultiplier(this.playerStatuses, 'atk');
+    const target = this.pickTarget();
+    if (target) this.computeAndApplyDamage(target, atk, target.def, 'slash', 'Your charge');
+    this.lastActionId = 'charge';
+    this.lastActionType = 'slash';
+    this.checkOutcome();
+    return this.snapshot();
+  }
+
+  /** 1 AP: fall back two steps and raise your guard. */
+  fallBack(): CombatSnapshot {
+    if (this.phase !== 'player' || (this.playerAP < 1 && this.freeActionCharges < 1)) return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : 1;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
+    this.recordAction('fall_back');
+    this.playerRow = this.moveRowBy(-2);
+    this.log.push(`You fall back — now at ${POSITION_META[this.playerRow].label}.`);
+    this.guarding = true;
+    this.lastActionId = 'fall_back';
+    this.lastActionType = null;
+    return this.snapshot();
+  }
+
   resolveMomentum(choice: MomentumChoice): CombatSnapshot {
     if (this.phase !== 'momentum_choice') return this.snapshot();
     this.player.momentum = 0;
@@ -2896,6 +2993,7 @@ export class CombatEngine {
             weakWindowTurns: this.windowStates.get(e._key)?.turns ?? 0,
             weakHitStreak: this.windowStates.get(e._key)?.streak ?? 0,
             lastHitType: this.lastHitTypes.get(e._key),
+            row: e.row,
           };
         }),
       initiativeOrder,
@@ -2913,6 +3011,7 @@ export class CombatEngine {
       fear: this.fear,
       bossIntel: this.bossIntelView() ?? undefined,
       battlefieldState: this.battlefieldState,
+      playerRow: this.playerRow,
       allies: this.allyStates
         .filter((s) => accompaniesIn(s.loyalty))
         .map((s) => ({

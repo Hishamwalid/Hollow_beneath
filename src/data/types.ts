@@ -145,6 +145,8 @@ export interface EnemyDef {
   description: string;
   /** Personality archetype, used for the HUD tendency glyph and investigation flavor. */
   tendency?: EnemyTendency;
+  /** Phase 6b (override): preferred battlefield row. Defaults to a tendency-derived row. */
+  position?: Row;
   /** Pre-declared move pool. Engine picks one at round start and resolves it when the enemy acts. */
   intents?: IntentDef[];
   /** Called on this enemy's turn. Mutates ctx and returns a log line. Legacy fallback when `intents` is absent. */
@@ -184,6 +186,9 @@ export interface CombatState_Player extends CombatantBase {
 export type EnemyTendency =
   | 'aggressor' | 'tactician' | 'berserker' | 'guardian' | 'caster'
   | 'hunter' | 'sage' | 'coward' | 'fanatic' | 'manipulator';
+
+/** Battlefield row occupied by an entity (Phase 6b: Positioning). Rows 0..2 over `back/middle/front`. */
+export type Row = 'back' | 'middle' | 'front';
 
 export interface IntentDef {
   id: string;
@@ -328,6 +333,8 @@ export interface BossDef {
   takeTurn(ctx: BossTurnContext): void;
   /** Phase 5: personality identity — flavour + behaviour hooks (e.g. martyr). */
   persona?: BossPersona;
+  /** Phase 6b (override): preferred battlefield row for this boss. Defaults to 'middle'. */
+  position?: Row;
   aftermathText(flags: Record<string, number>): string;
   getRewards(flags: Record<string, number>): BossRewards;
 }
