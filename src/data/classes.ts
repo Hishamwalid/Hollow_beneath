@@ -132,8 +132,11 @@ export const CLASS_SKILLS: Record<string, SkillDef> = {
   unwritten_page: {
     id: 'unwritten_page', name: 'The Unwritten Page', apCost: 2, mpCost: 30, damageType: 'sacred',
     skillPower: 2.5, tree: 'scholar',
-    description: 'Sacred 2.5; removes all buffs from the target and prevents buffs for 2 turns.',
-    effects: [{ kind: 'damage', type: 'sacred', power: 2.5, target: 'single', stat: 'magic' }],
+    description: 'Sacred 2.5; removes all buffs from the target. Writing nothing hallows the ground — Sacred Ground settles over the fight for 3 turns.',
+    effects: [
+      { kind: 'damage', type: 'sacred', power: 2.5, target: 'single', stat: 'magic' },
+      { kind: 'battlefield', id: 'sacred_ground' },
+    ],
     tags: ['Elemental', 'Sacred', 'Knowledge'],
   },
 

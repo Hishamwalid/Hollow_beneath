@@ -5,6 +5,7 @@ import { ITEMS } from '@data/items';
 import { NAMED_SKILLS } from '@data/skills';
 import type { EventApplyCtx, PlayerState } from '@data/types';
 import { CombatEngine, type CombatSnapshot, type MomentumChoice } from '@systems/CombatEngine';
+import { BATTLEFIELD_STATES } from '@systems/combat/BattlefieldStateSystem';
 import { BRAVERY_ACTIONS } from '@systems/combat/FearSystem';
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
@@ -60,6 +61,7 @@ export class CombatScene extends Phaser.Scene {
   private actionBarTooltip?: Phaser.GameObjects.Text;
   private logText?: Phaser.GameObjects.Text;
   private phaseLabelText?: Phaser.GameObjects.Text;
+  private battlefieldLabelText?: Phaser.GameObjects.Text;
   private playerRowText?: Phaser.GameObjects.Text;
   private overlayMenu?: ChoiceMenu;
   private overlayBg?: Phaser.GameObjects.Rectangle;
@@ -111,6 +113,10 @@ export class CombatScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
     this.phaseLabelText = this.add
       .text(GAME_WIDTH / 2, 58, '', { fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' })
+      .setOrigin(0.5, 0);
+
+    this.battlefieldLabelText = this.add
+      .text(GAME_WIDTH / 2, 82, '', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold })
       .setOrigin(0.5, 0);
 
     const initialSnap = this.engine.beginRound();
@@ -224,6 +230,12 @@ export class CombatScene extends Phaser.Scene {
     this.insightText?.setText(`INSIGHT ${snap.insight}/3`);
     this.insightBtn?.setEnabled(snap.phase === 'player' && snap.insight >= 3);
     this.phaseLabelText?.setText(snap.bossPhaseLabel ?? '');
+    if (snap.battlefieldState) {
+      const label = BATTLEFIELD_STATES[snap.battlefieldState.id].label;
+      this.battlefieldLabelText?.setText(`◈ BATTLEFIELD: ${label} (${snap.battlefieldState.turns})`);
+    } else {
+      this.battlefieldLabelText?.setText('');
+    }
     if (this.selectedTarget && !snap.enemies.some((e) => e.key === this.selectedTarget)) {
       this.selectedTarget = snap.enemies[0]?.key ?? null;
     }
@@ -342,6 +354,7 @@ export class CombatScene extends Phaser.Scene {
         onSelect: () => { this.closeOverlay(); this.doAction('resonance', () => this.engine.resonanceAbility(this.selectedTarget ?? undefined)); },
       },
       { label: 'Sunder (2 AP)', subtitle: 'Sunder an enemy: reduce its Defense by 50% for 2 turns.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)); } },
+      { label: 'Archive: Expose Weakness (2 AP)', subtitle: 'Turn a fully-catalogued foe\'s catalogue against it: +20% damage for 2 turns.', disabled: !canAfford(2) || !(targetView?.archiveExploited ?? false), onSelect: () => { this.closeOverlay(); this.doAction('sunder', () => this.engine.archiveExpose(this.selectedTarget ?? undefined)); } },
       { label: 'Probe (1 AP)', subtitle: 'Focused intel: Observe Body / Mind / Weapon / Memory / Resonance / Behavior. Requires a Scan.', disabled: !canAfford(1) || targetLayer < 1, onSelect: () => { this.closeOverlay(); this.openProbeMenu(); } },
       { label: 'Deep Analysis (2 AP)', subtitle: 'Full move pool, exact rules, hidden notes. Requires at least one Probe.', disabled: !canAfford(2) || targetProbes < 1, onSelect: () => { this.closeOverlay(); this.doAction('deep_analyze', () => this.engine.deepAnalyze(this.selectedTarget ?? undefined)); } },
       { label: 'Focus (1 AP)', subtitle: 'Regain 15 MP and gain +1 Momentum.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('focus', () => this.engine.focus()); } },

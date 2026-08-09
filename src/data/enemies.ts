@@ -158,6 +158,16 @@ export const ENEMIES: Record<string, EnemyDef> = {
     tendency: 'caster',
     intents: [
       {
+        id: 'darken_veil', label: 'Shroud the Field', weight: 70,
+        condition: (ctx) => !ctx.self.flags.shroudField,
+        description: 'Once: casts a Shadow Veil over the whole field (3 turns).',
+        resolve(ctx) {
+          ctx.self.flags.shroudField = 1;
+          ctx.applyBattlefieldState('shadow_veil', 3);
+          return `${ctx.self.name} shroud the field — Shadow Veil settles over the fight.`;
+        },
+      },
+      {
         id: 'weave_curse', label: 'Weave Curse', weight: 999,
         condition: (ctx) => (ctx.turn - 1) % 3 === 0,
         description: 'Every third turn: a Curse that compounds against you (Curse, 3 turns).',

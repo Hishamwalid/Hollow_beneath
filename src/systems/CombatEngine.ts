@@ -156,6 +156,8 @@ export interface EnemyView {
   lastHitType?: DamageType;
   /** Phase 6b: battlefield row this enemy occupies ('front'|'middle'|'back'). */
   row: Row;
+  /** Phase 6c: full persistent archive entry present — enables the Archive Exploit on this foe. */
+  archiveExploited: boolean;
   /** Combo banner text (from the most recent activation) — engine-accumulated, cleared per snapshot pick. */
   comboBanner?: string;
   /** Reaction banner text — engine-accumulated, cleared per snapshot pick. */
@@ -336,6 +338,8 @@ export class CombatEngine {
   private mirrorTurns = 0;
   /** Per-enemy Death's Mark: +50% incoming damage for N turns (key -> turns). */
   private marked = new Map<string, number>();
+  /** Phase 6c: targets exposed by the Archive Exploit (+20% damage, turns remaining). */
+  private exposed = new Map<string, number>();
   /** Ranger/Shadow next-attack-cannot-miss / crit conditions set by signatures. */
   private eagleAccuracyTurns = 0;
   /** Guardian Counter: reflect 100% of the next physical hit. */
@@ -678,6 +682,11 @@ export class CombatEngine {
       if (next <= 0) this.marked.delete(key);
       else this.marked.set(key, next);
     }
+    for (const [key, turns] of this.exposed) {
+      const next = turns - 1;
+      if (next <= 0) this.exposed.delete(key);
+      else this.exposed.set(key, next);
+    }
 
     for (const e of this.aliveEnemies()) {
       const dot = tickDots(e.statuses);
@@ -844,7 +853,7 @@ export class CombatEngine {
         if (this.chargedIntent) continue;
         const phaseInfo = this.bossDef.getPhase(e.hp / e.maxHp);
         const ctx = this.makeBossTurnCtx(e, this.bossOwnTurnCounter + 1, phaseInfo.key);
-        const picked = pickBossIntent(this.bossDef.intents, ctx, this.rng);
+        const picked = pickBossIntent(this.bossDef.intents, ctx, this.rng, this.bossDef.persona?.intentBias);
         if (picked) {
           if (picked.charge) this.declareCharge(e, picked);
           else this.pendingIntents.set(e._key, picked.id);
@@ -873,6 +882,7 @@ export class CombatEngine {
       applyStatusToSelf: (id, turns, stacks, meta) => applyStatus(enemy.statuses, id, turns, stacks, meta),
       spawnAlly: (enemyId, hpOverride) => this.spawnAdd(enemyId, hpOverride),
       removePlayerBuffs: () => removeAllBuffs(this.playerStatuses),
+      applyBattlefieldState: (id, turns) => this.applyBattlefieldState(id, turns),
     };
   }
 
@@ -913,6 +923,7 @@ export class CombatEngine {
       stress: this.bossStress(),
       band: this.bossBand(),
       adaptations: [...this.adaptations],
+      applyBattlefieldState: (id, turns) => this.applyBattlefieldState(id, turns),
     };
   }
 
@@ -1323,6 +1334,9 @@ export class CombatEngine {
     }
 
     let dmg = amount;
+    // Phase 6a: the active battlefield state also mutes/augments incoming damage.
+    const stateMod = battlefieldDamageMod(this.battlefieldState, type);
+    if (stateMod !== 1) dmg = Math.round(dmg * stateMod);
     if (this.guarding && !bypassGuard) {
       let guardMultiplier = this.player.skillsKnown.includes('iron_resolve') ? 0.35 : 0.5;
       if (this.lastStandTurns > 0) guardMultiplier -= 0.3;
@@ -1612,6 +1626,7 @@ export class CombatEngine {
     if (this.lastStandTurns > 0) dmg = Math.round(dmg * 0.5 + dmg); // +50%
     if (hasStatus(this.playerStatuses, 'atk_up')) dmg = Math.round(dmg * 1.25);
     if ((this.marked.get(target._key) ?? 0) > 0) dmg = Math.round(dmg * 1.5);
+    if ((this.exposed.get(target._key) ?? 0) > 0) dmg = Math.round(dmg * 1.2);
     if (this.eagleAccuracyTurns > 0) {
       // accuracy handled at hit-roll; no damage change
     }
@@ -2023,6 +2038,10 @@ export class CombatEngine {
           this.veilStepGuaranteed = true;
           this.log.push('You go still, ready to slip the next blow entirely.');
           break;
+        case 'battlefield':
+          this.applyBattlefieldState(eff.id, eff.turns);
+          this.log.push(`${skill.name} reshapes the battlefield — ${BATTLEFIELD_STATES[eff.id].label} settles over the fight.`);
+          break;
       }
     }
   }
@@ -2296,6 +2315,10 @@ export class CombatEngine {
       }
       this.log.push(`You use ${item.name}, curing ${item.effect.cureStatus.join(', ')}.`);
     }
+    if (item.effect?.battlefield) {
+      this.applyBattlefieldState(item.effect.battlefield);
+      this.log.push(`You use ${item.name} — ${BATTLEFIELD_STATES[item.effect.battlefield].label} settles over the fight.`);
+    }
     this.lastActionId = 'use_item';
     this.lastActionType = null;
     return this.snapshot();
@@ -2537,6 +2560,28 @@ export class CombatEngine {
       this.firstWeaknessRevealed = true;
       this.log.push('INSIGHT — you open a Weakness Window on every enemy for 2 rounds.');
     }
+    return this.snapshot();
+  }
+
+  /** Phase 2 Layer 4 / Phase 6c: Expose Weakness on a fully-catalogued foe — +20% damage for 2 turns. */
+  archiveExpose(targetKey?: string): CombatSnapshot {
+    if (this.phase !== 'player') return this.snapshot();
+    if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
+    if (this.playerAP < ACTION_AP_COST.sunder && this.freeActionCharges < 1) return this.snapshot();
+    const target = this.pickTarget(targetKey);
+    if (!target) return this.snapshot();
+    if (archiveDamageBonus(this.archive, target.defId) <= 1) {
+      this.log.push('You do not have a full archive entry on this foe yet. Scan and defeat it again to catalogue it fully.');
+      return this.snapshot();
+    }
+    this.playerAP -= this.freeActionCharges > 0 ? 0 : ACTION_AP_COST.sunder;
+    if (this.freeActionCharges > 0) this.freeActionCharges -= 1;
+    this.actionsTakenThisRound += 1;
+    this.recordAction('sunder');
+    this.exposed.set(target._key, 2);
+    this.log.push(`ARCHIVE EXPOSE — you turn ${target.name}'s catalogued weakness against it. It takes +20% damage for 2 turns.`);
+    this.lastActionId = 'archive_expose';
+    this.lastActionType = null;
     return this.snapshot();
   }
 
@@ -3047,6 +3092,7 @@ export class CombatEngine {
             weakHitStreak: this.windowStates.get(e._key)?.streak ?? 0,
             lastHitType: this.lastHitTypes.get(e._key),
             row: e.row,
+            archiveExploited: archiveDamageBonus(this.archive, e.defId) > 1,
           };
         }),
       initiativeOrder,

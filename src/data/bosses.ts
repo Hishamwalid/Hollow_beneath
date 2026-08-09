@@ -189,7 +189,7 @@ export const SENTINEL: BossDef = {
   },
 aftermathText: () =>
     'The silver light fades from its engravings all at once, like a held breath finally let go. It does not fall so much as settle, the way a door settles back into its frame. Somewhere underneath the corridor, you feel — rather than hear — something unlock.',
-  persona: { label: 'Scholar', blurb: 'It files every move you make away before it strikes, and quotes your own tactics back at you.' },
+  persona: { label: 'Scholar', blurb: 'It files every move you make away before it strikes, and quotes your own tactics back at you.', intentBias: { catalogue: 1.5, reshelves: 1.3, archive_strike: 0.9 } },
   getRewards: () => ({
     factionDelta: { archive: 20 },
     resonanceDelta: 5,
@@ -426,7 +426,7 @@ export const PATRIARCH: BossDef = {
     flags.cassDefWeakened === 1
       ? 'He kneels again before he falls, and this time it looks less like prayer. "You already knew," he says. "That\'s the part I couldn\'t forgive." The fire behind him finally goes out.'
       : "He goes down still murmuring the same rite, three words behind where he should be. The fire behind him gutters and, for the first time since you arrived, actually looks like it's burning something.",
-  persona: { label: 'Executioner', blurb: 'He does not fight to win. He fights to finish — the blow you cannot Guard is the only prayer he believes in.' },
+  persona: { label: 'Executioner', blurb: 'He does not fight to win. He fights to finish — the blow you cannot Guard is the only prayer he believes in.', intentBias: { martyr_unleashed: 1.6, punishing_strike: 1.3, dispel_holy: 1.2 } },
   getRewards: () => ({
     factionDelta: { sable: 25 },
     resonanceDelta: 8,
@@ -655,6 +655,11 @@ export const CHORUS: BossDef = {
       loreFragment: 'chorus_was_a_warning',
       flag: 'chorus_defeated_attack',
     };
+  },
+  persona: {
+    label: 'Echo',
+    blurb: 'It does not attack so much as answer. Whatever you repeated, whatever you reused, it will say back — louder, and with all the voices agreeing for once.',
+    intentBias: { harmonic_overload: 1.6, copy_memory: 1.4, many_voiced_strike: 0.7 },
   },
 };
 
@@ -910,7 +915,7 @@ export const FOSSIL_KING: BossDef = {
     flags.ultimateCharging === 1
       ? 'He falls mid-syllable, the ultimate decree unfinished, and something in his stone face looks — almost — relieved. "...thank...you..." is all that makes it out before the quiet takes the rest.'
       : 'The last of him settles into the throne completely, indistinguishable now from the stone around it. The Court he ruled crumbles a little further with him, the way an argument does once no one is left to keep having it.',
-  persona: { label: 'The Last Emperor', blurb: 'A king who outlived everyone he ruled. He does not attack so much as hand down sentences — and the finished one is the one you cannot Guard.' },
+  persona: { label: 'The Last Emperor', blurb: 'A king who outlived everyone he ruled. He does not attack so much as hand down sentences — and the finished one is the one you cannot Guard.', martyr: true, intentBias: { imperial_edict: 1.5, utter_stillness: 1.3, last_law: 1.2 } },
   getRewards: () => ({
     factionDelta: { caravan: 15, archive: 10 },
     resonanceDelta: 10,
@@ -1115,7 +1120,7 @@ export const REFLECTION: BossDef = {
   },
   aftermathText: () =>
     "It doesn't dissolve so much as stop insisting on a shape. What's left in the mirrors is just your own reflection again, ordinary, breathing hard, alone in a room full of glass. Somewhere below, or above, or nowhere at all, The Loom has finished asking its question — and is waiting, with what might be patience, for you to answer it yourself.",
-  persona: { label: 'Prophet', blurb: 'It wears your choices the way the Loom wears thread. Whatever it is about to do, it declared before it did — you simply chose not to hear.' },
+  persona: { label: 'Prophet', blurb: 'It wears your choices the way the Loom wears thread. Whatever it is about to do, it declared before it did — you simply chose not to hear.', intentBias: { quoted_choice: 1.4, weight_of_evidence: 1.3, gather_everything: 1.2 } },
   getRewards: () => ({
     resonanceDelta: 10,
     echoShards: 10,

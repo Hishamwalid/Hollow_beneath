@@ -8,17 +8,9 @@
  * certain items. The data model + modifier logic live here so the engine and
  * tests can drive them headlessly.
  */
-import type { DamageType } from '@data/types';
-
-export type BattlefieldStateId =
-  | 'dust_storm'
-  | 'sacred_ground'
-  | 'broken_terrain'
-  | 'echo_zone'
-  | 'shadow_veil'
-  | 'time_distortion'
-  | 'silence_field'
-  | 'truth_aura';
+import type { DamageType, BattlefieldStateId } from '@data/types';
+/** Re-export so existing call-sites (`type BattlefieldStateId`) keep working. */
+export type { BattlefieldStateId } from '@data/types';
 
 export const BATTLEFIELD_STATES: Record<BattlefieldStateId, { label: string; damageMod: (type: DamageType) => number }> = {
   // Obscured range: ranged elemental attacks lose cohesion.

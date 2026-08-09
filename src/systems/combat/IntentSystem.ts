@@ -56,17 +56,31 @@ export function pickEnemyIntent(intents: IntentDef[], ctx: EnemyTurnContext, rng
   return weightedPick(eligible, rng) as IntentDef | undefined;
 }
 
-export function pickBossIntent(intents: BossIntentDef[], ctx: BossTurnContext, rng: () => number): BossIntentDef | undefined {
+export function pickBossIntent(
+  intents: BossIntentDef[],
+  ctx: BossTurnContext,
+  rng: () => number,
+  bias?: Record<string, number>,
+): BossIntentDef | undefined {
   const eligible = intents.filter((i) => !i.condition || i.condition(ctx));
-  return weightedPick(eligible, rng) as BossIntentDef | undefined;
+  return weightedPick(eligible, rng, bias) as BossIntentDef | undefined;
 }
 
-function weightedPick<T>(eligible: T[], rng: () => number): T | undefined {
+function weightedPick<T>(eligible: T[], rng: () => number, bias?: Record<string, number>): T | undefined {
   if (eligible.length === 0) return undefined;
-  const total = eligible.reduce((s, i) => s + (((i as IntentDef).weight ?? 1) as number), 0);
+  const weight = (item: T): number => {
+    const base = ((item as IntentDef).weight ?? 1) as number;
+    if (bias) {
+      const id = (item as IntentDef).id;
+      const mult = bias[id];
+      if (mult !== undefined) return base * mult;
+    }
+    return base;
+  };
+  const total = eligible.reduce((s, i) => s + weight(i), 0);
   let roll = rng() * total;
   for (const item of eligible) {
-    roll -= (item as IntentDef).weight ?? 1;
+    roll -= weight(item);
     if (roll <= 0) return item;
   }
   return eligible[eligible.length - 1];

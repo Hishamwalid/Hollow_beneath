@@ -80,7 +80,8 @@ export type SkillEffect =
   | { kind: 'cost'; hpFlat?: number; hpPct?: number; resonance?: number; onHit?: boolean }
   | { kind: 'resource'; momentum?: number; mp?: number }
   | { kind: 'evade' }
-  | { kind: 'next_attack_amp'; dmg: number; guaranteed?: boolean };
+  | { kind: 'next_attack_amp'; dmg: number; guaranteed?: boolean }
+  | { kind: 'battlefield'; id: BattlefieldStateId; turns?: number };
 
 export interface SkillDef {
   id: string;
@@ -165,6 +166,8 @@ export interface EnemyTurnContext {
   applyStatusToSelf: (id: StatusId, turns: number, stacks?: number, meta?: Record<string, number>) => void;
   spawnAlly: (enemyId: string, hpOverride?: number) => void;
   removePlayerBuffs: () => void;
+  /** Phase 6a: enemy intents can reshape the whole battlefield. */
+  applyBattlefieldState: (id: BattlefieldStateId, turns?: number) => void;
 }
 
 export interface CombatState_Enemy extends CombatantBase {
@@ -189,6 +192,17 @@ export type EnemyTendency =
 
 /** Battlefield row occupied by an entity (Phase 6b: Positioning). Rows 0..2 over `back/middle/front`. */
 export type Row = 'back' | 'middle' | 'front';
+
+/** Global battlefield state ids (Phase 6a). States modify damage by damage type for several turns. */
+export type BattlefieldStateId =
+  | 'dust_storm'
+  | 'sacred_ground'
+  | 'broken_terrain'
+  | 'echo_zone'
+  | 'shadow_veil'
+  | 'time_distortion'
+  | 'silence_field'
+  | 'truth_aura';
 
 export interface IntentDef {
   id: string;
@@ -275,6 +289,9 @@ export interface BossPersona {
   blurb: string;   // one flavour line about how it fights
   /** Fossil King: taking damage lashes back at the player. */
   martyr?: boolean;
+  /** Phase 5e: intent-id → weight multiplier. Personalities that "read" the player
+   *  favour the moves the doc maps to them (Scholar analyses, Executioner finishes, Echo reflects). */
+  intentBias?: Record<string, number>;
 }
 
 // ---- Bosses --------------------------------------------------------------------
@@ -315,6 +332,8 @@ export interface BossTurnContext {
   stress: number;
   band: StressBand;
   adaptations: AdaptationId[];
+  /** Phase 6a: boss abilities can also reshape the battlefield. */
+  applyBattlefieldState: (id: BattlefieldStateId, turns?: number) => void;
 }
 
 export interface BossDef {
@@ -386,6 +405,8 @@ export interface ItemDef {
     healPercent?: number;
     cureStatus?: StatusId[];
     statBonus?: Partial<Record<'atk' | 'def' | 'matk' | 'mdef', number>>;
+    /** Phase 6a: using the item casts a 3-turn battlefield state. */
+    battlefield?: BattlefieldStateId;
   };
   sellValue: number;
 }
