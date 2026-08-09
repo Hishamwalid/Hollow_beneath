@@ -38,6 +38,10 @@ export function createEnemyDisplay(
       align: 'center',
     })
     .setOrigin(0.5, 0);
+  // Phase 6b: battlefield-row pip on the enemy card.
+  const rowText = scene.add
+    .text(-(CARD_W / 2) + 14, -64, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.goldBright, fontStyle: 'bold' })
+    .setOrigin(0, 0.5);
   const hpBg = scene.add.rectangle(0, 78, CARD_W - 26, 9, 0x2a2e33);
   const hpFg = scene.add.rectangle(-(CARD_W - 26) / 2, 78, CARD_W - 26, 9, 0xb0453f).setOrigin(0, 0.5);
   const hpText = scene.add
@@ -87,7 +91,7 @@ export function createEnemyDisplay(
     { x: -12, y: 0 },
   ], true);
   diamond.setVisible(false);
-  container.add([panelBg, token, nameText, hpBg, hpFg, hpText, affinityText, statsText, statusText, intentText, windowBadge, diamond]);
+  container.add([panelBg, token, nameText, hpBg, hpFg, hpText, affinityText, statsText, statusText, intentText, windowBadge, diamond, rowText]);
   panelBg.on('pointerdown', onClick);
   token.on('pointerdown', onClick);
   token.on('pointerover', () => { if (!selected) token.setScale(1.06); });
@@ -130,6 +134,7 @@ export function createEnemyDisplay(
     update: (view: EnemyView) => {
       container.setVisible(view.alive);
       nameText.setText(view.tendency ? `${view.tendency} ${view.name}` : view.name);
+      rowText.setText(view.row ? view.row.toUpperCase() : '');
       const pct = Math.max(0, view.hp / view.maxHp);
       hpFg.width = (CARD_W - 26) * pct;
       hpText.setText(`${view.hp}/${view.maxHp}`);

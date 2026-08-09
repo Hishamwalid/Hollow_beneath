@@ -72,6 +72,7 @@ export class SettingsScene extends Phaser.Scene {
     this.buildVolumeSlider(cx, settings);
     this.buildTextSpeedSlider(cx, settings);
     this.buildScreenShakeToggle(cx, settings);
+    this.buildDifficulty(cx);
     this.buildCredits(cx);
     this.buildClearData(cx);
     this.buildBackButton(cx);
@@ -125,8 +126,33 @@ export class SettingsScene extends Phaser.Scene {
     }, { width: 80, height: 36, fontSize: '14px' });
   }
 
+  private buildDifficulty(cx: number) {
+    const modes = ['easy', 'normal', 'hard', 'ironman'] as const;
+    const y = 330;
+    const current = settingsManager.get().difficulty;
+
+    this.addSettingsLabel(cx - 300, y, 'Difficulty');
+    const active = this.add.text(cx + 160, y, current.toUpperCase(), {
+      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
+    }).setOrigin(0, 0.5);
+
+    const buttons: ReturnType<typeof createButton>[] = [];
+    let x = cx - 120;
+    for (const mode of modes) {
+      const activeBtn = mode === current;
+      buttons.push(createButton(this, x, y, `${mode[0].toUpperCase()}${mode.slice(1)}`, () => {
+        settingsManager.set({ difficulty: mode });
+        audio.click();
+        buttons.forEach((b) => b.destroy());
+        active.setText(mode.toUpperCase());
+        this.scene.restart();
+      }, { width: 74, height: 34, fontSize: '12px', disabled: activeBtn }));
+      x += 82;
+    }
+  }
+
   private buildCredits(cx: number) {
-    let y = 370;
+    let y = 430;
     const divider = this.add.rectangle(cx, y, 600, 1, 0xc9a24b, 0.3).setDepth(1);
     y += 20;
 

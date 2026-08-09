@@ -60,6 +60,7 @@ export class CombatScene extends Phaser.Scene {
   private actionBarTooltip?: Phaser.GameObjects.Text;
   private logText?: Phaser.GameObjects.Text;
   private phaseLabelText?: Phaser.GameObjects.Text;
+  private playerRowText?: Phaser.GameObjects.Text;
   private overlayMenu?: ChoiceMenu;
   private overlayBg?: Phaser.GameObjects.Rectangle;
   private endTurnBtn?: ReturnType<typeof createButton>;
@@ -116,6 +117,9 @@ export class CombatScene extends Phaser.Scene {
     this.buildEnemyDisplays(initialSnap);
 
     this.statPanel = createStatPanel(this, 16, 585, 320);
+    this.playerRowText = this.add
+      .text(16, 560, '', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold })
+      .setOrigin(0, 0);
     this.apPips = createApPips(this, 1150, 565);
     this.insightText = this.add
       .text(1150, 606, '', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold })
@@ -215,6 +219,7 @@ export class CombatScene extends Phaser.Scene {
   private refresh(snap: CombatSnapshot) {
     const { player } = useGameStore.getState();
     if (player)     this.statPanel?.update(player);
+    this.playerRowText?.setText(snap.playerRow ? `ROW: ${snap.playerRow.toUpperCase()}` : '');
     this.apPips?.update(snap.playerAP, snap.bankedAP);
     this.insightText?.setText(`INSIGHT ${snap.insight}/3`);
     this.insightBtn?.setEnabled(snap.phase === 'player' && snap.insight >= 3);
@@ -310,6 +315,7 @@ export class CombatScene extends Phaser.Scene {
     if (snap.phase !== 'player') return;
     const hasFree = snap.freeActionCharges > 0;
     const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
+    const canAct = snap.phase === 'player';
     const resonanceCost = player.skillsKnown.includes('resonant_study') ? 1 : 3;
     const activeSkills = player.skillsKnown.filter((id) => (NAMED_SKILLS[id]?.apCost ?? 0) > 0);
     const targetView = snap.enemies.find((e) => e.key === this.selectedTarget);
@@ -349,6 +355,11 @@ export class CombatScene extends Phaser.Scene {
           }))
         : []),
       { label: 'Withdraw (2 AP)', subtitle: 'Attempt to flee. Speed-based success chance.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('withdraw', () => this.engine.withdraw()); } },
+      // Phase 6b repositioning
+      { label: 'Advance (free)', subtitle: 'Step one row toward the front: +15% damage, but you take 10% more.', disabled: !canAct, onSelect: () => { this.closeOverlay(); this.doAction('advance', () => this.engine.advance()); } },
+      { label: 'Retreat (free)', subtitle: 'Step one row back: -10% damage, shields 15%, +10 dodge.', disabled: !canAct, onSelect: () => { this.closeOverlay(); this.doAction('retreat', () => this.engine.retreat()); } },
+      { label: 'Charge (1 AP)', subtitle: 'Surge two rows forward, striking as you go.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('charge', () => this.engine.charge()); } },
+      { label: 'Fall Back (1 AP)', subtitle: 'Drop two rows back and raise your guard.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('fall_back', () => this.engine.fallBack()); } },
     ];
 
     this.overlayBg?.destroy();
@@ -455,6 +466,20 @@ export class CombatScene extends Phaser.Scene {
         if (settingsManager.get().screenShake) {
           this.cameras.main.shake(200, 0.005);
         }
+        break;
+      }
+      case 'advance':
+      case 'retreat':
+      case 'fall_back': {
+        this.setPlayerPose('idle', false);
+        if (snap.playerRow) this.floatingText(250, 560, `ROW ${snap.playerRow.toUpperCase()}`, PALETTE_HEX.gold);
+        if (this.statPanel) this.flashTarget(this.statPanel.container, 0xc9a24b);
+        break;
+      }
+      case 'charge': {
+        this.setPlayerPose('attack');
+        showAllEnemyDamage();
+        if (snap.playerRow) this.floatingText(250, 560, `ROW ${snap.playerRow.toUpperCase()}`, PALETTE_HEX.gold);
         break;
       }
       default: {
