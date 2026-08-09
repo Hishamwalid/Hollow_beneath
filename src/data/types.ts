@@ -630,7 +630,20 @@ export interface MetaState {
   bossesEverDefeated: string[];
   deathCount: number;
   lastRunStats: RunStats | null;
+  /** Phase 6c: permanent enemy catalogue — fragments gained from scanning/defeating foes. */
+  enemyArchive: EnemyArchive;
 }
+
+/** Phase 6c: one entry in the persistent enemy archive. */
+export interface EnemyArchiveEntry {
+  /** Catalogued fragment labels (max ARCHIVE_FRAGMENT_COUNT). */
+  fragments: string[];
+  /** Fully catalogued — unlocks the archive exploit (permanent damage bonus vs that foe). */
+  exploited: boolean;
+}
+
+/** Phase 6c: persistent record of every enemy scanned/defeated across runs. */
+export type EnemyArchive = Record<string, EnemyArchiveEntry>;
 
 export interface SaveBlob {
   version: number;

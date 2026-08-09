@@ -102,6 +102,7 @@ export class CombatScene extends Phaser.Scene {
       playerHistory: new Set(player.history),
       allies: player.companions ?? [],
       difficulty: settingsManager.get().difficulty,
+      enemyArchive: store.meta.enemyArchive,
     });
 
     this.add
@@ -801,6 +802,7 @@ export class CombatScene extends Phaser.Scene {
     // victory
     audio.victory();
     player.enemiesKilled += this.engine.getEnemiesKilled();
+    store.commitArchiveGains(this.engine.getArchiveGains());
     const xp = this.engine.getXpEarned();
     const levelsGained = store.addXp(xp);
 

@@ -4,8 +4,9 @@ import type {
   BossDef,
   BossIntentDef,
   BossTurnContext,
-  CombatState_Enemy,
-  DamageType,
+CombatState_Enemy,
+   DamageType,
+   EnemyArchive,
    EnemyTendency,
    EnemyTurnContext,
    IntentDef,
@@ -107,6 +108,8 @@ import { BATTLEFIELD_STATES, BattlefieldState, battlefieldDamageMod, tickBattlef
 import { POSITION_META, ROW_ORDER, defaultRowFor, stepRow } from './combat/PositionSystem';
 // ---- Phase 6d: difficulty modes (easy/normal/hard/ironman) ----
 import { difficultyMods, type DifficultyId } from './combat/DifficultySystem';
+// ---- Phase 6c: persistent enemy archive (fragments + exploit bonus) ----
+import { ARCHIVE_FRAGMENT_COUNT, archiveDamageBonus } from './combat/ArchiveSystem';
 
 const ALL_ENEMY_DEFS = { ...ENEMIES, ...SUMMON_ENEMIES };
 
@@ -124,6 +127,8 @@ export interface CombatSetup {
   allies?: AllySaveState[];
   /** Phase 6d: difficulty mode (defaults to 'normal' — fully neutral). */
   difficulty?: DifficultyId;
+  /** Phase 6c: persistent known-enemy catalogue (drives the archive damage bonus). */
+  enemyArchive?: EnemyArchive;
 }
 
 export interface EnemyView {
@@ -230,6 +235,10 @@ export class CombatEngine {
   /** Phase 6d: difficulty mode + its stat multipliers (normal is fully neutral). */
   private difficulty: DifficultyId = 'normal';
   private diff = difficultyMods('normal');
+  /** Phase 6c: persistent enemy catalogue (fragments + exploit bonus). Read-only inside a fight. */
+  private archive: EnemyArchive = {};
+  /** Phase 6c: fragments gained this fight, keyed by enemy defId (capped at ARCHIVE_FRAGMENT_COUNT). */
+  private archiveGains: Record<string, number> = {};
   private playerStatuses: StatusInstance[] = [];
   private flags: Record<string, number> = {};
   private playerHistorySet: Set<string>;
@@ -420,6 +429,7 @@ export class CombatEngine {
     this.allyStates = (setup.allies ?? []).map((a) => ({ ...a }));
     this.difficulty = setup.difficulty ?? 'normal';
     this.diff = difficultyMods(this.difficulty);
+    this.archive = setup.enemyArchive ?? {};
 
     if (this.player.skillsKnown.includes('chorus_echo')) {
       this.player.momentum = Math.max(this.player.momentum, 1);
@@ -718,6 +728,10 @@ export class CombatEngine {
     if (this.phase === 'victory') {
       this.restoreOverclockedMaxHp();
       this.applyAllyRewards();
+      // Phase 6c: cataloguing the vanquished — every felled foe yields an archive fragment.
+      for (const e of this.enemies) {
+        if (e.hp <= 0 && !e._isBoss) this.gainArchiveFragment(e.defId);
+      }
     }
   }
 
@@ -1488,6 +1502,11 @@ export class CombatEngine {
     this.player.fatigue = clampFatigue(this.player.fatigue + amt);
   }
 
+  /** Phase 6c: record an archive fragment gain against an enemy's defId for this fight. */
+  private gainArchiveFragment(defId: string): void {
+    this.archiveGains[defId] = Math.min(ARCHIVE_FRAGMENT_COUNT, (this.archiveGains[defId] ?? 0) + 1);
+  }
+
   private rollCrit(): boolean {
     if (this.desperateStrike) return true;
     if (this.forcedCrits > 0) {
@@ -1575,6 +1594,9 @@ export class CombatEngine {
     if (posDmgMult !== 1 || posDefMult !== 1) dmg = Math.round(dmg * posDmgMult * posDefMult);
     // Phase 6d: difficulty scales player output (normal = 1, no-op).
     if (this.diff.playerDmgMult !== 1 && !isAlly) dmg = Math.round(dmg * this.diff.playerDmgMult);
+    // Phase 6c: a fully-catalogued foe is more vulnerable to the archive exploit.
+    const archiveMult = archiveDamageBonus(this.archive, target.defId);
+    if (archiveMult !== 1 && !isAlly) dmg = Math.round(dmg * archiveMult);
     dmg = Math.round(dmg * windowDamageMult(state));
     if (crit) dmg = Math.round(dmg * 1.5);
     if (hasStatus(this.playerStatuses, 'echo_surge')) dmg = Math.round(dmg * 1.2);
@@ -2306,6 +2328,8 @@ export class CombatEngine {
       const intent = this.intentDefFor(target);
       if (intent) this.log.push(`You sense what it intends: ${intent.label}.`);
       else if (target._isBoss && this.unreadable()) this.log.push('You sense nothing — it has sealed its intentions behind the learning.');
+      this.gainArchiveFragment(target.defId);
+      this.log.push('A fragment is added to the archive.');
     }
     this.gainMomentum(1);
     this.player.insight = Math.min(3, this.player.insight + 1);
@@ -2938,6 +2962,11 @@ export class CombatEngine {
 
   getEnemiesKilled(): number {
     return this.enemies.filter((e) => e.hp <= 0).length;
+  }
+
+  /** Phase 6c: archive fragments gained this fight (defId → count, capped). Caller commits them to MetaState. */
+  getArchiveGains(): Record<string, number> {
+    return { ...this.archiveGains };
   }
 
   /** Phase 3: returns and clears the queued reaction/combo banners since the last read. */

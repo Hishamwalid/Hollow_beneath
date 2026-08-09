@@ -6,3 +6,4 @@ export * from './ComboSystem';
 export * from './BattlefieldStateSystem';
 export * from './PositionSystem';
 export * from './DifficultySystem';
+export * from './ArchiveSystem';

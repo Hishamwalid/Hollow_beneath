@@ -32,6 +32,7 @@ import { matchCombo } from '@systems/combat/ComboSystem';
 import { battlefieldDamageMod, BATTLEFIELD_STATES } from '@systems/combat/BattlefieldStateSystem';
 import { POSITION_META, ROW_ORDER, defaultRowFor } from '@systems/combat/PositionSystem';
 import { DIFFICULTIES, difficultyMods } from '@systems/combat/DifficultySystem';
+import { ARCHIVE_FRAGMENT_COUNT, addArchiveFragment, archiveDamageBonus, archiveExploited, emptyArchive } from '@systems/combat/ArchiveSystem';
 import { CRISES, type CrisisId } from '@systems/combat/CrisisSystem';
 import { fearModifiers } from '@systems/combat/FearSystem';
 import { hasStatus, getStatus, tickDurations } from '@systems/StatusEffectSystem';
@@ -917,6 +918,45 @@ assert(bossChargeSeen !== '', 'boss charge cycle seen in simulation');
     assert(hardHp > normalHp, `hard enemies have more HP (normal ${normalHp} vs hard ${hardHp})`);
     assert(hardEng.snapshot().difficulty === 'hard', 'snapshot exposes the active difficulty');
     ok('difficulty modes: neutral base, enemy scaling applied, snapshot surfaces mode');
+  }
+
+  // ---- 22. Phase 6c: Persistent Enemy Archive (fragments -> exploit) ----------
+  {
+    // Unit: fragments catalogue an enemy, then unlock the exploit.
+    assert(ARCHIVE_FRAGMENT_COUNT === 3, 'exactly 3 fragments per entry');
+    const ar = emptyArchive();
+    assert(archiveExploited(ar, 'echo_skeleton') === false && archiveDamageBonus(ar, 'echo_skeleton') === 1, 'unknown enemy: no exploit, neutral damage');
+    const a1 = addArchiveFragment(ar, 'echo_skeleton');
+    assert(a1.added && !a1.complete, 'first fragment records (not yet complete)');
+    addArchiveFragment(ar, 'echo_skeleton');
+    const a3 = addArchiveFragment(ar, 'echo_skeleton');
+    assert(a3.complete && archiveExploited(ar, 'echo_skeleton'), 'third fragment completes the entry');
+    assert(addArchiveFragment(ar, 'echo_skeleton').added === false, 'no gain beyond a complete entry');
+    assert(archiveDamageBonus(ar, 'echo_skeleton') === 1.15, 'exploit bonus +15% once complete');
+    ok('archive: fragment accumulation flips exploited + damage bonus');
+
+    // Integration: an exploited enemy takes +15% vs a fresh engine (same seed, identical RNG stream).
+    const mk = (archive: Record<string, unknown>) => {
+      const p = makeTestPlayer({ str: 12, dex: 6, con: 12, int: 10, will: 10 });
+      const eng = new CombatEngine({ player: p, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(5301), playerHistory: new Set(), enemyArchive: archive as never });
+      eng.beginRound();
+      const snap = eng.attack();
+      return snap.enemies[0].maxHp - snap.enemies[0].hp;
+    };
+    const exploited = { echo_skeleton: { fragments: ['f', 'f', 'f'], exploited: true } };
+    const exploitedDmg = mk(exploited);
+    const freshDmg = mk({});
+    assert(exploitedDmg > freshDmg, `exploit deals more damage (exploited ${exploitedDmg} vs fresh ${freshDmg})`);
+    ok('archive: exploit deal damage vs a catalogued foe');
+
+    // Engine records gains from analyze + defeat (capped).
+    const pA = makeTestPlayer({ str: 12, dex: 6, con: 12, int: 10, will: 10 });
+    const engA = new CombatEngine({ player: pA, enemyIds: ['echo_skeleton'], page: 1, rng: mulberry32(5401), playerHistory: new Set() });
+    engA.beginRound();
+    engA.analyze();
+    const gains1 = engA.getArchiveGains();
+    assert((gains1['echo_skeleton'] ?? 0) >= 1, `analyze credits a fragment (gains=${JSON.stringify(gains1)})`);
+    ok('archive: analyze + defeat credit fragments into getArchiveGains');
   }
 }
 

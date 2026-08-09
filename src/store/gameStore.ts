@@ -11,6 +11,7 @@ import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } fr
 import { applyUnlocksToNewRun, deathRefund, shardsForEnding } from '@systems/EchoShardSystem';
 import { computeLevelUp, MAX_LEVEL } from '@systems/LevelSystem';
 import { settingsManager } from '@systems/SettingsManager';
+import { addArchiveFragment } from '@systems/combat/ArchiveSystem';
 import { SKILL_TREES } from '@data/skillTree';
 import { CLASSES } from '@data/classes';
 import { TOTAL_MAJOR_BOSSES } from '@data/bosses';
@@ -115,6 +116,8 @@ interface GameStore {
   resetSkillTreePurchases: () => void;
   computeRunStats: () => RunStats | null;
   equipItem: (slot: keyof Equipment, itemId: string | null) => void;
+  /** Phase 6c: merge per-fight archive gains (enemyId -> fragments) into the persistent catalogue. */
+  commitArchiveGains: (gains: Record<string, number>) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -361,5 +364,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { player, game, meta } = get();
     if (!player || !game) return null;
     return computeRunStatsImpl(player, game, meta, player.echoShards, game.endingAchieved);
+  },
+
+  commitArchiveGains: (gains) => {
+    const { meta } = get();
+    const nextArchive = { ...meta.enemyArchive };
+    for (const [enemyId, count] of Object.entries(gains)) {
+      for (let i = 0; i < count; i++) addArchiveFragment(nextArchive, enemyId);
+    }
+    set({ meta: { ...meta, enemyArchive: nextArchive } });
+    get().persist();
   },
 }));

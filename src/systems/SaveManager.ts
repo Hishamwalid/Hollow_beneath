@@ -2,7 +2,7 @@ import type { GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
 import { CLASS_OF_PRESET, closestPresetName } from '@data/stats';
 
 const STORAGE_KEY = 'hollow_beneath_save_v1';
-const VERSION = 4;
+const VERSION = 5;
 
 function simpleChecksum(payload: string): string {
   let hash = 0;
@@ -23,6 +23,7 @@ export function defaultMeta(): MetaState {
     bossesEverDefeated: [],
     deathCount: 0,
     lastRunStats: null,
+    enemyArchive: {},
   };
 }
 
@@ -52,6 +53,10 @@ function migrateBlob(blob: SaveBlob): SaveBlob {
     if (!player.position) player.position = 'middle';
     // Phase 5: v3 saves predate companions.
     if (!Array.isArray(player.companions)) player.companions = [];
+  }
+  // Phase 6c: v4 saves predate the persistent enemy archive.
+  if (blob.meta && (!blob.meta.enemyArchive || typeof blob.meta.enemyArchive !== 'object')) {
+    blob.meta = { ...blob.meta, enemyArchive: {} };
   }
   blob.version = VERSION;
   return blob;
