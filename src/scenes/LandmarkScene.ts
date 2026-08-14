@@ -107,7 +107,13 @@ export class LandmarkScene extends Phaser.Scene {
     const boss = BOSSES[bossId];
     this.add.text(GAME_WIDTH / 2, 60, boss.name, { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
     this.add.text(GAME_WIDTH / 2, 100, boss.theme, { fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' }).setOrigin(0.5);
-    this.add.image(GAME_WIDTH / 2, 230, `tok_${bossId}`).setDisplaySize(140, 140);
+    const isSentinel = bossId === 'sentinel' && this.textures.exists('enemy_sentinel_half');
+    const halfBodyKey = isSentinel ? 'enemy_sentinel_half' : `tok_${bossId}`;
+    const bodyImg = this.add.image(GAME_WIDTH / 2, 230, halfBodyKey);
+    const fr = this.textures.getFrame(halfBodyKey);
+    const bh = 250;
+    const bw = fr ? bh * (fr.realWidth / fr.realHeight) : 140;
+    bodyImg.setDisplaySize(bw, bh);
 
     this.dialog?.destroy();
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 420, 860, 190);

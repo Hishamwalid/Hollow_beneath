@@ -1,0 +1,75 @@
+{
+  "stage": "combat-ui",
+  "adjustments": [
+    {
+      "key": "actionGrid",
+      "dx": -24.1,
+      "dy": 62.5
+    },
+    {
+      "key": "apPips",
+      "dx": 18.7,
+      "dy": 18.6
+    },
+    {
+      "key": "combatLog",
+      "dx": 0,
+      "dy": 0
+    },
+    {
+      "key": "enemyRowY",
+      "dx": 0,
+      "dy": 25.2
+    },
+    {
+      "key": "enemySpacing",
+      "dx": 0,
+      "dy": 32.9
+    },
+    {
+      "key": "fxAnchor",
+      "dx": 68,
+      "dy": 28.5
+    },
+    {
+      "key": "insightBtn",
+      "dx": 46.1,
+      "dy": 2.2
+    },
+    {
+      "key": "insightText",
+      "dx": -19.7,
+      "dy": 4.4
+    },
+    {
+      "key": "playerRow",
+      "dx": -20.8,
+      "dy": 16.4
+    },
+    {
+      "key": "playerShadow",
+      "dx": 0,
+      "dy": 25.2
+    },
+    {
+      "key": "playerSprite",
+      "dx": 37.3,
+      "dy": 19.8
+    },
+    {
+      "key": "statPanel",
+      "dx": 24.2,
+      "dy": 31.8
+    },
+    {
+      "key": "tooltipPanel",
+      "dx": -0.7,
+      "dy": 38.4
+    },
+    {
+      "key": "turnOrder",
+      "dx": 7.7,
+      "dy": -3.3
+    }
+  ]
+}
