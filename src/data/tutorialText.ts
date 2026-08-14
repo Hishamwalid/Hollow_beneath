@@ -34,7 +34,7 @@ export const TUTORIAL_SCREENS: TutorialScreen[] = [
     id: 'tokens_and_fatigue',
     title: 'Tokens & Fatigue',
     icons: ['tok_player'],
-    body: 'Every hit you land generates a TOKEN — spend them the same turn as AP. Weakness hits, criticals, dodges and kills all forge tokens; repeating the same move over and over burns them.\n\nWatch your FATIGUE bar (purple, under MP). At 26% accuracy drops. At 51% you bleed damage too and start rounds down an AP. Above 76% you may even lose a turn. Rest heals it.',
+    body: 'Every hit you land generates a TOKEN — spend them the same turn as AP. Weakness hits, criticals, dodges and kills all forge tokens; repeating the same move over and over burns them.\n\nWatch your FATIGUE bar (purple, under MP). At 26% accuracy drops. At 51% you bleed damage too. Above 76% you start rounds down an AP and may even lose a turn. Rest heals it.',
   },
   {
     id: 'investigate',

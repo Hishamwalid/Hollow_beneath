@@ -1,6 +1,6 @@
 /**
  * PART 11 — FEAR / BRAVERY (Ultimate Battle System).
- * Hidden 0-100 fear gauge; >50 applies the Terrified debuff (-20% accuracy, -10% damage).
+ * Hidden 0-100 fear gauge; >50 applies the Terrified debuff (-10% accuracy, -10% damage).
  * Fear increases from: massive hits (>30% max HP in one hit), boss ultimates, or
  * being brought to critical HP. The player lowers fear via bravery actions.
  */
@@ -29,9 +29,9 @@ export interface FearModifiers {
   accuracyMult: number;
 }
 
-/** Terrified: -20% accuracy, -10% damage. */
+/** Terrified: -10% accuracy, -10% damage. */
 export function fearModifiers(fear: number): FearModifiers {
-  return isTerrified(fear) ? { damageMult: 0.9, accuracyMult: 0.8 } : { damageMult: 1, accuracyMult: 1 };
+  return isTerrified(fear) ? { damageMult: 0.9, accuracyMult: 0.9 } : { damageMult: 1, accuracyMult: 1 };
 }
 
 export interface BraveryActionDef {

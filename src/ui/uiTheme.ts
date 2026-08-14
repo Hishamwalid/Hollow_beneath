@@ -38,3 +38,14 @@ export const DAMAGE_TYPE_HEX: Record<string, string> = {
   sacred: '#f5f0e1',
   shadow: '#7a7a86',
 };
+
+// Battle UI design palette (Battle UI.svg, 1920x1080 source)
+export const DESIGN = {
+  panelOlive: '#9b741e',
+  buttonInner: '#21252a',
+  hpRed: '#b10000',
+  mpBlue: '#64b5f5',
+  momentumPurple: '#b967bc',
+  shadow: '#291c00',
+  shadowAlpha: 0.76,
+} as const;

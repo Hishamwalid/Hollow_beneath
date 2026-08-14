@@ -134,10 +134,12 @@ export interface CombatSetup {
 
 export interface EnemyView {
   key: string;
+  defId: string;
   name: string;
   hp: number;
   maxHp: number;
   alive: boolean;
+  isBoss: boolean;
   statuses: StatusInstance[];
   revealed: boolean;
   revealCount: number;
@@ -170,6 +172,10 @@ export interface CombatSnapshot {
   phase: CombatPhase;
   playerAP: number;
   bankedAP: number;
+  /** AP docked at the start of the current round by exhaustion/fatigue (0 = none). */
+  apPenalty: number;
+  /** Why AP was docked ('Fatigue' / 'Exhaustion' / combined). */
+  apPenaltyLabel?: string;
   freeActionCharges: number;
   playerHP: number;
   playerMaxHP: number;
@@ -185,7 +191,13 @@ export interface CombatSnapshot {
   playerResonance: number;
   enemies: EnemyView[];
   initiativeOrder: string[];
+  /** True cyclic turn order: fast enemies (spd desc) → player → slow enemies (spd desc) → accompanying allies. */
+  turnOrder: string[];
+  /** Turn slots consumed in the last phase transition (beginRound faster enemies, endPlayerPhase slower enemies + allies). */
+  lastActors: string[];
   playerHitEnemyKeys: string[];
+  /** Damage the player took from each enemy key during the current enemy phase (un-attributed damage like DoTs is absent). */
+  enemyPhaseDamage: Record<string, number>;
   log: string[];
   bossPhaseLabel?: string;
   /** Banners queued by reactions/combos since the last snapshot (now consumed by the caller read). */
@@ -252,6 +264,9 @@ export class CombatEngine {
   phase: CombatPhase = 'player';
   playerAP = 3;
   bankedAP = 0;
+  /** AP docked at the start of the current round (exhaustion / fatigue / exhaustion-skip). */
+  private apPenaltyThisRound = 0;
+  private apPenaltyLabelThisRound = '';
   guarding = false;
   log: string[] = [];
   private bossOwnTurnCounter = 0;
@@ -269,6 +284,9 @@ export class CombatEngine {
   private actionsTakenThisRound = 0;
   /** Keys of enemies that landed damage on the player since the start of the current enemy phase. */
   private playerHitEnemyKeys: string[] = [];
+  /** Damage amount the player took from each enemy key during the current enemy phase. */
+  private playerDamageByEnemy: Record<string, number> = {};
+  private lastActors: string[] = [];
   /** Key of the enemy currently resolving its turn (used to attribute player damage). */
   private _currentAttackerKey: string | null = null;
   /** Phase Shift: dodge the next N attacks (momentum trigger). */
@@ -547,9 +565,13 @@ export class CombatEngine {
   beginRound(): CombatSnapshot {
     if (this.phase === 'victory' || this.phase === 'defeat' || this.phase === 'fled') return this.snapshot();
     this.round += 1;
+    this.log.push(`— Round ${this.round} —`);
     recordTurn(this.profile);
     for (const e of this.enemies) if (e._isBoss) e.flags.martyrShockFired = 0;
-    this.playerAP = 3 + (this.round === 1 && this.player.skillsKnown.includes('borrowed_time') ? 1 : 0) + this.bankedAP;
+    this.apPenaltyThisRound = 0;
+    this.apPenaltyLabelThisRound = '';
+    const startAP = 3 + (this.round === 1 && this.player.skillsKnown.includes('borrowed_time') ? 1 : 0) + this.bankedAP;
+    this.playerAP = startAP;
     this.bankedAP = 0;
     this.guarding = false;
     this.veilStepGuaranteed = false;
@@ -569,6 +591,7 @@ export class CombatEngine {
     // Exhaustion (from the "Flow" momentum trigger)
     if (hasStatus(this.playerStatuses, 'exhausted')) {
       this.playerAP = Math.max(0, this.playerAP - 1);
+      this.apPenaltyLabelThisRound = 'Exhaustion';
       this.log.push('Exhaustion weighs on you — you start the round with 1 less AP.');
     }
     if (this.momentumMultTurns > 0) this.momentumMultTurns -= 1;
@@ -576,12 +599,15 @@ export class CombatEngine {
     const fatigue = fatiguePenalty(this.player.fatigue);
     if (fatigue.apPenalty > 0 && this.playerAP > 0) {
       this.playerAP = Math.max(0, this.playerAP - fatigue.apPenalty);
+      this.apPenaltyLabelThisRound = this.apPenaltyLabelThisRound ? 'Fatigue + Exhaustion' : 'Fatigue';
       this.log.push(`Fatigue leaves you short — ${fatigue.apPenalty} AP lost.`);
     }
     if (fatigue.skipChance > 0 && this.rng() < fatigue.skipChance) {
       this.log.push('You are too exhausted to act this round.');
       this.playerAP = 0;
+      this.apPenaltyLabelThisRound = this.apPenaltyLabelThisRound ? 'Fatigue + Exhaustion' : 'Fatigue';
     }
+    this.apPenaltyThisRound = Math.max(0, startAP - this.playerAP);
 
     const alive = this.aliveEnemies();
     for (const e of alive) {
@@ -603,9 +629,12 @@ export class CombatEngine {
     }
     const playerSpd = this.effectivePlayerSpeed();
     const faster = alive.filter((e) => this.enemyEffectiveSpeed(e) > playerSpd).sort((a, b) => this.enemyEffectiveSpeed(b) - this.enemyEffectiveSpeed(a));
+    this.playerHitEnemyKeys = [];
+    this.playerDamageByEnemy = {};
     this.resolvingEnemyTurns = true;
     for (const e of faster) this.resolveEnemyTurn(e);
     this.resolvingEnemyTurns = false;
+    this.lastActors = faster.map((e) => e._key);
 
     this.checkOutcome();
     if (this.player.currentHP <= 0 || this.aliveEnemies().length === 0) return this.snapshot();
@@ -641,6 +670,7 @@ export class CombatEngine {
     const playerSpd = this.effectivePlayerSpeed();
     const slowerOrEqual = alive.filter((e) => this.enemyEffectiveSpeed(e) <= playerSpd).sort((a, b) => this.enemyEffectiveSpeed(b) - this.enemyEffectiveSpeed(a));
     this.playerHitEnemyKeys = [];
+    this.playerDamageByEnemy = {};
     this.resolvingEnemyTurns = true;
     for (const e of slowerOrEqual) this.resolveEnemyTurn(e);
     this.resolvingEnemyTurns = false;
@@ -715,6 +745,14 @@ export class CombatEngine {
     this.checkOutcome();
     if (this.phase === 'player') this.resolveAllyTurns();
     this.checkOutcome();
+    if (this.phase === 'player' || this.phase === 'momentum_choice') {
+      const allyKeys = this.allyStates
+        .filter((s) => accompaniesIn(s.loyalty))
+        .map((s) => `ally_${s.id}`);
+      this.lastActors = [...slowerOrEqual.map((e) => e._key), ...allyKeys];
+    } else {
+      this.lastActors = slowerOrEqual.map((e) => e._key);
+    }
     return this.snapshot();
   }
 
@@ -1406,6 +1444,7 @@ export class CombatEngine {
     }
     if (dmg > 0 && this._currentAttackerKey) {
       if (!this.playerHitEnemyKeys.includes(this._currentAttackerKey)) this.playerHitEnemyKeys.push(this._currentAttackerKey);
+      this.playerDamageByEnemy[this._currentAttackerKey] = (this.playerDamageByEnemy[this._currentAttackerKey] ?? 0) + dmg;
     }
     if (hasStatus(this.playerStatuses, 'reflection') && dmg > 0) {
       const reflected = Math.round(dmg * 0.25);
@@ -1505,6 +1544,7 @@ export class CombatEngine {
       this.nextAttackGuaranteed = false;
       return true;
     }
+    if (this.desperateStrike) return true;
     let acc = this.player.derived.accuracy + (this.player.skillsKnown.includes('steady_hands') ? 10 : 0)
       + (this.eagleAccuracyTurns > 0 ? 40 : 0);
     const fatigue = fatiguePenalty(this.player.fatigue);
@@ -1515,7 +1555,7 @@ export class CombatEngine {
     let shockMiss = 0;
     const sd = getStatus(this.playerStatuses, 'shock_dot');
     if (sd) shockMiss = 15 * sd.stacks;
-    const chance = Math.max(5, Math.min(99, acc - target.dodge - shockMiss));
+    const chance = Math.max(15, Math.min(99, acc - target.dodge - shockMiss));
     return this.rng() * 100 < chance;
   }
 
@@ -2818,9 +2858,18 @@ export class CombatEngine {
     return this.snapshot();
   }
 
+  /** Safety net: if a modal phase is stuck without a renderable modal, resume the player phase. */
+  recoverPhase(): CombatSnapshot {
+    if (this.phase === 'crisis' && !this.pendingCrisisId) this.phase = 'player';
+    if (this.phase === 'momentum_choice') {
+      this.momentumChoicePending = false;
+      this.phase = 'player';
+    }
+    return this.snapshot();
+  }
+
   /** Bravery: spend AP to lower the fear gauge and gain a boon. */
-  resolveBravery(actionId: string): CombatSnapshot {
-    if (this.phase !== 'player') return this.snapshot();
+  resolveBravery(actionId: string): CombatSnapshot {    if (this.phase !== 'player') return this.snapshot();
     if (!this.playerCanAct()) { this.checkOutcome(); return this.snapshot(); }
     const def = BRAVERY_ACTIONS.find((a) => a.id === actionId);
     if (!def) return this.snapshot();
@@ -3060,11 +3109,23 @@ export class CombatEngine {
       'player',
       ...sortedEnemies.map((e) => e._key),
     ];
+    const faster = sortedEnemies.filter((e) => this.enemyEffectiveSpeed(e) > playerSpd);
+    const slower = sortedEnemies.filter((e) => this.enemyEffectiveSpeed(e) <= playerSpd);
+    const turnOrder = [
+      ...faster.map((e) => e._key),
+      'player',
+      ...slower.map((e) => e._key),
+      ...this.allyStates.filter((s) => accompaniesIn(s.loyalty)).map((s) => `ally_${s.id}`),
+    ];
+    const lastActors = this.lastActors;
+    this.lastActors = [];
     return {
       round: this.round,
       phase: this.phase,
       playerAP: this.playerAP,
       bankedAP: this.bankedAP,
+      apPenalty: this.apPenaltyThisRound,
+      apPenaltyLabel: this.apPenaltyLabelThisRound || undefined,
       freeActionCharges: this.freeActionCharges,
       playerHP: this.player.currentHP,
       playerMaxHP: this.player.derived.maxHP,
@@ -3093,10 +3154,12 @@ export class CombatEngine {
           const charged = e._isBoss && this.chargedIntent && !this.isChargeDue() ? this.chargedIntent : null;
           return {
             key: e._key,
+            defId: e.defId,
             name: e.name,
             hp: e.hp,
             maxHp: e.maxHp,
             alive: e.hp > 0,
+            isBoss: e._isBoss,
             statuses: e.statuses,
             revealed: e._revealed,
             revealCount: this.player.skillsKnown.includes('librarians_eye') ? 2 : 1,
@@ -3120,7 +3183,10 @@ export class CombatEngine {
           };
         }),
       initiativeOrder,
+      turnOrder,
+      lastActors,
       playerHitEnemyKeys: [...this.playerHitEnemyKeys],
+      enemyPhaseDamage: { ...this.playerDamageByEnemy },
       log: this.log,
       bossPhaseLabel: bossAlive && this.bossDef ? this.bossDef.getPhase(bossAlive.hp / bossAlive.maxHp).label : undefined,
       banners: [...this.pendingBanners],

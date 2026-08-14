@@ -3,6 +3,7 @@ import { HOSTILE_FLAVOR } from '@data/events';
 import type { EventChoice, EventDef, FactionState } from '@data/types';
 import { useGameStore } from '@store/gameStore';
 import { resolveEventChoice } from '@systems/EventEngine';
+import { sanitizeFightEnemies } from '@data/enemies';
 import { createDialogBox, type DialogBox } from '@ui/DialogBox';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
@@ -102,9 +103,10 @@ export class EventScene extends Phaser.Scene {
       }
       if (resolution.combat) {
         const page = Math.max(1, Math.ceil((currentGame?.currentNodeIndex ?? 1) / 10));
+        const enemyIds = sanitizeFightEnemies(resolution.combat.enemyIds, page, Math.random);
         fadeToScene(this, 'Combat', {
           mode: 'event',
-          enemyIds: resolution.combat.enemyIds,
+          enemyIds,
           page,
           onVictory: resolution.combat.onVictory,
         });

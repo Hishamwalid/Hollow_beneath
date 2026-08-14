@@ -22,6 +22,42 @@ Phaser's `generateTexture()` does **not** overwrite an existing key (`if (scene.
 
 ---
 
+## 0. Combat Sprites — Player & Stage 1 Enemies (P0)
+
+Full-body character frames displayed in `CombatScene`/`CombatHUD`. Loading is **already wired** in `PreloadScene.ts` — drop files in place, no code changes needed.
+
+### 0.1 Player — 7 frames
+
+| Field | Value |
+|-------|-------|
+| **Canvas size** | **512×768 px** per frame (displays at max 243×329) |
+| **Format** | PNG with alpha |
+| **Frames** | `idle`, `windup`, `attack`, `hit`, `victory`, `defeat`, `guard` |
+| **Files** | `public/assets/image_assets/player/<state>.png` |
+| **Existing** | `idle`, `attack`, `hit` (placeholders — replace); **`windup`, `victory`, `defeat`, `guard` missing — create** |
+
+Rules:
+- **Identical canvas size for every frame** — the game fits each frame to a 243×329 box, so mismatched canvases make the character visibly shrink/grow when swapping poses.
+- Keep the character's **feet on the same baseline** and the body at a consistent scale across all frames.
+- Leave **~15–20% padding** around the body so `windup`/`attack` weapon swings don't clip.
+- Draw facing left toward the enemy row (player sits at x=336, enemies at x≈640).
+
+### 0.2 Stage 1 Enemies — Dust Wight & Echo Skeleton
+
+| Field | Value |
+|-------|-------|
+| **Canvas size** | **512×512 px** per frame (displays at max 200×200) |
+| **Format** | PNG with alpha |
+| **Frames per enemy** | `idle`, `attack`, `hit` |
+| **Files** | `public/assets/image_assets/enemy/echo_skeleton/<state>.png`, `public/assets/image_assets/enemy/dust_wight/<state>.png` (folders created) |
+| **Existing** | none (generic `enemy/` placeholders currently shown) |
+
+Same rules as the player: identical canvas across the 3 frames, consistent baseline, ~15–20% padding for attack lunges. The `hit` frame is tinted red by the engine (`CombatHUD.ts:74`) — keep the pose readable under a red tint.
+
+The generic `enemy/<state>.png` fallback (used by the other 10 enemies) is unchanged.
+
+---
+
 ## 1. Character & Creature Tokens
 
 ### 1.1 Player Token

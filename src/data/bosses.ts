@@ -38,9 +38,9 @@ export const SENTINEL: BossDef = {
   id: 'sentinel',
   name: 'The Argent Sentinel',
   vennName: 'Keth-Vor, the First Door',
-  page: 20,
+  page: 4,
   theme: 'The danger of curiosity.',
-  baseStats: { hp: 130, atk: 16, matk: 12, def: 14, mdef: 12, spd: 14 },
+  baseStats: { hp: 112, atk: 14, matk: 11, def: 12, mdef: 11, spd: 14 },
   approachText:
     "It stands where the corridor narrows into a single door of tarnished silver, unmoving until you are three steps away. Then it turns — not fast, not slow, exactly the speed of something that has done this before. Its surface is engraved, edge to edge, with a language that keeps almost resolving into words you know. It does not raise a weapon. It simply waits, the way a locked door waits, to see what you'll try.",
   preCombatChoices: [
@@ -57,11 +57,8 @@ export const SENTINEL: BossDef = {
     },
   ],
   getPhase(hpPercent: number): BossPhaseInfo {
-    if (hpPercent > 90 / 130) {
-      return { key: 'curator', label: 'The Curator', hpFloorPercent: 90 / 130, affinities: { shock: 1.5, pierce: 1.2, blunt: 0.5, sacred: 0.8 } };
-    }
     if (hpPercent > 40 / 130) {
-      return { key: 'erudite', label: 'The Erudite', hpFloorPercent: 40 / 130, affinities: { pierce: 1.2, sacred: 1.5, shock: 0.5 } };
+      return { key: 'curator', label: 'The Curator', hpFloorPercent: 40 / 130, affinities: { shock: 1.5, pierce: 1.2, blunt: 0.5, sacred: 0.8 } };
     }
     return { key: 'guardian', label: 'The Desperate Guardian', hpFloorPercent: 0, affinities: { pierce: 1.2, sacred: 1.5, shock: 0.5 } };
   },
@@ -77,30 +74,30 @@ export const SENTINEL: BossDef = {
     },
     {
       id: 'reshelves', label: 'Reshelves', weight: 999,
-      condition: (ctx) => ctx.phaseKey === 'curator' && ctx.turn % 2 === 0,
-      description: 'Heals 15 HP and raises a Barrier (25).',
+      condition: (ctx) => ctx.phaseKey === 'curator' && ctx.turn % 4 === 1,
+      description: 'Heals 12 HP and raises a Barrier (20).',
       resolve(ctx) {
-        ctx.healSelf(15);
-        ctx.setBarrier(25);
-        ctx.log.push(`${ctx.self.name} Reshelves — heals 15 HP and raises a Barrier (25).`);
+        ctx.healSelf(12);
+        ctx.setBarrier(20);
+        ctx.log.push(`${ctx.self.name} Reshelves — heals 12 HP and raises a Barrier (20).`);
       },
     },
     {
       id: 'archive_strike', label: 'Archive Strike', weight: 900,
-      condition: (ctx) => ctx.phaseKey === 'curator',
+      condition: (ctx) => ctx.phaseKey === 'curator' && ctx.turn % 4 === 2,
       description: 'A crushing blunt archival blow.',
       resolve(ctx) {
-        const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.2);
+        const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.1);
         ctx.applyDamageToPlayer(dmg, 'blunt', 'Archive Strike');
         ctx.log.push(`${ctx.self.name} lands an Archive Strike for ${dmg} damage.`);
       },
     },
     {
       id: 'cite_source', label: 'Cite Source', weight: 900,
-      condition: (ctx) => ctx.phaseKey === 'erudite' && ctx.turn % 2 === 1,
+      condition: (ctx) => ctx.phaseKey === 'curator' && ctx.turn % 4 === 3,
       description: 'Sacred magic that ignores 30% of your Magic Defense.',
       resolve(ctx) {
-        const dmg = bossDamage(ctx.self.matk, Math.round(ctx.player.mdef * 0.7), 1.5);
+        const dmg = bossDamage(ctx.self.matk, Math.round(ctx.player.mdef * 0.7), 1.3);
         ctx.applyDamageToPlayer(dmg, 'sacred', 'Cite Source');
         ctx.log.push(`${ctx.self.name} casts Cite Source (ignores 30% Magic Defense) for ${dmg} damage.`);
       },
@@ -108,10 +105,10 @@ export const SENTINEL: BossDef = {
     {
       id: 'quotation', label: 'Quotation', weight: 900,
       charge: true,
-      condition: (ctx) => ctx.phaseKey === 'erudite' && (ctx.band === 'high' || ctx.band === 'critical'),
+      condition: (ctx) => ctx.phaseKey === 'curator' && ctx.turn % 4 === 0,
       description: 'Echoes your own tactic back at you as sacred damage (declared a turn before).',
       resolve(ctx) {
-        const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 1.1);
+        const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 1.0);
         ctx.applyDamageToPlayer(dmg, 'sacred', 'Quotation');
         ctx.log.push(`${ctx.self.name} uses Quotation, echoing your own tactic for ${dmg} damage.`);
       },
@@ -123,17 +120,17 @@ export const SENTINEL: BossDef = {
       resolve(ctx) {
         if (!ctx.flags.guardianEntered) {
           ctx.flags.guardianEntered = 1;
-          ctx.self.def = Math.max(1, ctx.self.def - 6);
-          ctx.self.atk += 4;
+          ctx.self.def = Math.max(1, ctx.self.def - 4);
+          ctx.self.atk += 3;
           ctx.log.push(`${ctx.self.name} becomes the Desperate Guardian — Defense drops, Attack rises.`);
         }
         if (ctx.turn % 2 === 0) {
-          const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.8);
-          ctx.damageSelf(10);
+          const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.5);
+          ctx.damageSelf(8);
           ctx.applyDamageToPlayer(dmg, 'blunt', 'Final Index');
-          ctx.log.push(`${ctx.self.name} unleashes Final Index for ${dmg} damage (10 HP recoil).`);
+          ctx.log.push(`${ctx.self.name} unleashes Final Index for ${dmg} damage (8 HP recoil).`);
         } else {
-          const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.0);
+          const dmg = bossDamage(ctx.self.atk, ctx.player.def, 0.9);
           ctx.applyDamageToPlayer(dmg, 'blunt', 'a desperate blow');
           ctx.log.push(`${ctx.self.name} swings desperately for ${dmg} damage.`);
         }
@@ -147,24 +144,21 @@ export const SENTINEL: BossDef = {
       return;
     }
     if (ctx.phaseKey === 'curator') {
-      if (ctx.turn % 2 === 0) {
-        ctx.healSelf(15);
-        ctx.setBarrier(25);
-        ctx.log.push(`${ctx.self.name} Reshelves — heals 15 HP and raises a Barrier (25).`);
-        return;
-      }
-      const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.2);
-      ctx.applyDamageToPlayer(dmg, 'blunt', 'Archive Strike');
-      ctx.log.push(`${ctx.self.name} lands an Archive Strike for ${dmg} damage.`);
-      return;
-    }
-    if (ctx.phaseKey === 'erudite') {
-      if (ctx.turn % 2 === 1) {
-        const dmg = bossDamage(ctx.self.matk, Math.round(ctx.player.mdef * 0.7), 1.5);
+      const r = ctx.turn % 4;
+      if (r === 1) {
+        ctx.healSelf(12);
+        ctx.setBarrier(20);
+        ctx.log.push(`${ctx.self.name} Reshelves — heals 12 HP and raises a Barrier (20).`);
+      } else if (r === 2) {
+        const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.1);
+        ctx.applyDamageToPlayer(dmg, 'blunt', 'Archive Strike');
+        ctx.log.push(`${ctx.self.name} lands an Archive Strike for ${dmg} damage.`);
+      } else if (r === 3) {
+        const dmg = bossDamage(ctx.self.matk, Math.round(ctx.player.mdef * 0.7), 1.3);
         ctx.applyDamageToPlayer(dmg, 'sacred', 'Cite Source');
         ctx.log.push(`${ctx.self.name} casts Cite Source (ignores 30% Magic Defense) for ${dmg} damage.`);
       } else {
-        const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 1.1);
+        const dmg = bossDamage(ctx.self.matk, ctx.player.mdef, 1.0);
         ctx.applyDamageToPlayer(dmg, 'sacred', 'Quotation');
         ctx.log.push(`${ctx.self.name} uses Quotation, echoing your own tactic for ${dmg} damage.`);
       }
@@ -172,17 +166,17 @@ export const SENTINEL: BossDef = {
     }
     if (!ctx.flags.guardianEntered) {
       ctx.flags.guardianEntered = 1;
-      ctx.self.def = Math.max(1, ctx.self.def - 6);
-      ctx.self.atk += 4;
+      ctx.self.def = Math.max(1, ctx.self.def - 4);
+      ctx.self.atk += 3;
       ctx.log.push(`${ctx.self.name} becomes the Desperate Guardian — Defense drops, Attack rises.`);
     }
     if (ctx.turn % 2 === 0) {
-      const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.8);
-      ctx.damageSelf(10);
+      const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.5);
+      ctx.damageSelf(8);
       ctx.applyDamageToPlayer(dmg, 'blunt', "Final Index");
-      ctx.log.push(`${ctx.self.name} unleashes Final Index for ${dmg} damage (10 HP recoil).`);
+      ctx.log.push(`${ctx.self.name} unleashes Final Index for ${dmg} damage (8 HP recoil).`);
     } else {
-      const dmg = bossDamage(ctx.self.atk, ctx.player.def, 1.0);
+      const dmg = bossDamage(ctx.self.atk, ctx.player.def, 0.9);
       ctx.applyDamageToPlayer(dmg, 'blunt', 'a desperate blow');
       ctx.log.push(`${ctx.self.name} swings desperately for ${dmg} damage.`);
     }
@@ -207,7 +201,7 @@ export const PATRIARCH: BossDef = {
   id: 'patriarch',
   name: 'Patriarch Oren Cass',
   vennName: 'The Ash Covenant, Ascendant',
-  page: 40,
+  page: 8,
   theme: 'Faith as anesthetic.',
   baseStats: { hp: 160, atk: 14, matk: 18, def: 16, mdef: 18, spd: 12 },
   approachText:
@@ -465,7 +459,7 @@ export const CHORUS: BossDef = {
   id: 'chorus',
   name: 'The Merged Chorus',
   vennName: 'The Loom, Speaking With Borrowed Mouths',
-  page: 60,
+  page: 12,
   theme: 'The self as a chosen fiction.',
   baseStats: { hp: 200, atk: 16, matk: 20, def: 12, mdef: 16, spd: 15 },
   approachText:
@@ -670,7 +664,7 @@ export const FOSSIL_KING: BossDef = {
   id: 'fossil_king',
   name: 'The Fossil King',
   vennName: 'Dominion, Last of Its Court',
-  page: 80,
+  page: 16,
   theme: 'Power that outlived its purpose.',
   baseStats: { hp: 250, atk: 18, matk: 22, def: 18, mdef: 20, spd: 10 },
   approachText:
@@ -934,7 +928,7 @@ export const REFLECTION: BossDef = {
   id: 'reflection',
   name: 'The Final Reflection',
   vennName: 'The Loom, Wearing You',
-  page: 100,
+  page: 20,
   theme: 'You were the mystery all along.',
   baseStats: { hp: 280, atk: 20, matk: 20, def: 15, mdef: 15, spd: 18 },
   approachText:

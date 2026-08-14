@@ -685,17 +685,65 @@ export const SUMMON_ENEMIES: Record<string, EnemyDef> = {
   },
 };
 
-/** Which enemies are eligible per page range, for BoardGenerator's combat-node resolution. */
+/** Which enemies are eligible per page range, for BoardGenerator's combat-node resolution.
+ *  Each stage (4 pages = 1 chapter) has an exclusive roster; later stages also reuse
+ *  earlier elite pools. Resonance only tightens availability (never unlocks earlier). */
 export function enemiesForPage(page: number, resonance: number): string[] {
-  const veryEarly = ['dust_wight'];
-  const early = ['echo_skeleton', 'venn_custodian', 'sable_zealot', 'ash_seer'];
-  const mid = ['dust_road_raider', 'archive_cipher_wraith'];
-  const late = ['sable_inquisitor', 'ash_mutant', 'echo_soldier'];
-  let pool: string[];
-  if (page <= 2) pool = [...veryEarly, ...early];
-  else if (page <= 5) pool = [...early, ...mid];
-  else pool = [...early, ...mid, ...late];
-  if (resonance >= 25) pool.push('memory_wraith');
-  if (resonance >= 50 && page >= 6) pool.push('the_unread');
+  const stage = stageForPage(page);
+  const pool = [...STAGE_ENEMY_POOLS[stage - 1]];
+  if (stage >= 3 && resonance >= 25) pool.push('memory_wraith');
+  if (stage >= 5 && resonance >= 50) pool.push('the_unread');
   return pool;
+}
+
+/** Exclusive per-stage rosters (stage 5 reuses stages 3–4 elites). */
+const STAGE_ENEMY_POOLS: string[][] = [
+  ['dust_wight', 'echo_skeleton'],
+  ['venn_custodian', 'sable_zealot', 'ash_seer'],
+  ['dust_road_raider', 'archive_cipher_wraith'],
+  ['sable_inquisitor', 'ash_mutant', 'echo_soldier'],
+  ['dust_road_raider', 'archive_cipher_wraith', 'sable_inquisitor', 'ash_mutant', 'echo_soldier'],
+];
+
+/** 1-based stage (1–5) for a page: pages 1–3, 4–7, 8–11, 12–15, 16–20. */
+export function stageForPage(page: number): number {
+  return Math.min(5, Math.floor(page / 4) + 1);
+}
+
+/** Stage an enemy belongs to (1–5). 0 = exempt — never substituted by sanitizeFightEnemies. */
+export function stageForEnemy(id: string): number {
+  switch (id) {
+    case 'dust_wight':
+    case 'echo_skeleton':
+      return 1;
+    case 'venn_custodian':
+    case 'sable_zealot':
+    case 'ash_seer':
+      return 2;
+    case 'dust_road_raider':
+    case 'archive_cipher_wraith':
+    case 'memory_wraith':
+      return 3;
+    case 'sable_inquisitor':
+    case 'ash_mutant':
+    case 'echo_soldier':
+      return 4;
+    case 'the_unread':
+      return 5;
+    default:
+      return 0; // sera_voss (NPC event fight), summons, unknown — pass through
+  }
+}
+
+/** Stage-scrubs a scripted fight (event choice, ambush) so each stage only sees its own
+ *  roster. Enemies belonging to a later stage are replaced by a random member of the
+ *  current stage's pool; exempt enemies (stageForEnemy === 0) pass through unchanged. */
+export function sanitizeFightEnemies(enemyIds: string[], page: number, rng: () => number): string[] {
+  const stage = stageForPage(page);
+  const pool = STAGE_ENEMY_POOLS[stage - 1];
+  return enemyIds.map((id) => {
+    const need = stageForEnemy(id);
+    if (need === 0 || need <= stage) return id;
+    return pool[Math.floor(rng() * pool.length)] ?? id;
+  });
 }

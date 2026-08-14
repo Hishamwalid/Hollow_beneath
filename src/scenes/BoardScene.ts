@@ -11,6 +11,7 @@ import { TOTAL_NODES, PAGES, NODES_PER_PAGE, GAME_WIDTH, GAME_HEIGHT } from '@/c
 import { pickEvent } from '@systems/EventEngine';
 import { resolveTrap } from '@systems/EventEngine';
 import { TRAPS } from '@data/events';
+import { sanitizeFightEnemies } from '@data/enemies';
 import { MINOR_LANDMARKS } from '@data/minorLandmarks';
 import { DISCOVERABLE_SKILLS } from '@data/skills';
 import { shardsForNodeVisit, applyShardBonus } from '@systems/EchoShardSystem';
@@ -667,8 +668,12 @@ export class BoardScene extends Phaser.Scene {
     const hostileKey = (Object.keys(player.faction) as (keyof FactionState)[]).find(
       (k) => influenceStatus(player.faction[k]) === 'Hostile',
     );
-    const enemies = hostileKey && AMBUSH_TABLE[hostileKey] ? AMBUSH_TABLE[hostileKey] : ['sable_zealot', 'sable_zealot'];
     const page = Math.max(1, game.currentPage);
+    const enemies = sanitizeFightEnemies(
+      hostileKey && AMBUSH_TABLE[hostileKey] ? AMBUSH_TABLE[hostileKey] : ['sable_zealot', 'sable_zealot'],
+      page,
+      Math.random,
+    );
     useGameStore.setState({ game: { ...game, pendingNodeIndex: target } });
 
     const factionNames: Record<string, string> = { sable: 'Sable', archive: 'Archive', covenant: 'Covenant', caravan: 'Caravan' };
@@ -825,7 +830,7 @@ export class BoardScene extends Phaser.Scene {
     if (player.totalRuns === 0 && game.currentPage <= 1 && !this.firstNodeTooltips[node.type]) {
       this.firstNodeTooltips[node.type] = true;
       const tip = FIRST_NODE_TOOLTIPS[node.type];
-      if (tip) this.showNodeTooltip(tip);
+      if (tip) this.preview?.setTip(tip);
     }
 
     if (node.type === 'landmark') {
@@ -883,24 +888,6 @@ export class BoardScene extends Phaser.Scene {
     this.afterInlineResolution();
   }
 
-  private showNodeTooltip(text: string) {
-    const tx = this.add.text(GAME_WIDTH / 2, 200, text, {
-      fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.gold,
-      align: 'center', wordWrap: { width: 520 },
-    }).setOrigin(0.5).setDepth(100).setAlpha(0);
-    this.tweens.add({
-      targets: tx, alpha: 1, duration: 300, ease: 'Sine.easeOut',
-      onComplete: () => {
-        this.time.delayedCall(2500, () => {
-          this.tweens.add({
-            targets: tx, alpha: 0, duration: 300, ease: 'Sine.easeIn',
-            onComplete: () => tx.destroy(),
-          });
-        });
-      },
-    });
-  }
-
   private resolveRest(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>) {
     if (player.flags.skip_next_rest) {
       delete player.flags.skip_next_rest;
@@ -954,7 +941,7 @@ export class BoardScene extends Phaser.Scene {
     const s = useGameStore.getState();
     s.addXp(8);
     this.log(`${def.name} steps out of the hollow and chooses to walk with you. It is bound to ${homeRegion}.`);
-    this.showNodeTooltip(`${def.name} joins you — it will fight beside you.`);
+    this.preview?.setTip(`${def.name} joins you — it will fight beside you.`);
   }
 
   private resolveDiscovery(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {
