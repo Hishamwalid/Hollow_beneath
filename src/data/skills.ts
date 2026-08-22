@@ -1,308 +1,438 @@
-import type { ActionId, SkillDef } from './types';
-import { CLASS_SKILLS } from './classes';
-
-/** AP cost for the combat actions (Battle Plan Part 2). 'skill' cost comes from the SkillDef chosen. */
-export const ACTION_AP_COST: Record<ActionId, number> = {
-  attack: 1,
-  skill: 2,
-  resonance_ability: 3,
-  guard: 1,
-  use_item: 1,
-  analyze: 1,
-  sunder: 2,
-  withdraw: 2,
-  focus: 1,
-  brace: 1,
-};
-
-export const ACTION_LABELS: Record<ActionId, string> = {
-  attack: 'Attack',
-  skill: 'Skill',
-  resonance_ability: 'Resonance Ability',
-  guard: 'Guard',
-  use_item: 'Use Item',
-  analyze: 'Analyze',
-  sunder: 'Sunder',
-  withdraw: 'Withdraw',
-  focus: 'Focus',
-  brace: 'Brace',
-};
+import type { SkillDef } from './types';
 
 /**
- * Named skills earned from events, bosses, character creation, and discovery.
- * Most are passive hooks checked by id in CombatEngine (tag field); some are active attacks.
- * `tree` is organizational only — there is no separate skill-point-spending system;
- * skills are granted directly by whatever content awards them.
+ * Named skills for the revamped solo-protagonist combat system.
+ *
+ * - Chapter loadout skills unlock as the player reaches each chapter and are
+ *   auto-equipped into the 6-slot loadout (see CHAPTER_LOADOUTS).
+ * - Passives are permanent once learned.
+ * - Everything else sits in the discovery pool (training notes / boss rewards)
+ *   and lands in the Skill Archive if it exceeds the 6 equipped slots.
  */
 export const NAMED_SKILLS: Record<string, SkillDef> = {
+  // ---- Chapter 1 loadout: Surface Threshold ---------------------------------
+  cleaving_swing: {
+    id: 'cleaving_swing',
+    name: 'Cleaving Swing',
+    description: 'Physical — HP cost. A heavy two-handed Slash.',
+    hpCost: { pct: 8 },
+    damageType: 'slash',
+    skillPower: 1.7,
+    stat: 'atk',
+    target: 'single',
+    chapter: 1,
+  },
+  pinpoint_strike: {
+    id: 'pinpoint_strike',
+    name: 'Pinpoint Strike',
+    description: 'Physical — HP cost. High-crit Pierce attack that cannot miss.',
+    hpCost: { flat: 6 },
+    damageType: 'pierce',
+    skillPower: 1.2,
+    stat: 'atk',
+    target: 'single',
+    guaranteed: true,
+    critChanceBonus: 0.25,
+    chapter: 1,
+  },
+  flame_pulse: {
+    id: 'flame_pulse',
+    name: 'Flame Pulse',
+    description: 'Magic — MP cost. Single-target Flame damage.',
+    mpCost: 7,
+    damageType: 'flame',
+    skillPower: 1.5,
+    stat: 'magic',
+    target: 'single',
+    chapter: 1,
+  },
+  heavy_guard: {
+    id: 'heavy_guard',
+    name: 'Heavy Guard',
+    description: 'Physical — HP cost. Blunt strike that raises your Defense for 2 turns.',
+    hpCost: { pct: 6 },
+    damageType: 'blunt',
+    skillPower: 1.1,
+    stat: 'atk',
+    target: 'single',
+    effects: [{ kind: 'buff', id: 'defense_up', turns: 2 }],
+    chapter: 1,
+  },
+  mend: {
+    id: 'mend',
+    name: 'Mend',
+    description: 'Utility — MP cost. Restores 30% of your max HP.',
+    mpCost: 8,
+    effects: [{ kind: 'heal', pct: 30 }],
+    chapter: 1,
+  },
+  ignite: {
+    id: 'ignite',
+    name: 'Ignite',
+    description: 'Magic — MP cost. Light Flame damage with a strong chance to Burn.',
+    mpCost: 5,
+    damageType: 'flame',
+    skillPower: 0.9,
+    stat: 'magic',
+    target: 'single',
+    effects: [{ kind: 'status', id: 'burn', turns: 2, stacks: 1, target: 'single' }],
+    chapter: 1,
+  },
+
+  // ---- Chapter 2 loadout: Cults & Factions ----------------------------------
+  frost_touch: {
+    id: 'frost_touch',
+    name: 'Frost Touch',
+    description: 'Magic — MP cost. Frost damage that leaves the target Chilled.',
+    mpCost: 7,
+    damageType: 'frost',
+    skillPower: 1.4,
+    stat: 'magic',
+    target: 'single',
+    effects: [{ kind: 'status', id: 'chilled', turns: 2, target: 'single' }],
+    chapter: 2,
+  },
+  shock_arc: {
+    id: 'shock_arc',
+    name: 'Shock Arc',
+    description: 'Magic — MP cost. Shock damage; triggers Superconduct (Stun) on Chilled targets.',
+    mpCost: 7,
+    damageType: 'shock',
+    skillPower: 1.4,
+    stat: 'magic',
+    target: 'single',
+    chapter: 2,
+  },
+  cleanse_surge: {
+    id: 'cleanse_surge',
+    name: 'Cleanse & Surge',
+    description: 'Utility — MP cost. Cleanses all your debuffs and restores 4 MP.',
+    mpCost: 5,
+    effects: [{ kind: 'resource', mp: 4 }],
+    chapter: 2,
+  },
+
+  // ---- Chapter 3 loadout: Deepening & Memory Loss ----------------------------
+  chain_plasma: {
+    id: 'chain_plasma',
+    name: 'Chain Plasma',
+    description: 'Magic — MP cost. Arcing Shock damage to all enemies.',
+    mpCost: 12,
+    damageType: 'shock',
+    skillPower: 1.2,
+    stat: 'magic',
+    target: 'all',
+    chapter: 3,
+  },
+  inferno_wave: {
+    id: 'inferno_wave',
+    name: 'Inferno Wave',
+    description: 'Magic — MP cost. Flame damage to all enemies; Overcharges Shocked targets.',
+    mpCost: 12,
+    damageType: 'flame',
+    skillPower: 1.2,
+    stat: 'magic',
+    target: 'all',
+    chapter: 3,
+  },
+  sacred_ray: {
+    id: 'sacred_ray',
+    name: 'Sacred Ray',
+    description: 'Magic — MP cost. Sacred damage; marks the target for Eclipse.',
+    mpCost: 8,
+    damageType: 'sacred',
+    skillPower: 1.6,
+    stat: 'magic',
+    target: 'single',
+    effects: [{ kind: 'status', id: 'sacred_mark', turns: 2, target: 'single' }],
+    chapter: 3,
+  },
+  barrier_protocol: {
+    id: 'barrier_protocol',
+    name: 'Barrier Protocol',
+    description: 'Utility — MP cost. Raises a shield equal to 25% of your max HP.',
+    mpCost: 9,
+    effects: [{ kind: 'barrier', pct: 25, turns: 99 }],
+    chapter: 3,
+  },
+
+  // ---- Chapter 4 loadout: Corruption & Mutants -------------------------------
+  shadow_veil: {
+    id: 'shadow_veil',
+    name: 'Shadow Veil',
+    description: 'Magic — MP cost. Shadow damage; triggers Eclipse on Sacred-marked targets.',
+    mpCost: 8,
+    damageType: 'shadow',
+    skillPower: 1.5,
+    stat: 'magic',
+    target: 'single',
+    chapter: 4,
+  },
+  heavy_crush: {
+    id: 'heavy_crush',
+    name: 'Heavy Crush',
+    description: "Physical — HP cost. A devastating Blunt blow.",
+    hpCost: { pct: 10 },
+    damageType: 'blunt',
+    skillPower: 1.9,
+    stat: 'atk',
+    target: 'single',
+    chapter: 4,
+  },
+  viper_pierce: {
+    id: 'viper_pierce',
+    name: 'Viper Pierce',
+    description: 'Physical — HP cost. Pierce attack with a high Bleed chance.',
+    hpCost: { flat: 8 },
+    damageType: 'pierce',
+    skillPower: 1.3,
+    stat: 'atk',
+    target: 'single',
+    effects: [{ kind: 'status', id: 'bleed', turns: 3, stacks: 1, target: 'single' }],
+    chapter: 4,
+  },
+  mass_renew: {
+    id: 'mass_renew',
+    name: 'Mass Renew',
+    description: 'Utility — MP cost. Regenerates HP over 3 turns.',
+    mpCost: 10,
+    effects: [{ kind: 'buff', id: 'regeneration', turns: 3 }],
+    chapter: 4,
+  },
+
+  // ---- Chapter 5 loadout: The Deep & Final Reflection -------------------------
+  full_knowledge: {
+    id: 'full_knowledge',
+    name: 'Full Knowledge',
+    description: 'Utility — MP cost. Instantly reveals every unknown affinity slot of all active enemies.',
+    mpCost: 10,
+    effects: [{ kind: 'reveal_all_affinities' }],
+    chapter: 5,
+  },
+  eclipse_blade: {
+    id: 'eclipse_blade',
+    name: 'Eclipse Blade',
+    description: 'Dual — HP/MP cost. A Slash + Shadow cut; triggers Eclipse on marked targets.',
+    mpCost: 6,
+    hpCost: { flat: 6 },
+    damageType: 'shadow',
+    skillPower: 1.8,
+    stat: 'atk',
+    target: 'single',
+    chapter: 5,
+  },
+  absolute_zero: {
+    id: 'absolute_zero',
+    name: 'Absolute Zero',
+    description: 'Magic — MP cost. Devastating Frost storm; may Stun each enemy.',
+    mpCost: 16,
+    damageType: 'frost',
+    skillPower: 1.4,
+    stat: 'magic',
+    target: 'all',
+    effects: [{ kind: 'status', id: 'stun', turns: 1, target: 'all' }],
+    chapter: 5,
+  },
+  aegis_covenant: {
+    id: 'aegis_covenant',
+    name: 'Aegis Covenant',
+    description: 'Utility — MP cost. Cleanses everything, heals 40% max HP, raises a heavy shield.',
+    mpCost: 14,
+    effects: [
+      { kind: 'heal', pct: 40 },
+      { kind: 'barrier', pct: 30, turns: 99 },
+    ],
+    chapter: 5,
+  },
+
+  // ---- Passives (permanent once learned) --------------------------------------
   chorus_step: {
     id: 'chorus_step',
     name: 'Chorus Step',
-    apCost: 0,
     description: 'Passive. +10% Dodge for the rest of the run.',
-    tag: 'passive_dodge_10',
-    tree: 'universal',
+    passive: 'passive_dodge_10',
   },
   unfinished_sentence: {
     id: 'unfinished_sentence',
     name: 'Unfinished Sentence',
-    apCost: 0,
     description: 'Passive. The first killing blow each run instead leaves you at 1 HP.',
-    tag: 'passive_death_ward',
-    tree: 'universal',
+    passive: 'passive_death_ward',
   },
   loom_touched: {
     id: 'loom_touched',
     name: 'Loom-Touched',
-    apCost: 0,
-    description: 'Passive. Shadow damage dealt +30%. Max HP -10%.',
-    tag: 'passive_shadow_boost',
-    tree: 'shadow',
-  },
-  librarians_eye: {
-    id: 'librarians_eye',
-    name: "Librarian's Eye",
-    apCost: 0,
-    description: 'Passive. Analyze reveals two weaknesses instead of one.',
-    tag: 'passive_analyze_double',
-    tree: 'scholar',
-  },
-  martyrs_flame: {
-    id: 'martyrs_flame',
-    name: "Martyr's Flame",
-    apCost: 2,
-    mpCost: 8,
-    damageType: 'sacred',
-    skillPower: 1.6,
-    description: 'Sacred AoE. Costs 10 HP and 8 MP to cast.',
-    effects: [
-      { kind: 'cost', hpFlat: 10 },
-      { kind: 'damage', type: 'sacred', power: 1.6, target: 'all', stat: 'magic' },
-    ],
-    tags: ['Elemental', 'Sacred', 'Strike'],
-    tree: 'guardian',
+    description: 'Passive. Shadow damage dealt +30%.',
+    passive: 'passive_shadow_boost',
   },
   archival_insight: {
     id: 'archival_insight',
     name: 'Archival Insight',
-    apCost: 0,
     description: 'Passive. +10% XP and Echo Shards gained.',
-    tag: 'passive_archive_bonus',
-    tree: 'scholar',
+    passive: 'passive_archive_bonus',
   },
   chorus_echo: {
     id: 'chorus_echo',
     name: 'Chorus Echo',
-    apCost: 0,
     description: 'Passive. Start every combat with 1 Momentum.',
-    tag: 'passive_start_momentum',
-    tree: 'shadow',
+    passive: 'passive_start_momentum',
   },
-  sealing_strike: {
-    id: 'sealing_strike',
-    name: 'Sealing Strike',
-    apCost: 2,
-    damageType: 'sacred',
-    skillPower: 1.1,
-    description: 'A Sable rite turned to combat use. -2 Resonance on hit.',
-    effects: [
-      { kind: 'damage', type: 'sacred', power: 1.1, target: 'single', stat: 'atk' },
-      { kind: 'cost', resonance: 2, onHit: true },
-    ],
-    tags: ['Elemental', 'Sacred', 'Strike'],
-    tree: 'guardian',
-  },
-
-  // ---- Warrior tree -----------------------------------------------------------------
   iron_resolve: {
     id: 'iron_resolve',
     name: 'Iron Resolve',
-    apCost: 0,
     description: 'Passive. Guard blocks an additional 15% damage.',
-    tag: 'passive_guard_bonus',
-    tree: 'warrior',
-  },
-  reckless_swing: {
-    id: 'reckless_swing',
-    name: 'Reckless Swing',
-    apCost: 2,
-    damageType: 'slash',
-    skillPower: 1.8,
-    description: 'A heavy overcommitted strike. Costs 8% of your current HP to cast.',
-    effects: [
-      { kind: 'cost', hpPct: 8 },
-      { kind: 'damage', type: 'slash', power: 1.8, target: 'single', stat: 'atk' },
-    ],
-    tags: ['Physical', 'Slash', 'Strike'],
-    tree: 'warrior',
+    passive: 'passive_guard_bonus',
   },
   second_wind: {
     id: 'second_wind',
     name: 'Second Wind',
-    apCost: 0,
-    description: "Passive. The first time your HP drops below 25% each combat, instantly heal 15% max HP.",
-    tag: 'passive_second_wind',
-    tree: 'warrior',
+    description: 'Passive. The first time your HP drops below 25% each combat, instantly heal 15% max HP.',
+    passive: 'passive_second_wind',
   },
-
-  // ---- Ranger tree ------------------------------------------------------------------
   quickstep: {
     id: 'quickstep',
     name: 'Quickstep',
-    apCost: 0,
     description: 'Passive. +5 Speed for the rest of the run.',
-    tag: 'passive_spd_bonus',
-    tree: 'ranger',
+    passive: 'passive_spd_bonus',
   },
   opening_strike: {
     id: 'opening_strike',
     name: 'Opening Strike',
-    apCost: 0,
-    description: "Passive. Your first Attack each combat deals 20% bonus damage.",
-    tag: 'passive_opening_strike',
-    tree: 'ranger',
+    description: 'Passive. Your first Attack each combat deals 20% bonus damage.',
+    passive: 'passive_opening_strike',
   },
-  hunters_mark: {
-    id: 'hunters_mark',
-    name: "Hunter's Mark",
-    apCost: 2,
-    mpCost: 3,
-    damageType: 'pierce',
-    skillPower: 1.3,
-    description: 'A precise strike that cannot miss.',
-    effects: [{ kind: 'damage', type: 'pierce', power: 1.3, target: 'single', stat: 'atk', guaranteed: true }],
-    tags: ['Physical', 'Pierce', 'Strike', 'Mark'],
-    tree: 'ranger',
-  },
-
-  // ---- Scholar tree -----------------------------------------------------------------
-  resonant_study: {
-    id: 'resonant_study',
-    name: 'Resonant Study',
-    apCost: 0,
-    description: 'Passive. Resonance Ability costs 1 AP instead of 3.',
-    tag: 'passive_resonance_efficiency',
-    tree: 'scholar',
-  },
-  cross_reference: {
-    id: 'cross_reference',
-    name: 'Cross-Reference',
-    apCost: 0,
-    description: 'Passive. Analyze costs 0 AP.',
-    tag: 'passive_analyze_free',
-    tree: 'scholar',
-  },
-  overwritten_truth: {
-    id: 'overwritten_truth',
-    name: 'Overwritten Truth',
-    apCost: 2,
-    mpCost: 6,
-    damageType: 'shock',
-    skillPower: 1.7,
-    description: 'A precise, INT-scaled strike of corrected fact.',
-    effects: [{ kind: 'damage', type: 'shock', power: 1.7, target: 'single', stat: 'magic' }],
-    tags: ['Elemental', 'Shock', 'Strike', 'Knowledge'],
-    tree: 'scholar',
-  },
-
-  // ---- Guardian tree ----------------------------------------------------------------
   bulwark_stance: {
     id: 'bulwark_stance',
     name: 'Bulwark Stance',
-    apCost: 0,
     description: 'Passive. +15% Defense for the rest of the run.',
-    tag: 'passive_def_bonus',
-    tree: 'guardian',
+    passive: 'passive_def_bonus',
   },
   retaliation: {
     id: 'retaliation',
     name: 'Retaliation',
-    apCost: 0,
     description: 'Passive. A successful Guard reflects 20% of the blocked damage back at the attacker.',
-    tag: 'passive_retaliate',
-    tree: 'guardian',
+    passive: 'passive_retaliate',
   },
   unshakeable: {
     id: 'unshakeable',
     name: 'Unshakeable',
-    apCost: 0,
     description: 'Passive. 50% chance to resist incoming Control-type status effects.',
-    tag: 'passive_status_resist',
-    tree: 'guardian',
-  },
-
-  // ---- Shadow tree ------------------------------------------------------------------
-  veil_step: {
-    id: 'veil_step',
-    name: 'Veil Step',
-    apCost: 2,
-    mpCost: 4,
-    description: "Guarantees you avoid the enemy's next attack this turn.",
-    effects: [{ kind: 'evade' }],
-    tags: ['Stealth'],
-    tree: 'shadow',
+    passive: 'passive_status_resist',
   },
   parting_words: {
     id: 'parting_words',
     name: 'Parting Words',
-    apCost: 0,
     description: 'Passive. Shadow damage dealt +40% against enemies below 30% HP.',
-    tag: 'passive_shadow_execute',
-    tree: 'shadow',
+    passive: 'passive_shadow_execute',
   },
-  borrowed_time: {
-    id: 'borrowed_time',
-    name: 'Borrowed Time',
-    apCost: 0,
-    description: 'Passive. Start every combat with 1 extra AP.',
-    tag: 'passive_bonus_ap',
-    tree: 'shadow',
-  },
-
-  // ---- Universal ----------------------------------------------------------------------
   deep_breath: {
     id: 'deep_breath',
     name: 'Deep Breath',
-    apCost: 0,
     description: 'Passive. Resting heals 10% more max HP than usual.',
-    tag: 'passive_rest_bonus',
-    tree: 'universal',
+    passive: 'passive_rest_bonus',
   },
   steady_hands: {
     id: 'steady_hands',
     name: 'Steady Hands',
-    apCost: 0,
     description: 'Passive. +10 Accuracy for the rest of the run.',
-    tag: 'passive_accuracy_bonus',
-    tree: 'universal',
+    passive: 'passive_accuracy_bonus',
+  },
+
+  // ---- Discovery actives (events / bosses) -------------------------------------
+  reckless_swing: {
+    id: 'reckless_swing',
+    name: 'Reckless Swing',
+    description: 'A heavy overcommitted strike. Costs 8% of your current HP to cast.',
+    hpCost: { pct: 8 },
+    damageType: 'slash',
+    skillPower: 1.8,
+    stat: 'atk',
+    target: 'single',
+  },
+  hunters_mark: {
+    id: 'hunters_mark',
+    name: "Hunter's Mark",
+    description: 'A precise Pierce strike that cannot miss.',
+    damageType: 'pierce',
+    skillPower: 1.3,
+    stat: 'atk',
+    target: 'single',
+    guaranteed: true,
+  },
+  overwritten_truth: {
+    id: 'overwritten_truth',
+    name: 'Overwritten Truth',
+    description: 'A precise, INT-scaled strike of corrected fact.',
+    mpCost: 6,
+    damageType: 'shock',
+    skillPower: 1.7,
+    stat: 'magic',
+    target: 'single',
+  },
+  martyrs_flame: {
+    id: 'martyrs_flame',
+    name: "Martyr's Flame",
+    description: 'Sacred AoE. Costs 10 HP and 8 MP to cast.',
+    mpCost: 8,
+    hpCost: { flat: 10 },
+    damageType: 'sacred',
+    skillPower: 1.6,
+    stat: 'magic',
+    target: 'all',
+  },
+  sealing_strike: {
+    id: 'sealing_strike',
+    name: 'Sealing Strike',
+    description: 'A Sable rite turned to combat use. Sacred damage.',
+    damageType: 'sacred',
+    skillPower: 1.1,
+    stat: 'atk',
+    target: 'single',
   },
 };
 
-/** Starting skill granted at character creation, keyed by preset name (PRESET_BUILDS). */
-export const PRESET_STARTING_SKILL: Record<string, string> = {
-  Warrior: 'iron_resolve',
-  Ranger: 'quickstep',
-  Scholar: 'cross_reference',
-  Guardian: 'bulwark_stance',
-  Shadow: 'borrowed_time',
-  Balanced: 'steady_hands',
+/** Skills granted when the player first reaches each chapter (auto-equipped). */
+export const CHAPTER_LOADOUTS: Record<number, string[]> = {
+  1: ['cleaving_swing', 'pinpoint_strike', 'flame_pulse', 'heavy_guard', 'mend', 'ignite'],
+  2: ['frost_touch', 'shock_arc', 'flame_pulse', 'heavy_guard', 'cleanse_surge', 'mend'],
+  3: ['chain_plasma', 'inferno_wave', 'sacred_ray', 'pinpoint_strike', 'barrier_protocol', 'mend'],
+  4: ['sacred_ray', 'shadow_veil', 'heavy_crush', 'viper_pierce', 'frost_touch', 'mass_renew'],
+  5: ['full_knowledge', 'eclipse_blade', 'absolute_zero', 'aegis_covenant', 'chain_plasma', 'sacred_ray'],
 };
 
-/** Class skills merged into the discoverable/universal pool (never discoverable — class-locked). */
-Object.assign(NAMED_SKILLS, CLASS_SKILLS);
+/** Loadout slot count (mirrors MAX_EQUIPPED_SKILLS in types). */
+export const MAX_EQUIPPED_SKILLS_FALLBACK = (): number => 6;
 
-/** Pool for the discovery "training notes" template — anything not already covered above. */
+/** All skills referenced by loadouts, in grant order per chapter. */
+export function chapterGrantSkills(chapter: number): string[] {
+  const grants: string[] = [];
+  for (let c = 1; c <= Math.min(5, chapter); c++) {
+    for (const id of CHAPTER_LOADOUTS[c] ?? []) {
+      if (!grants.includes(id)) grants.push(id);
+    }
+  }
+  return grants;
+}
+
+/** Pool for the discovery "training notes" template + event/boss rewards. */
 export const DISCOVERABLE_SKILLS: string[] = [
   'reckless_swing',
   'second_wind',
   'opening_strike',
   'hunters_mark',
-  'resonant_study',
   'overwritten_truth',
   'retaliation',
   'unshakeable',
   'parting_words',
-  'veil_step',
   'deep_breath',
+  'steady_hands',
+  'chorus_step',
+  'iron_resolve',
+  'quickstep',
+  'bulwark_stance',
   'sealing_strike',
+  'martyrs_flame',
 ];
+
+export function getSkill(id: string): SkillDef | undefined {
+  return NAMED_SKILLS[id];
+}

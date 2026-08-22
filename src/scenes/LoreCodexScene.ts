@@ -2,38 +2,48 @@ import Phaser from 'phaser';
 import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { useGameStore } from '@store/gameStore';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
-import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX, DAMAGE_TYPE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { ENEMIES } from '@data/enemies';
 import { BOSSES } from '@data/bosses';
-import type { BossDef, EnemyDef } from '@data/types';
-import { ARCHIVE_FRAGMENT_NAMES } from '@systems/combat/ArchiveSystem';
+import type { AffinityKind, DamageType, EnemyAffinities } from '@data/types';
+import { DAMAGE_TYPES, DAMAGE_TYPE_ABBREV } from '@data/types';
 
 const PER_PAGE = 4;
 const ROW_H = 130;
 const LIST_TOP = 125;
 
-type CodexTab = 'lore' | 'archive';
+type CodexTab = 'lore' | 'bestiary';
 
-interface ArchiveRow {
+interface BestiaryRow {
   id: string;
   name: string;
-  fragments: number;
-  exploited: boolean;
+  level?: number;
+  affinities: EnemyAffinities; // discovered slots only
+  kills: number;
 }
 
-/** Lore fragments + Phase 6c persistent Enemy Archive, browsable side by side. */
+const AFFINITY_HEX: Record<AffinityKind, number> = {
+  wk: 0xe9c876,
+  str: 0x7fb0c9,
+  null: 0x555555,
+  rep: 0xc0392b,
+  drn: 0x5c8a5c,
+  '-': 0x9a9488,
+};
+
+/** Lore fragments + persistent Bestiary (Scan discoveries), browsable side by side. */
 export class LoreCodexScene extends Phaser.Scene {
   private page = 0;
   private listContainer?: Phaser.GameObjects.Container;
   private pageLabel?: Phaser.GameObjects.Text;
   private headerNote?: Phaser.GameObjects.Text;
   private tab: CodexTab = 'lore';
-  private tabButtons!: { lore: ReturnType<typeof createButton>; archive: ReturnType<typeof createButton> };
+  private tabButtons!: { lore: ReturnType<typeof createButton>; bestiary: ReturnType<typeof createButton> };
   private allIds: string[] = [];
   private discovered: string[] = [];
-  private archiveEntries: ArchiveRow[] = [];
+  private bestiaryRows: BestiaryRow[] = [];
 
   constructor() {
     super('LoreCodex');
@@ -46,11 +56,10 @@ export class LoreCodexScene extends Phaser.Scene {
     this.tab = 'lore';
     const cx = GAME_WIDTH / 2;
     const { player, meta } = useGameStore.getState();
-    // Permanently banked (from runs that reached an ending) + whatever the current active run has found so far,
-    // so the codex is accurate whether you're between runs or mid-run.
+    // Permanently banked + current-run finds, so the codex is accurate mid-run too.
     this.discovered = Array.from(new Set([...meta.loreFragmentsSeen, ...(player?.loreFragments ?? [])]));
     this.allIds = Object.keys(LORE_FRAGMENTS).sort();
-    this.archiveEntries = this.buildArchiveEntries(meta.enemyArchive ?? {});
+    this.bestiaryRows = this.buildBestiaryRows();
 
     this.add.text(cx, 44, 'The Codex', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
     this.headerNote = this.add
@@ -67,7 +76,7 @@ export class LoreCodexScene extends Phaser.Scene {
 
     this.tabButtons = {
       lore: createButton(this, cx - 260, GAME_HEIGHT - 50, 'Lore Fragments', () => this.switchTab('lore'), { width: 190, height: 42 }),
-      archive: createButton(this, cx - 40, GAME_HEIGHT - 50, 'Enemy Archive', () => this.switchTab('archive'), { width: 190, height: 42 }),
+      bestiary: createButton(this, cx - 40, GAME_HEIGHT - 50, 'Bestiary', () => this.switchTab('bestiary'), { width: 190, height: 42 }),
     };
     this.tintTab(this.tab);
     createButton(this, cx - 540, GAME_HEIGHT - 50, '< Prev', () => this.changePage(-1), { width: 150, height: 42 });
@@ -79,21 +88,17 @@ export class LoreCodexScene extends Phaser.Scene {
 
   private tabLine(): string {
     if (this.tab === 'lore') return `${this.discovered.length} / ${TOTAL_LORE_FRAGMENTS} fragments discovered`;
-    const total = this.archiveEntries.length;
-    const complete = this.archiveEntries.filter((e) => e.exploited).length;
-    return `${complete} / ${total} enemies fully catalogued`;
+    const known = this.bestiaryRows.filter((r) => Object.keys(r.affinities).length > 0).length;
+    return `${known} / ${this.bestiaryRows.length} enemies encountered`;
   }
 
   private tintTab(active: CodexTab) {
-    for (const key of ['lore', 'archive'] as const) {
+    for (const key of ['lore', 'bestiary'] as const) {
       const b = this.tabButtons[key];
       if (!b) continue;
       const img = b.container.list[0] as Phaser.GameObjects.Image;
-      if (key === active) {
-        img.setTint(parseInt(PALETTE_HEX.gold.replace('#', ''), 16));
-      } else {
-        img.clearTint();
-      }
+      if (key === active) img.setTint(parseInt(PALETTE_HEX.gold.replace('#', ''), 16));
+      else img.clearTint();
     }
   }
 
@@ -101,22 +106,36 @@ export class LoreCodexScene extends Phaser.Scene {
     if (this.tab === tab) return;
     this.tab = tab;
     this.page = 0;
+    this.bestiaryRows = this.buildBestiaryRows();
     this.headerNote?.setText(this.tabLine());
     this.tintTab(this.tab);
     this.renderPage();
   }
 
-  private buildArchiveEntries(archive: Record<string, { fragments: string[]; exploited: boolean }>): ArchiveRow[] {
-    const entries: ArchiveRow[] = [];
-    for (const [id, def] of Object.entries(ENEMIES) as [string, EnemyDef][]) {
-      const entry = archive[id];
-      entries.push({ id, name: def.name, fragments: entry?.fragments.length ?? 0, exploited: entry?.exploited ?? false });
+  private buildBestiaryRows(): BestiaryRow[] {
+    const rows: BestiaryRow[] = [];
+    for (const [id, def] of Object.entries(ENEMIES)) {
+      if (def.minResonance && id !== 'the_unread' && id !== 'memory_wraith') continue;
+      rows.push({
+        id,
+        name: def.name,
+        level: def.level,
+        affinities: useGameStore.getState().meta.discoveredAffinities[id] ?? {},
+        kills: useGameStore.getState().meta.bestiaryKills[id] ?? 0,
+      });
     }
-    for (const [id, def] of Object.entries(BOSSES) as [string, BossDef][]) {
-      const entry = archive[id];
-      entries.push({ id, name: def.name, fragments: entry?.fragments.length ?? 0, exploited: entry?.exploited ?? false });
+    for (const [id, boss] of Object.entries(BOSSES)) {
+      const base = boss.phases[0]?.affinities ?? {};
+      rows.push({
+        id,
+        name: boss.name,
+        level: boss.level,
+        affinities: useGameStore.getState().meta.discoveredAffinities[id] ?? {},
+        kills: useGameStore.getState().meta.bestiaryKills[id] ?? 0,
+      });
+      void base;
     }
-    return entries.sort((a, b) => a.name.localeCompare(b.name));
+    return rows.sort((a, b) => a.name.localeCompare(b.name));
   }
 
   private changePage(delta: number) {
@@ -128,7 +147,7 @@ export class LoreCodexScene extends Phaser.Scene {
   }
 
   private pageSize(): number {
-    return this.tab === 'lore' ? this.allIds.length : this.archiveEntries.length;
+    return this.tab === 'lore' ? this.allIds.length : this.bestiaryRows.length;
   }
 
   private renderPage() {
@@ -172,50 +191,64 @@ export class LoreCodexScene extends Phaser.Scene {
         container.add([bg, title, body]);
       });
     } else {
-      const slice = this.archiveEntries.slice(start, start + PER_PAGE);
+      const slice = this.bestiaryRows.slice(start, start + PER_PAGE);
       slice.forEach((entry, i) => {
         const rowY = LIST_TOP + i * ROW_H + ROW_H / 2 - 8;
-        const bg = this.add.rectangle(cx, rowY, 960, ROW_H - 14, 0x16191d).setStrokeStyle(1, entry.exploited ? 0x3a3226 : 0x2a2e33);
-        container.add([bg]);
+        const knownCount = Object.keys(entry.affinities).length;
+        const bg = this.add.rectangle(cx, rowY, 960, ROW_H - 14, 0x16191d)
+          .setStrokeStyle(1, knownCount >= 6 ? 0x3a3226 : 0x2a2e33);
 
-        const name = this.add.text(cx - 440, rowY - ROW_H / 2 + 18, entry.name, {
+        const lv = entry.level != null ? `   Lv ${entry.level}` : '';
+        const kills = entry.kills > 0 ? `   — slain ×${entry.kills}` : '';
+        const name = this.add.text(cx - 440, rowY - ROW_H / 2 + 16, `${entry.name}${lv}${kills}`, {
           fontFamily: FONT_SERIF,
           fontSize: '17px',
           color: PALETTE_HEX.gold,
         });
-        container.add([name]);
+        container.add([bg, name]);
 
-        const bars = ARCHIVE_FRAGMENT_NAMES.map((fragmentName, idx) => {
-          const fill = idx < entry.fragments ? '▰' : '▱';
-          return `${fill} ${fragmentName}`;
-        }).join('   ');
-        const status = this.add.text(cx - 440, rowY - ROW_H / 2 + 46, `Catalogue: ${bars}`, {
-          fontFamily: FONT_MONO,
-          fontSize: '13px',
-          color: entry.exploited ? PALETTE_HEX.goldBright : PALETTE_HEX.boneMuted,
+        // Affinity grid: 8 type chips over result chips (matches the in-combat Scan card).
+        const chipX0 = cx - 420;
+        const chipW = 52;
+        const gap = 12;
+        DAMAGE_TYPES.forEach((t, idx) => {
+          const x = chipX0 + idx * (chipW + gap);
+          const kind = entry.affinities[t as DamageType];
+          const known = kind !== undefined;
+
+          const topBg = this.add.rectangle(x + chipW / 2, rowY - 18, chipW, 26, 0x21252c).setStrokeStyle(1, 0x3a3f46);
+          const topLabel = this.add.text(x + chipW / 2, rowY - 18, DAMAGE_TYPE_ABBREV[t], {
+            fontFamily: FONT_MONO,
+            fontSize: '13px',
+            color: `#${(DAMAGE_TYPE_HEX[t] ?? '9a9488').replace('#', '')}`,
+          }).setOrigin(0.5);
+
+          const botBg = this.add.rectangle(x + chipW / 2, rowY + 16, chipW, 22, 0x21252c).setStrokeStyle(1, 0x3a3f46);
+          const botLabel = this.add.text(x + chipW / 2, rowY + 16, known ? kind! : '?', {
+            fontFamily: FONT_MONO,
+            fontSize: '13px',
+            color: known ? `#${AFFINITY_HEX[kind!].toString(16).padStart(6, '0')}` : '#555555',
+          }).setOrigin(0.5);
+
+          container.add([topBg, topLabel, botBg, botLabel]);
         });
-        container.add([status]);
 
         const note = this.add.text(
-          cx - 440,
-          rowY - ROW_H / 2 + 72,
-          entry.exploited
-            ? 'Fully catalogued — this foe is permanently vulnerable to the Archive Exploit in combat.'
-            : `${ARCHIVE_FRAGMENT_NAMES.length - entry.fragments} fragment(s) remaining. Scan or defeat it in combat to learn more.`,
+          cx + 120,
+          rowY - ROW_H / 2 + 20,
+          knownCount === 0
+            ? 'Unknown. Strike it in battle or use Full Knowledge.'
+            : `${knownCount}/8 affinity slots mapped.`,
           {
             fontFamily: FONT_BODY,
-            fontSize: '14px',
+            fontSize: '13px',
             fontStyle: 'italic',
-            color: entry.exploited ? PALETTE_HEX.bone : PALETTE_HEX.boneMuted,
-            wordWrap: { width: 860 },
+            color: PALETTE_HEX.boneMuted,
+            wordWrap: { width: 240 },
           }
         );
         container.add([note]);
       });
-    }
-
-    if (this.pageSize() === 0) {
-      this.add.text(cx, LIST_TOP + 40, 'Nothing to show yet.', { fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5);
     }
   }
 }

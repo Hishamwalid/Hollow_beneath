@@ -1,3 +1,5 @@
+> **STATUS: SUPERSEDED (August 2026) by `docs/COMBAT_SYSTEM_REVAMP.md` — kept as historical record.**
+
 # BATTLE ROADMAP — The Ultimate Battle System
 
 Source of truth: `H:\Study mat\3.1\lab\sw\ULTIMATE BATTLE SYSTEM.md` ("THE ECHO COMBAT ARCHITECTURE").

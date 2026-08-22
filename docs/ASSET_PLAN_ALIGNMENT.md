@@ -2,6 +2,25 @@
 
 *Cross-match between `THE_HOLLOW_BENEATH_Art_Audio_Asset_Checklist.md` and the current repo state (200-node board per `PLAN_OVERHAUL.md` v1.1, no mini-bosses).*
 
+> **STATUS UPDATE (August 2026).** This reconciliation predates the first art delivery batch
+> and the battle overhaul. What actually happened since:
+>
+> - **Fonts delivered** — but as Cinzel / IM Fell English / Courier Prime (not the Crimson
+>   Text / VT323 recommended below). Wired via `@font-face` in `style.css` as `Hollow*` families.
+> - **Backgrounds delivered** — 5 chapter maps (`map1–map5`), the hand-authored Stage 1 board
+>   background (`stage1_background.png`, 1920×1080), and 3 stage-1 combat backgrounds
+>   (`combat_stage1_sand/_stone/_boss.png`). Stages 2–5 board/combat art still open.
+> - **Combat sprites delivered** — full player set (7 poses + face + pin), Dust Wight +
+>   Echo Skeleton sets, and the Argent Sentinel animation set (17 frames incl.
+>   transform/victory/defeat sequences).
+> - **UI delivered (partial)** — book panel + one board token; the other panels remain placeholders.
+> - **SFX unchanged** — all 22+ cues are still Web Audio synthesized; no music yet.
+> - Combat UI was rebuilt around the Echo Combat Architecture (intent cards, investigation,
+>   positioning rows); per-element HUD offsets are live-tunable via `src/data/combatLayout.json`.
+>
+> Per-key status now lives in `docs/ART_ASSET_CHECKLIST_DETAILED.md` (§0/§6/§9 status columns)
+> and `docs/ARTIST_ASSET_OVERVIEW.md`. The analysis below is kept as-is for reference.
+
 ---
 
 ## Overall Assessment: Feasible — 8 adjustments needed

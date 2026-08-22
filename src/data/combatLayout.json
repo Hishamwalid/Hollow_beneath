@@ -12,14 +12,9 @@
       "dy": 18.6
     },
     {
-      "key": "combatLog",
-      "dx": 0,
-      "dy": 0
-    },
-    {
       "key": "enemyRowY",
       "dx": 0,
-      "dy": 25.2
+      "dy": 53.7
     },
     {
       "key": "enemySpacing",
@@ -68,8 +63,8 @@
     },
     {
       "key": "turnOrder",
-      "dx": 7.7,
-      "dy": -3.3
+      "dx": 8.8,
+      "dy": -23
     }
   ]
 }

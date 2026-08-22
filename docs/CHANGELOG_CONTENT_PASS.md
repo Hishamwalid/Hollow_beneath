@@ -158,3 +158,111 @@ Three parallel audit agents (CombatSystem, Economy/Items, Events/Board/Scenes) r
 ## Validation
 
 `smoketest.ts` extended with: minor-landmark + full lore-registry cross-reference check, per-page event coverage check (every page × low/high Resonance), content-count assertions (20/12/25/30/40/50/5), skill-distribution-path sanity, whisper-tier coverage. All pass.
+
+---
+
+# Battle Architecture Overhaul + Companions + Stage 1 Map (August 2026)
+
+Full record of the "Echo Combat Architecture" implementation (docs/BATTLE_ROADMAP.md Phases 0–7,
+all complete) plus the companion system and the hand-authored Stage 1 board map.
+
+## Combat system rebuild (Phases 0–7)
+
+| Phase | Delivered |
+|---|---|
+| 0 Foundations | types.ts fields (classId, fatigue, insight, fearGauge, position), SaveManager v3 migration with defaults injection |
+| 1 Action Economy | Token AP gauge (0–5; miss wipes tokens), FatigueSystem bands, 9 momentum payoffs (Flow/Harmony/Archive/Forgotten Technique/Unravel/Echo Surge/Phase Shift/Desperate Strike/Overclock), per-action AP cost table, Analyze de-free-ified |
+| 2 Investigation & Intent | Layered Scan/Probe/Deep Analysis per enemy, Insight spend, enemies pre-declare intents at round start (confidence % scales with layer), all 17 enemy defs + 5 bosses given tendency + intents |
+| 3 Weakness Depth | WeaknessWindowSystem (3 streak → 2-turn window), ElementalReactionSystem (8 ordered type pairs), ComboSystem (8 tag sequences, +2 tokens), damage numbers colored by type |
+| 4 Classes & Crisis | classes.ts — 6 class-locked trees (passive + signature + 4 progression each = 36 skills), SkillEffect resolver, 5 crises × options, FearSystem (hidden gauge → Terrified) with bravery actions, DesperationSystem low-HP gambles |
+| 5 Boss Intelligence | ProfileSystem (12 habit metrics), AdaptationSystem (every 3rd boss turn), StressSystem (4 behaviour bands), TellSystem (charged ultimates telegraphed a turn early), 5 personalities biasing intent weights |
+| 6 States / Position / Meta | BattlefieldStateSystem (8 global states), PositionSystem (front/mid/back rows + Advance/Retreat/Charge/Fall Back), ArchiveSystem (persistent MetaState.enemyArchive fragments → Layer-4 exploits, Codex Enemy tab), DifficultySystem (easy/normal/hard/ironman incl. permadeath) |
+| 7 Polish | Audio cues (weakness crunch, adaptation warning, combo/AP ding, fatigue gasp, resonance chime), intent confidence % on cards, combat-log damage breakdowns + enemy "thoughts" + color coding, crisis flash/shake, resonance tier glow, tutorial expanded to teach tokens/investigation/intents/classes |
+
+## Companion/ally system (`src/systems/ally/`)
+
+- 4 companions: Warden Emissary (shielding), Covenant Courier (healer), Sable Zealot (striker),
+  Archive Cartographer (prober) — recruited from region-bound discovery nodes
+- Loyalty 15→100 with tiers (Steadfast 25 / Devoted 50 / True Bond 80) gating ability tiers;
+  gains +12 win / +4 loss / +5 home-region fight
+- Deterministic `planAllyTurn()` combat AI (heal dying player → guard boss rounds → heal →
+  support → attack weakest non-boss)
+- Boss assists: Last Oath, Unbroken Vigil, Bitter Revival, The Whole Letter, First Church Word
+- Rewards: victory shards scale with loyalty; bond thresholds grant one-time Resonance (+3/+5/+8)
+
+## Board & stage work
+
+- Hand-authored Stage 1 map: 40 anchor points over `stage1_background.png`
+  (`src/data/paths/stage1_path.json` + `stage1_adjust.json` + `stage1Nodes.ts`); chapter 1
+  renders the full 40-node polyline instead of the procedural ring
+- Dev tools: PathPointPickerScene ('PathPointPicker') records path JSON; NodePreviewScene
+  ('NodePreview') visualises it; `?editpath=1` drag-edit + export; `?editlayout=1` live-tunes
+  combat HUD offsets saved to `src/data/combatLayout.json`
+- Stage-based enemy pools: 5 stages with exclusive rosters; `sanitizeFightEnemies()` scrubs
+  scripted fights to current-stage enemies (documented in docs/ENEMY_ROSTER_BY_STAGE.md)
+
+## Real assets integrated
+
+- Fonts: Cinzel (display), IM Fell English (body), Courier Prime (numerics) — WOFF2 in
+  `public/assets/fonts/`, registered as `Hollow*` families in `style.css`
+- Backgrounds: map1–5 chapter maps, stage1 background, 3 combat backgrounds (sand/stone/boss)
+- Sprites: player set (idle/windup/attack/hit/victory/defeated/guard + face + pin),
+  Dust Wight + Echo Skeleton sets, full Argent Sentinel frame set (17 frames incl.
+  transform/victory/defeat sequences with failsafe timing)
+- UI: book panel, board token
+
+## Validation
+
+`npm run typecheck`, `npm run build`, and `npm run test` green after every phase. Smoketest
+extended to ~22 sections covering every battle phase (windows/reactions/combos regression,
+investigation, class identity, crisis/fear/desperation, allies ×5 subsections, battlefield
+states, positioning, difficulty, archive, 0 HP defeat edge case).
+
+---
+
+# Combat Revamp — "Echo" + Scan + QTE + Loadout (August 2026)
+
+Source of truth: `docs/COMBAT_SYSTEM_REVAMP.md`. Supersedes the Echo Combat Architecture above. Battle UI layout/positions & action images are **unchanged** (compat shims).
+
+## What changed
+
+- **Combat model:** no AP/fatigue; one action/turn → `END TURN`; QTE-timed offense (perfect/good/miss), Slowed doubles needle speed, Guard skips QTE; Guard halves damage, blocks Stagger, +6 MP.
+- **Affinity discovery:** 8 slots per enemy start as `?`; hitting with a damage type discovers that slot forever (`wk`/`str`/`null`/`rep`/`drn`/`-`); discoveries persist across runs in `MetaState.discoveredAffinities` and surface in a free Scan modal (geometry per `scan_UI.svg` ×⅔) + Lore Codex Bestiary. Cipher Barrier nullifies the next skill; Reflection erases a slot for two turns.
+- **Down + 1-More:** `wk` (or any crit) with decent timing Downs the target (lose next turn) and grants an immediate extra action.
+- **Reactions:** `Frost→Shock` Superconduct (stun, consumes Chilled), `Shock→Flame` Overcharge (+30%), `Sacred-mark→Shadow` Eclipse (strips buffs, ×2).
+- **Skills:** no classes/trees/skill points. ~40 named techniques via five **chapter loadouts** (6 active + Archive); auto-granted on chapter entry, swappable on the new **Loadout** screen (replaces SkillTreeScene). One-time HP/MP costs, DISCOVERABLE_SKILLS pool, passives retained (`unfinished_sentence`, `archival_insight`, etc.).
+- **Enemies/bosses:** discrete affinities + named movepools per revamp §4; charge telegraphs (`⚡ CHARGING:`) unleash next enemy phase; groups of ≥3 cap at one heavy/AOE per round; boss telegraphs & mechanics preserved (Patriarch Toll, Chorus Unison Shift, Fossil Cataclysm, Reflection Mirror/Erasure/Surge).
+- **Engine:** new `CombatEngine` (~1300 lines) with headless `resolveQte()` hook, `exposedPhase` (`momentum_choice` compat), `EnemyView` legacy veneer, and 15+ no-op shims so the original battle UI scene (`CombatScene.ts`) compiles unchanged. Difficulty/Resonance scaling, page scaling, barrier, and Save **v6** migration (Bestiary + loadout) carried over.
+- **UX:** Scan is a free action; full Bestiary tab in `LoreCodexScene`; Loadout replaces SkillTree; BoardScene auto-grants chapter skills; QTE respects `Slowed` and `phase_shift` dodge charges.
+- **Removed:** `classes.ts`, `skillTree.ts`, 15 `systems/combat/*` subsystems, `ally/AllyCombat` + `AllyBoss`, `CombatHUD` dependency (kept for battle scene).
+
+## Validation
+
+`npx tsc --noEmit` 0 errors; `npm run test` 153/0; `npm run build` 102 modules. The circular-chunk warning (`systems → data → systems`) is pre-existing (data/bosses ↔ systems/checks ↔ engine).
+
+See README "Current State" and `docs/AGENTS.md` §13 for the post-revamp picture.
+
+---
+
+# Combat UX & Balance Pass — post-revamp polish (August 2026)
+
+Follow-up to the revamp above: makes the revamped combat fully playable end-to-end from the battle scene and tunes feel. All gates green (`tsc -b`, `vite build`, smoketest 165+/0).
+
+## Battle flow & engine
+- **QTE wired into the UI** (was engine-only): offensive skills open a timing bar (`src/ui/QteBar.ts`) — needle sweep, Space/Enter or click, verdict label + zone flash on confirm, auto-miss if ignored. **Basic attacks resolve instantly with no timing bar.**
+- **Timing scaling:** miss ×0.8 / good ×1.0 / perfect ×1.3 (+0.35 crit). A missed window **always connects** (the old 40% whiff is gone); only true no-contact plays the miss cue.
+- **1-More is single-use** and no longer chains: weakness hits on an *already-Downed* enemy grant nothing (`afterAction()` consumes the flag; strike() gates on `!downed`).
+- **Turn order includes the player** (initiative merged by SPD); panel lists everyone.
+- **Real enemy-phase animation data:** snapshot `lastActors` = enemies that actually acted; `enemyPhaseDamage` attributed per attacker — enemy poses/damage beats play only after END TURN, not after every player action.
+- **Enemy accuracy tuning:** player dodge counts at half weight vs enemy attacks; hit-chance floor 25% (enemies land ~75% typically).
+- **Boss nerf (temporary):** boss HP ×0.85, atk/mat ×0.85, def/mdef ×0.90 until per-boss balance is revisited.
+- New accessor `CombatEngine.getLog()` (snapshot carries only the log tail).
+
+## Battle UI
+- **Free Scan modal**: name/Lv, MAX HP/MP, all 8 affinity chips (`?` until discovered), move pool; costs nothing.
+- **LOG button** replaces the side log panel → detailed full-log modal; new log lines also toast briefly in a boxed message inside the frame's top edge.
+- ACT/AP box removed (one action/turn conveyed by grid state); momentum shown as a bar; stat panel reads live HP/MP/momentum from the engine snapshot.
+- Enemy cards show a DOWNED pill; kill sequence = HP drain → dissolve (regular foes) or defeat animation (bosses: `defeat1→2→3` frames when art exists, fade-and-sink fallback otherwise) → breather → result screen.
+
+## Meta
+- **Starting a new run wipes Bestiary scan data** (`discoveredAffinities`, `bestiaryKills`); Continue keeps it.

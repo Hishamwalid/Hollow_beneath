@@ -2,6 +2,14 @@
 
 *Every texture key in the codebase, with precise specs for production. Cross-referenced against `src/placeholder/PlaceholderTextures.ts` and all scene files that consume each key.*
 
+> **STATUS UPDATE (August 2026).** The first production batch is **delivered and wired**:
+> fonts (Cinzel / IM Fell English / Courier Prime — see §9), the full player frame set (§0.1),
+> Dust Wight + Echo Skeleton sets (§0.2), the Argent Sentinel combat frame set (17 frames:
+> idle/attack/hit/guard/victory/transform/defeat × phases + face1/face2/half — newer than this
+> checklist, no § here), board chapter maps `map1–map5` + `stage1_background`, 3 stage-1 combat
+> backgrounds, book panel UI and a board token. Everything else in this checklist is still
+> open. Real files load first in `PreloadScene.ts`; placeholders only fill missing keys.
+
 ---
 
 ## How to Add a New Texture (Code Pattern)
@@ -34,7 +42,7 @@ Full-body character frames displayed in `CombatScene`/`CombatHUD`. Loading is **
 | **Format** | PNG with alpha |
 | **Frames** | `idle`, `windup`, `attack`, `hit`, `victory`, `defeat`, `guard` |
 | **Files** | `public/assets/image_assets/player/<state>.png` |
-| **Existing** | `idle`, `attack`, `hit` (placeholders — replace); **`windup`, `victory`, `defeat`, `guard` missing — create** |
+| **Existing** | ✅ **All 7 delivered** (`idle`, `windup`, `attack`, `hit`, `victory`, `defeated`, `guard` — note the file is `defeated.png`; the engine loads the state name `defeated`) + `face.png` and `player_pin.png` |
 
 Rules:
 - **Identical canvas size for every frame** — the game fits each frame to a 243×329 box, so mismatched canvases make the character visibly shrink/grow when swapping poses.
@@ -50,7 +58,7 @@ Rules:
 | **Format** | PNG with alpha |
 | **Frames per enemy** | `idle`, `attack`, `hit` |
 | **Files** | `public/assets/image_assets/enemy/echo_skeleton/<state>.png`, `public/assets/image_assets/enemy/dust_wight/<state>.png` (folders created) |
-| **Existing** | none (generic `enemy/` placeholders currently shown) |
+| **Existing** | ✅ **Delivered** — both enemies have `idle`/`attack`/`hit` + `face.png`; wired in `PreloadScene.ts` |
 
 Same rules as the player: identical canvas across the 3 frames, consistent baseline, ~15–20% padding for attack lunges. The `hit` frame is tinted red by the engine (`CombatHUD.ts:74`) — keep the pose readable under a red tint.
 
@@ -175,13 +183,16 @@ Phaser 3.70 supports 9-slice textures (`this.add.nineslice()`), which would let 
 
 ## 6. Backgrounds
 
-| Asset | Count | Size | Priority |
-|-------|-------|------|----------|
-| Page backgrounds (board/exploration) | 10 (one per 2-page pair) | 1280×800 | P1 |
-| Combat arena backgrounds | 5 (one per macro-environment) | 1280×800 | P2 |
-| Title screen | 1 | 1280×800 | P0 |
-| Menu / Shard Shop background | 1 | 1280×800 | P1 |
-| Parallax layers | ~15 reusable tileable | Half-height | P2 |
+| Asset | Count | Size | Priority | Status |
+|-------|-------|------|----------|--------|
+| Page backgrounds (board/exploration) | 10 (one per 2-page pair) | 1280×800 | P1 | 🔶 Partial — `map1–map5` chapter maps + `stage1_background.png` (1920×1080, hand-authored Stage 1 board) delivered; stages 2–5 board art open |
+| Combat arena backgrounds | 5 (one per macro-environment) | 1280×800 | P2 | 🔶 Partial — stage 1 trio delivered: `combat_stage1_sand/_stone/_boss.png`; stages 2–5 open |
+| Title screen | 1 | 1280×800 | P0 | Open |
+| Menu / Shard Shop background | 1 | 1280×800 | P1 | Open |
+| Parallax layers | ~15 reusable tileable | Half-height | P2 | Open |
+
+Delivered files live in `public/assets/image_assets/backgrounds/` and are loaded in `PreloadScene.ts`
+(keys `map_1..5`, `stage1-bg`, `bg_combat_stage1_*`).
 
 ---
 
@@ -240,14 +251,16 @@ All synthesized via Web Audio API in `src/placeholder/PlaceholderAudio.ts`.
 
 ---
 
-## 9. Typography (P0 — 2 files, highest effort-to-impact ratio)
+## 9. Typography (P0 — ✅ DELIVERED)
 
-| Current | Target | Format |
+| Planned | Delivered | Format |
 |---------|--------|--------|
-| Georgia (body text everywhere) | Crimson Text | WOFF2 subset |
-| Courier New (mono/UI numbers) | VT323 | WOFF2 subset |
+| Crimson Text (display) → **Cinzel** (`HollowCinzel`) | ✅ Cinzel-Regular/Bold.woff2 | WOFF2 |
+| VT323 (mono/UI numbers) → **Courier Prime** (`HollowMono`) | ✅ CourierPrime/Bold.woff2 | WOFF2 |
+| (added during production) IM Fell English body font (`HollowFell`) | ✅ IMFELL-English/Italic.woff2 | WOFF2 |
 
-Place in `public/fonts/`, load via `@font-face` in `index.html` or `src/style.css`.
+All in `public/assets/fonts/`, registered via `@font-face` in `src/style.css`; consumed through
+`FONT_SERIF` / `FONT_BODY` / `FONT_MONO` in `src/ui/uiTheme.ts`.
 
 ---
 

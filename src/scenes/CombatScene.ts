@@ -3,16 +3,19 @@ import { useGameStore } from '@store/gameStore';
 import { BOSSES } from '@data/bosses';
 import { ITEMS } from '@data/items';
 import { NAMED_SKILLS } from '@data/skills';
-import type { EventApplyCtx, PlayerState } from '@data/types';
-import { CombatEngine, type CombatSnapshot, type MomentumChoice } from '@systems/CombatEngine';
-import { BATTLEFIELD_STATES } from '@systems/combat/BattlefieldStateSystem';
-import { BRAVERY_ACTIONS } from '@systems/combat/FearSystem';
+import type { AffinityKind, EventApplyCtx, PlayerState } from '@data/types';
+import { DAMAGE_TYPES, DAMAGE_TYPE_ABBREV } from '@data/types';
+import { CombatEngine, type CombatSnapshot, type EnemyView, type MomentumChoice } from '@systems/CombatEngine';
+// Revamp compat: battlefield states & fear/bravery systems removed — UI still renders their labels via no-op data.
+const BATTLEFIELD_STATES: Record<string, { label: string; turns?: number }> = {};
+const BRAVERY_ACTIONS: Array<{ id: string; label: string; detail?: string; apCost?: number }> = [];
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
 import { showWhisper } from '@ui/WhisperOverlay';
 import { addResonanceEffects } from '@systems/ResonanceFX';
 import { createStatPanel } from '@ui/StatPanel';
-import { createEnemyDisplay, createApPips, createActionGrid, createTurnOrderPanel, createTooltipPanel, createCombatLogPanel, createAllyDisplay, type EnemyDisplay, type ActionGridItem, type TooltipPanelHandle, type CombatLogPanelHandle, type AllyDisplay, ENEMY_NAME_X, ENEMY_NAME_Y } from '@ui/CombatHUD';
+import { createEnemyDisplay, createActionGrid, createTurnOrderPanel, createTooltipPanel, createAllyDisplay, type EnemyDisplay, type ActionGridItem, type TooltipPanelHandle, type AllyDisplay, ENEMY_NAME_X, ENEMY_NAME_Y } from '@ui/CombatHUD';
+import { createQteBar, type QteBarHandle, type QteQuality } from '@ui/QteBar';
 import { createChoiceMenu, type ChoiceMenu, type ChoiceMenuItem } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX, DAMAGE_TYPE_HEX } from '@ui/uiTheme';
@@ -82,9 +85,6 @@ const layoutAdj = (key: string): { dx: number; dy: number } =>
 const BATTLEFIELD_LABEL_BASE = { x: GAME_WIDTH / 2, y: 101.25 };
 const STAT_PANEL_BASE = { x: 237.7, y: 597.55 };
 const PLAYER_ROW_BASE = { x: FRAME_RIGHT - 10, y: 151.25 };
-const AP_PIPS_BASE = { x: 204.3, y: 523.95 };
-const INSIGHT_TEXT_BASE = { x: FRAME_RIGHT - 10, y: 185.25 };
-const INSIGHT_BTN_BASE = { x: FRAME_RIGHT - 130, y: 219.25 };
 const PLAYER_SPRITE_BASE = { x: 359.2, y: 500.05 };
 const ALLY_SPRITE_BASE = { x: 545, y: 505 };
 const PLAYER_SHADOW_BASE = { x: 351, y: 620.95 };
@@ -95,9 +95,25 @@ const ENEMY_ROW_BASE_Y = 323.25;
 /** Enemy row sits slightly right of center (design calls for enemies further from the player). */
 const ENEMY_ROW_CENTER = FRAME_X + FRAME_W / 2 + 45;
 const FX_ANCHOR_BASE = { x: 359.2, y: 564.25 };
-/** Vertical combat-log strip in the right margin (frame ends at FRAME_RIGHT). */
-const COMBAT_LOG_BASE = { x: 1230, y: 400 };
-const COMBAT_LOG_HIT = { w: 92, h: 608 };
+/** Where new combat-log lines toast on-screen (top of the battle frame). */
+const LOG_TOAST = { x: GAME_WIDTH / 2, y: 148 };
+/** Detailed-log button in the right margin (where the old side panel lived). */
+const LOG_BTN_BASE = { x: 1230, y: 150 };
+
+/** QTE timing bar sits centered over the battlefield while a strike is pending. */
+const QTE_BASE = { x: 640.7, y: 402 };
+/** Free Scan modal center. */
+const SCAN_BASE = { x: 640.7, y: 400 };
+
+/** Result colors for the Scan affinity chips (matches the Bestiary page). */
+const AFFINITY_HEX: Record<AffinityKind, number> = {
+  wk: 0xe9c876,
+  str: 0x7fb0c9,
+  null: 0x555555,
+  rep: 0xc0392b,
+  drn: 0x5c8a5c,
+  '-': 0x9a9488,
+};
 
 /** Which combat background to show: stage-1 sandy areas (pages 1–3), stone areas
  *  (page 4), or the Sentinel boss arena. Stages 2–5 keep the default dark frame. */
@@ -121,17 +137,17 @@ export class CombatScene extends Phaser.Scene {
   private lastRenderedRound = 0;
   /** Snapshot from the last refresh (kept for the combat-log panel). */
   private lastSnap?: CombatSnapshot;
-  /** Length of the engine log at the last log render (only re-render on growth). */
-  private lastLogLen = 0;
-  private combatLogPanel?: CombatLogPanelHandle;
+  /** How many engine log lines have already been toasted/shown. */
+  private shownLogCount = 0;
+  private toastQueue: string[] = [];
+  private toastBusy = false;
+  /** Last-seen views per enemy key — lets fallen enemies render their drained HP bar on fight end. */
+  private lastEnemyViews = new Map<string, EnemyView>();
   /** `?combatdebug=1` state overlay: R{round} PH:{phase} AP E:{enemyPhaseActive} T:{turnRotationActive} P:{pendingBeginRound} LA:{lastActors}. */
   private debugOverlay?: Phaser.GameObjects.Text;
   private lastAP = 0;
   private lastAPSet = false;
   private statPanel?: ReturnType<typeof createStatPanel>;
-  private apPips?: ReturnType<typeof createApPips>;
-  private insightText?: Phaser.GameObjects.Text;
-  private insightBtn?: ReturnType<typeof createButton>;
   private poseLockUntil = 0;
   private playerSprite?: Phaser.GameObjects.Image;
   private actionGridContainer?: Phaser.GameObjects.Container;
@@ -169,6 +185,16 @@ export class CombatScene extends Phaser.Scene {
   private sentinelTransformed = false;
   /** True while the sentinel transform cutscene is playing — blocks input and the action grid. */
   private transformCutscene = false;
+  /** True while a QTE strike is awaiting timing input — locks the action grid. */
+  private qteActive = false;
+  private qteBar?: QteBarHandle;
+  private qteType = 'attack';
+  private qteTargetKey?: string;
+  private qtePrevPlayerHP = 0;
+  private qtePrevEnemyHP = new Map<string, number>();
+  private qteHpCost = 0;
+  /** In-combat Scan modal container (cleaned up by closeOverlay). */
+  private scanPanel?: Phaser.GameObjects.Container;
 
   constructor() {
     super('Combat');
@@ -178,6 +204,18 @@ export class CombatScene extends Phaser.Scene {
     this.resultShown = false;
     this.sentinelTransformed = false;
     this.transformCutscene = false;
+    this.qteActive = false;
+    this.qteBar = undefined;
+    this.qteTargetKey = undefined;
+    this.scanPanel = undefined;
+    this.shownLogCount = 0;
+    this.toastQueue = [];
+    this.toastBusy = false;
+    this.lastEnemyViews.clear();
+    this.events.once('shutdown', () => {
+      if (this.qteBar) { this.qteBar.destroy(); this.qteBar = undefined; }
+      this.qteActive = false;
+    });
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
     this.sceneData = data;
@@ -222,9 +260,8 @@ export class CombatScene extends Phaser.Scene {
       bossDef,
       precombatFlags: data.precombatFlags,
       playerHistory: new Set(player.history),
-      allies: player.companions ?? [],
       difficulty: settingsManager.get().difficulty,
-      enemyArchive: store.meta.enemyArchive,
+      discoveredAffinities: (store.meta as unknown as Record<string, unknown>).discoveredAffinities as Record<string, import('@data/types').EnemyAffinities> ?? {},
     });
 
     this.add
@@ -251,17 +288,6 @@ export class CombatScene extends Phaser.Scene {
       .text(PLAYER_ROW_BASE.x + prAdj.dx, PLAYER_ROW_BASE.y + prAdj.dy, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold })
       .setOrigin(1, 0.5)
       .setDepth(10);
-    const apAdj = layoutAdj('apPips');
-    this.apPips = createApPips(this, AP_PIPS_BASE.x + apAdj.dx, AP_PIPS_BASE.y + apAdj.dy);
-    const itAdj = layoutAdj('insightText');
-    this.insightText = this.add
-      .text(INSIGHT_TEXT_BASE.x + itAdj.dx, INSIGHT_TEXT_BASE.y + itAdj.dy, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold })
-      .setOrigin(1, 0.5)
-      .setDepth(10);
-    const ibAdj = layoutAdj('insightBtn');
-    this.insightBtn = createButton(this, INSIGHT_BTN_BASE.x + ibAdj.dx, INSIGHT_BTN_BASE.y + ibAdj.dy, 'Study (3 INS)', () => this.showInsightModal(), {
-      width: 130, height: 28, fontSize: '13px', depth: 11,
-    });
 
     const psAdj = layoutAdj('playerSprite');
     this.playerSprite = this.add.image(PLAYER_SPRITE_BASE.x + psAdj.dx, PLAYER_SPRITE_BASE.y + psAdj.dy, 'player_idle').setDepth(6);
@@ -274,8 +300,10 @@ export class CombatScene extends Phaser.Scene {
 
     const tpAdj = layoutAdj('tooltipPanel');
     this.tooltipPanel = createTooltipPanel(this, TOOLTIP_PANEL_BASE.x + tpAdj.dx, TOOLTIP_PANEL_BASE.y + tpAdj.dy);
-    const clAdj = layoutAdj('combatLog');
-    this.combatLogPanel = createCombatLogPanel(this, COMBAT_LOG_BASE.x + clAdj.dx, COMBAT_LOG_BASE.y + clAdj.dy);
+    const lbAdj = layoutAdj('logBtn');
+    createButton(this, LOG_BTN_BASE.x + lbAdj.dx, LOG_BTN_BASE.y + lbAdj.dy, 'LOG', () => this.openLogModal(), {
+      width: 64, height: 34, fontSize: '14px', depth: 11,
+    });
     const toAdj = layoutAdj('turnOrder');
     this.turnOrderPanel = createTurnOrderPanel(this, TURN_ORDER_BASE.x + toAdj.dx, TURN_ORDER_BASE.y + toAdj.dy);
 
@@ -336,6 +364,7 @@ export class CombatScene extends Phaser.Scene {
         this.updateTargetHighlight(this.engine.snapshot());
       });
       disp.update(e);
+      this.lastEnemyViews.set(e.key, e);
       this.placeEnemyName(disp);
       if (EDIT_LAYOUT) {
         const pillAdj = layoutAdj('enemyNamePill');
@@ -544,28 +573,22 @@ export class CombatScene extends Phaser.Scene {
     this.lastSnap = snap;
     const { player } = useGameStore.getState();
     if (player) {
-      if (this.enemyPhaseActive && this.displayedPlayerHP > 0 && this.displayedPlayerHP !== player.currentHP) {
-        this.statPanel?.update({ ...player, currentHP: this.displayedPlayerHP });
-      } else {
-        this.displayedPlayerHP = player.currentHP;
-        this.statPanel?.update(player);
-      }
+      // Combat truth comes from the engine snapshot (store HP/MP only update at
+      // combat end). During the enemy-phase rotation HP is staged beat-by-beat.
+      const staged = this.enemyPhaseActive && this.displayedPlayerHP > 0 && this.displayedPlayerHP !== player.currentHP;
+      const shownHP = staged ? this.displayedPlayerHP : snap.playerHP;
+      this.displayedPlayerHP = shownHP;
+      this.statPanel?.update({
+        ...player,
+        currentHP: shownHP,
+        currentMP: snap.playerMP,
+        momentum: Math.max(0, Math.min(5, snap.momentum)),
+      });
     }
     this.playerRowText?.setText(snap.playerRow ? `ROW: ${snap.playerRow.toUpperCase()}` : '');
-    this.apPips?.update(snap.playerAP, snap.bankedAP);
     if (snap.round !== this.lastRenderedRound) {
       this.lastRenderedRound = snap.round;
-      if (snap.apPenalty > 0 && this.apPips) {
-        this.floatingText(
-          this.apPips.container.x,
-          this.apPips.container.y - 32,
-          `-${snap.apPenalty} AP (${snap.apPenaltyLabel ?? 'Fatigue'})`,
-          PALETTE_HEX.danger,
-        );
-      }
     }
-    this.insightText?.setText(`INSIGHT ${snap.insight}/3`);
-    this.insightBtn?.setEnabled(snap.phase === 'player' && !this.enemyPhaseActive && !this.transformCutscene && snap.insight >= 3);
     this.phaseLabelText?.setText(snap.bossPhaseLabel ?? '');
     if (snap.battlefieldState) {
       const label = BATTLEFIELD_STATES[snap.battlefieldState.id].label;
@@ -577,34 +600,69 @@ export class CombatScene extends Phaser.Scene {
     if (!selected || !selected.alive) {
       this.selectedTarget = snap.enemies.find((e) => e.alive)?.key ?? null;
     }
-    if (snap.enemies.length !== this.enemyDisplays.length) {
+    // On a finished fight the snapshot only lists survivors — keep the fallen boss
+    // on screen with its HP bar drained to zero so the kill reads visually.
+    if (snap.enemies.length !== this.enemyDisplays.length && snap.phase !== 'victory' && snap.phase !== 'defeat') {
       this.buildEnemyDisplays(snap);
+    } else if (snap.phase === 'victory' || snap.phase === 'defeat') {
+      snap.enemies.forEach((e, i) => {
+        this.enemyDisplays[i]?.update(e);
+        this.lastEnemyViews.set(e.key, e);
+      });
+      const aliveKeys = new Set(snap.enemies.map((e) => e.key));
+      for (const [key, view] of this.lastEnemyViews) {
+        if (aliveKeys.has(key)) continue;
+        const disp = this.enemyKeyMap.get(key);
+        if (!disp) continue;
+        const isBoss = this.sceneData.mode === 'boss' && this.sceneData.bossId === view.defId;
+        disp.update({ ...view, hp: 0, alive: true });
+        if (isBoss) continue; // bosses stay for their defeat sequence
+        // Regular foes drain, then dissolve away before the result shows.
+        this.tweens.add({
+          targets: [disp.container, disp.nameGroup],
+          alpha: 0,
+          delay: 250,
+          duration: 450,
+          onComplete: () => {
+            disp.container.setVisible(false);
+            disp.nameGroup.setVisible(false);
+          },
+        });
+      }
+      this.updateTargetHighlight(snap);
     } else {
-      snap.enemies.forEach((e, i) => this.enemyDisplays[i]?.update(e));
+      snap.enemies.forEach((e, i) => {
+        this.enemyDisplays[i]?.update(e);
+        this.lastEnemyViews.set(e.key, e);
+      });
       this.updateTargetHighlight(snap);
     }
     this.checkSentinelTransform(snap);
     this.buildActionGrid(snap);
     if (this.transformCutscene) return;
     this.allyDisplay?.container.setVisible(snap.allies.length > 0);
-    if (snap.lastActors.length > 0) {
-      this.startTurnRotation(snap, this.enemyPhaseLeadIn);
-    } else {
-      // Guard: a stale snapshot with no pending actors must never tear down a running rotation.
-      if (this.turnRotationActive) return;
-      this.turnRotationTimers.forEach((t) => t.remove());
-      this.turnRotationTimers = [];
-      this.turnRotationActive = false;
-      this.enemyPhaseActive = false;
-      this.updateTurnOrderPanel(snap, snap.phase === 'player' ? 'player' : undefined);
-      if (this.afterEnemyPhase) {
-        const cb = this.afterEnemyPhase;
-        this.afterEnemyPhase = undefined;
-        cb();
+    // Only animate the enemy rotation when an enemy phase actually just ran —
+    // stale lastActors from a previous phase must never replay their poses.
+    if (!this.qteActive) {
+      if (this.enemyPhaseActive && snap.lastActors.length > 0) {
+        this.startTurnRotation(snap, this.enemyPhaseLeadIn);
+      } else {
+        // Guard: a stale snapshot with no pending actors must never tear down a running rotation.
+        if (this.turnRotationActive) return;
+        this.turnRotationTimers.forEach((t) => t.remove());
+        this.turnRotationTimers = [];
+        this.turnRotationActive = false;
+        this.enemyPhaseActive = false;
+        this.updateTurnOrderPanel(snap, snap.phase === 'player' ? 'player' : undefined);
+        if (this.afterEnemyPhase) {
+          const cb = this.afterEnemyPhase;
+          this.afterEnemyPhase = undefined;
+          cb();
+        }
       }
     }
 
-    this.renderCombatLog();
+    this.pumpLogFeed();
 
     if (this.debugOverlay) {
       this.debugOverlay.setText(
@@ -627,45 +685,109 @@ export class CombatScene extends Phaser.Scene {
     }
     if ((snap.phase === 'victory' || snap.phase === 'defeat' || snap.phase === 'fled') && !this.resultShown) {
       this.resultShown = true;
-      this.time.delayedCall(400, () => this.handleCombatEnd(snap.phase));
+      // Let the killing blow land, the HP bar drain, and the foe dissolve — then show the result.
+      this.time.delayedCall(850, () => this.handleCombatEnd(snap.phase));
     }
   }
 
-  /** Pushes the newest combat-log lines into the right-margin log panel (renders only on growth). */
-  private renderCombatLog(): void {
-    const snap = this.lastSnap;
-    if (!snap) return;
-    if (snap.log.length === this.lastLogLen) return;
-    this.lastLogLen = snap.log.length;
-    this.combatLogPanel?.update(snap.log);
+  /** Feeds newly added engine log lines to the on-screen toast queue. */
+  private pumpLogFeed(): void {
+    const full = this.engine.getLog();
+    if (full.length <= this.shownLogCount) return;
+    const fresh = full.slice(this.shownLogCount);
+    this.shownLogCount = full.length;
+    this.toastQueue.push(...fresh);
+    this.showNextToast();
+  }
+
+  /** Shows queued log lines one at a time as brief boxed messages inside the frame's top edge. */
+  private showNextToast(): void {
+    if (this.toastBusy || this.toastQueue.length === 0) return;
+    const line = this.toastQueue.shift()!;
+    this.toastBusy = true;
+    const t = this.add
+      .text(LOG_TOAST.x, LOG_TOAST.y, line, {
+        fontFamily: FONT_BODY,
+        fontSize: '15px',
+        color: PALETTE_HEX.bone,
+        align: 'center',
+        wordWrap: { width: 560 },
+      })
+      .setOrigin(0.5)
+      .setDepth(31)
+      .setAlpha(0);
+    // Boxed presentation so the message reads cleanly over the battlefield art.
+    const bg = this.add
+      .rectangle(LOG_TOAST.x, LOG_TOAST.y, Math.max(t.width + 36, 120), t.height + 14, 0x0b0d10, 0.88)
+      .setStrokeStyle(1, 0xc9a24b)
+      .setOrigin(0.5)
+      .setDepth(30)
+      .setAlpha(0);
+    this.tweens.add({
+      targets: [t, bg],
+      alpha: 1,
+      duration: 180,
+      yoyo: true,
+      hold: 1500,
+      onComplete: () => {
+        bg.destroy();
+        this.toastBusy = false;
+        this.showNextToast();
+      },
+    });
+  }
+
+  /** Detailed combat history modal (opened from the LOG button). */
+  private openLogModal(): void {
+    if (this.overlayBg || this.overlayMenu || this.scanPanel) return;
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.72).setInteractive().setDepth(38);
+    this.overlayBg.on('pointerdown', () => this.closeOverlay());
+    const lines = this.engine.getLog();
+    const panel = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(39);
+    panel.add(this.add.rectangle(0, 0, 760, 520, 0x14171b, 0.96).setStrokeStyle(2, 0xc9a24b).setOrigin(0.5));
+    panel.add(this.add.text(0, -232, 'COMBAT LOG', { fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.gold }).setOrigin(0.5));
+    const body = lines.length > 0 ? lines.join('\n') : 'Nothing has happened yet.';
+    panel.add(this.add
+      .text(-350, -206, body, {
+        fontFamily: FONT_MONO,
+        fontSize: '13px',
+        color: PALETTE_HEX.bone,
+        lineSpacing: 4,
+        wordWrap: { width: 700 },
+      })
+      .setOrigin(0, 0));
+    panel.add(this.add.text(0, 238, 'Click anywhere to close', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5));
+    this.scanPanel = panel; // reuse the modal-panel cleanup path in closeOverlay
   }
 
   private buildActionGrid(snap: CombatSnapshot) {
     this.actionGridContainer?.destroy();
     const { player } = useGameStore.getState();
     if (!player) return;
-    const canAct = snap.phase === 'player' && !this.enemyPhaseActive && !this.transformCutscene;
-    const hasFree = snap.freeActionCharges > 0;
-    const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
+    const inCombat = snap.phase === 'player' && !this.enemyPhaseActive && !this.transformCutscene;
+    // One action per turn: the 4 verbs are usable while acting; End Turn stays
+    // available afterwards to pass to the enemy phase (and is blocked mid-QTE).
+    const canAct = inCombat && !this.qteActive && (!snap.actionUsed || snap.oneMore);
+    const canEndTurn = inCombat && !this.qteActive;
 
     const items: ActionGridItem[] = [
-      { id: 'attack', label: 'Attack', apCost: 1, description: 'Basic melee attack (Slash damage).', disabled: !canAct || !canAfford(1), onHover: () => this.previewWindup(), onUnhover: () => this.endWindupPreview(), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
-      { id: 'skill', label: 'Skill', apCost: 0, description: 'All skills and special actions: Resonance, Sunder, Focus, Brace, Withdraw.', disabled: !canAct, onHover: () => this.previewWindup(), onUnhover: () => this.endWindupPreview(), onClick: () => this.openSkillMenu() },
-      { id: 'guard', label: 'Guard', apCost: 1, description: 'Raise your guard. Take 50% less damage until your next turn. Eases fatigue.', disabled: !canAct || !canAfford(1), onClick: () => this.doAction('guard', () => this.engine.guard()) },
+      { id: 'attack', label: 'Attack', apCost: 0, description: 'Basic melee attack (Slash damage). QTE-timed.', disabled: !canAct, onHover: () => this.previewWindup(), onUnhover: () => this.endWindupPreview(), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
+      { id: 'skill', label: 'Skill', apCost: 0, description: 'Use one of your six techniques (offensive skills are QTE-timed).', disabled: !canAct, onHover: () => this.previewWindup(), onUnhover: () => this.endWindupPreview(), onClick: () => this.openSkillMenu() },
+      { id: 'guard', label: 'Guard', apCost: 0, description: 'Take 50% less damage until your next turn, block Stagger, recover +6 MP.', disabled: !canAct, onClick: () => this.doAction('guard', () => this.engine.guard()) },
       {
         id: 'scan',
         label: 'Scan',
-        apCost: 1,
-        description: 'Scan the target (1 AP): reveals weaknesses, tendency, and a sense of what it intends.',
-        disabled: !canAct || !canAfford(1),
-        onClick: () => this.doAction('scan', () => this.engine.analyze(this.selectedTarget ?? undefined)),
+        apCost: 0,
+        description: 'Free: open the Scan modal for the selected enemy — known weaknesses, pools, and its moves.',
+        disabled: !inCombat,
+        onClick: () => this.openScanModal(),
       },
       {
         id: 'item',
         label: 'Item',
-        apCost: 1,
+        apCost: 0,
         description: 'Use an item from your inventory.',
-        disabled: !canAct || !canAfford(1) || player.inventory.length === 0,
+        disabled: !canAct || player.inventory.length === 0,
         onClick: () => this.openItemMenu(),
       },
       {
@@ -673,7 +795,7 @@ export class CombatScene extends Phaser.Scene {
         label: 'End Turn',
         apCost: 0,
         description: 'End your turn and let the enemies act.',
-        disabled: !canAct,
+        disabled: !canEndTurn,
         onClick: () => this.onEndTurn(),
       },
     ];
@@ -691,73 +813,48 @@ export class CombatScene extends Phaser.Scene {
     const { player } = useGameStore.getState();
     if (!player) return;
     const snap = this.engine.snapshot();
-    if (snap.phase !== 'player') return;
-    const hasFree = snap.freeActionCharges > 0;
-    const canAfford = (cost: number) => hasFree || snap.playerAP >= cost;
-    const canAct = snap.phase === 'player';
-    const resonanceCost = player.skillsKnown.includes('resonant_study') ? 1 : 3;
-    const activeSkills = player.skillsKnown.filter((id) => (NAMED_SKILLS[id]?.apCost ?? 0) > 0);
-    const targetView = snap.enemies.find((e) => e.key === this.selectedTarget);
-    const targetLayer = targetView?.investigationLayer ?? 0;
-    const targetProbes = targetView?.investigationProbes.length ?? 0;
+    if (snap.phase !== 'player' || this.enemyPhaseActive || this.transformCutscene || this.qteActive) return;
+    const canAct = !snap.actionUsed || snap.oneMore;
+    const activeSkills = player.skillsKnown.filter((id) => NAMED_SKILLS[id] && !NAMED_SKILLS[id].passive);
 
-    const menuItems: ChoiceMenuItem[] = [
-      ...activeSkills.map((id): ChoiceMenuItem => {
-        const sk = NAMED_SKILLS[id];
-        const mpDesc = sk.mpCost ? ` | MP: ${sk.mpCost}` : '';
-        const mpOk = sk.mpCost ? (player.currentMP >= sk.mpCost) : true;
-        const disabled = !canAfford(sk.apCost) || !mpOk;
-        return {
-          label: `${sk.name} (${sk.apCost} AP)`,
-          subtitle: `${sk.description}${sk.damageType ? ` (${sk.damageType})` : ''}${mpDesc}`,
-          disabled,
-          onSelect: () => { this.closeOverlay(); this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined)); },
-        };
-      }),
-      {
-        label: `Resonance (${resonanceCost} AP)`,
-        subtitle: `Shadow burst. Needs 25 Resonance, 10 MP, -1 Resonance.`,
-        disabled: !canAfford(resonanceCost) || player.resonance < 25 || player.currentMP < 10,
-        onSelect: () => { this.closeOverlay(); this.doAction('resonance', () => this.engine.resonanceAbility(this.selectedTarget ?? undefined)); },
-      },
-      { label: 'Sunder (2 AP)', subtitle: 'Sunder an enemy: reduce its Defense by 50% for 2 turns.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('sunder', () => this.engine.sunder(this.selectedTarget ?? undefined)); } },
-      { label: 'Archive: Expose Weakness (2 AP)', subtitle: 'Turn a fully-catalogued foe\'s catalogue against it: +20% damage for 2 turns.', disabled: !canAfford(2) || !(targetView?.archiveExploited ?? false), onSelect: () => { this.closeOverlay(); this.doAction('sunder', () => this.engine.archiveExpose(this.selectedTarget ?? undefined)); } },
-      { label: 'Probe (1 AP)', subtitle: 'Focused intel: Observe Body / Mind / Weapon / Memory / Resonance / Behavior. Requires a Scan.', disabled: !canAfford(1) || targetLayer < 1, onSelect: () => { this.closeOverlay(); this.openProbeMenu(); } },
-      { label: 'Deep Analysis (2 AP)', subtitle: 'Full move pool, exact rules, hidden notes. Requires at least one Probe.', disabled: !canAfford(2) || targetProbes < 1, onSelect: () => { this.closeOverlay(); this.doAction('deep_analyze', () => this.engine.deepAnalyze(this.selectedTarget ?? undefined)); } },
-      { label: 'Focus (1 AP)', subtitle: 'Regain 15 MP and gain +1 Momentum.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('focus', () => this.engine.focus()); } },
-      { label: 'Brace (1 AP)', subtitle: 'Guard blocks 20% more damage for 2 turns.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('brace', () => this.engine.brace()); } },
-      ...(snap.fear > 50
-        ? BRAVERY_ACTIONS.map((b): ChoiceMenuItem => ({
-            label: `${b.label} (${b.apCost} AP)`,
-            subtitle: b.detail,
-            disabled: !canAfford(b.apCost),
-            onSelect: () => { this.closeOverlay(); this.doAction('bravery', () => this.engine.resolveBravery(b.id)); },
-          }))
-        : []),
-      { label: 'Withdraw (2 AP)', subtitle: 'Attempt to flee. Speed-based success chance.', disabled: !canAfford(2), onSelect: () => { this.closeOverlay(); this.doAction('withdraw', () => this.engine.withdraw()); } },
-      // Phase 6b repositioning
-      { label: 'Advance (free)', subtitle: 'Step one row toward the front: +15% damage, but you take 10% more.', disabled: !canAct, onSelect: () => { this.closeOverlay(); this.doAction('advance', () => this.engine.advance()); } },
-      { label: 'Retreat (free)', subtitle: 'Step one row back: -10% damage, shields 15%, +10 dodge.', disabled: !canAct, onSelect: () => { this.closeOverlay(); this.doAction('retreat', () => this.engine.retreat()); } },
-      { label: 'Charge (1 AP)', subtitle: 'Surge two rows forward, striking as you go.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('charge', () => this.engine.charge()); } },
-      { label: 'Fall Back (1 AP)', subtitle: 'Drop two rows back and raise your guard.', disabled: !canAfford(1), onSelect: () => { this.closeOverlay(); this.doAction('fall_back', () => this.engine.fallBack()); } },
-    ];
+    const menuItems: ChoiceMenuItem[] = activeSkills.map((id): ChoiceMenuItem => {
+      const sk = NAMED_SKILLS[id];
+      const costs: string[] = [];
+      if (sk.mpCost) costs.push(`${sk.mpCost} MP`);
+      if (sk.hpCost?.flat) costs.push(`${sk.hpCost.flat} HP`);
+      if (sk.hpCost?.pct) costs.push(`${sk.hpCost.pct}% HP`);
+      const mpOk = sk.mpCost ? (player.currentMP >= sk.mpCost) : true;
+      const hpOk = (sk.hpCost?.flat ?? 0) < player.currentHP && (!sk.hpCost?.pct || Math.round((sk.hpCost.pct / 100) * player.derived.maxHP) < player.currentHP);
+      const hpCost = (sk.hpCost?.flat ?? 0) + (sk.hpCost?.pct ? Math.max(1, Math.round((sk.hpCost.pct / 100) * player.derived.maxHP)) : 0);
+      return {
+        label: sk.name,
+        subtitle: `${sk.description}${sk.damageType ? ` (${sk.damageType})` : ''}${costs.length ? ` · ${costs.join(' ')}` : ''}`,
+        disabled: !canAct || !mpOk || !hpOk,
+        onSelect: () => { this.closeOverlay(); this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined), hpCost); },
+      };
+    });
+
+    if (menuItems.length === 0) {
+      this.tooltipPanel?.show('No techniques available.');
+      return;
+    }
 
     this.overlayBg?.destroy();
     this.overlayMenu?.destroy();
-this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive().setDepth(35);
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive().setDepth(35);
     this.overlayBg.on('pointerdown', () => this.closeOverlay());
     this.overlayMenu = createChoiceMenu(
       this,
       GAME_WIDTH / 2,
-      GAME_HEIGHT / 2,
+      GAME_HEIGHT / 2 - Math.min(menuItems.length - 1, 4) * 28,
       menuItems,
       { width: 520, spacing: 56 },
     );
     this.previewWindup();
   }
 
-  private doAction(type: string, fn: () => CombatSnapshot) {
-    if (this.enemyPhaseActive || this.transformCutscene) return;
+  private doAction(type: string, fn: () => CombatSnapshot, hpCost = 0) {
+    if (this.enemyPhaseActive || this.transformCutscene || this.qteActive) return;
     try {
       audio.click();
       const before = this.engine.snapshot();
@@ -768,9 +865,27 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
       const prevHP = this.lastPlayerHP;
       const prevEnemyHP = new Map(before.enemies.map((e) => [e.key, e.hp]));
       const snap = fn();
+
+      // Offensive actions park a pending QTE instead of resolving instantly: hold
+      // the player (grid locked, windup pose) and wait for the timing bar.
+      if (snap.qte && snap.phase === 'player') {
+        this.qteActive = true;
+        this.qteType = type;
+        this.qteTargetKey = snap.qte.targetKey;
+        this.qtePrevPlayerHP = prevHP;
+        this.qtePrevEnemyHP = prevEnemyHP;
+        this.qteHpCost = hpCost;
+        this.refresh(snap);
+        this.setPlayerPose('windup', false);
+        this.qteBar = createQteBar(this, QTE_BASE.x, QTE_BASE.y, {
+          slowed: snap.qte.slowed,
+          resolve: (quality) => this.resolvePendingQte(quality, snap.qte!.targetKey),
+        });
+        return;
+      }
       this.refresh(snap);
       if (this.transformCutscene) return;
-      this.animateAction(type, this.selectedTarget ?? undefined, snap, prevHP, prevEnemyHP);
+      this.animateAction(type, this.selectedTarget ?? undefined, snap, prevHP, prevEnemyHP, hpCost);
       this.maybeBeginRound();
     } catch (err) {
       console.error('doAction error:', err);
@@ -779,14 +894,38 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
     }
   }
 
-  private animateAction(type: string, targetKey: string | undefined, snap: CombatSnapshot, prevPlayerHP: number, prevEnemyHP: Map<string, number>) {
+  /** Called once the timing bar reports a quality: carry the strike through the engine. */
+  private resolvePendingQte(quality: QteQuality, targetKey: string) {
+    if (!this.qteActive) return;
+    this.qteActive = false;
+    if (this.qteBar) { this.qteBar.destroy(); this.qteBar = undefined; }
+    const prevHP = this.qtePrevPlayerHP;
+    const prevEnemyHP = this.qtePrevEnemyHP;
+    const type = this.qteType;
+    const hpCost = this.qteHpCost;
+    try {
+      const snap = this.engine.resolveQte(quality);
+      this.refresh(snap);
+      if (this.transformCutscene) return;
+            this.animateAction(type, targetKey, snap, prevHP, prevEnemyHP, hpCost, quality);
+      if (snap.phase !== 'player' || snap.actionUsed) this.maybeBeginRound();
+    } catch (err) {
+      console.error('resolveQte error:', err);
+      this.tooltipPanel?.show(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      this.recoverRoundChain();
+    }
+  }
+
+  private animateAction(type: string, targetKey: string | undefined, snap: CombatSnapshot, prevPlayerHP: number, prevEnemyHP: Map<string, number>, hpCost = 0, qte?: QteQuality) {
     const display = targetKey ? this.enemyKeyMap.get(targetKey) : undefined;
+    let dealtAny = false;
     const showAllEnemyDamage = () => {
       for (const e of snap.enemies) {
         const before = prevEnemyHP.get(e.key);
         if (before === undefined || before === e.hp) continue;
         const ed = this.enemyKeyMap.get(e.key);
         if (!ed) continue;
+        dealtAny = true;
         if (e.hp < before) {
           const dmgColor = e.lastHitType ? (DAMAGE_TYPE_HEX[e.lastHitType] ?? PALETTE_HEX.danger) : PALETTE_HEX.danger;
           this.floatingText(ed.container.x, ed.container.y - 55, `-${before - e.hp}`, dmgColor);
@@ -796,6 +935,14 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
         } else {
           this.floatingText(ed.container.x, ed.container.y - 55, `+${e.hp - before}`, PALETTE_HEX.ok);
         }
+      }
+      // Impact audio follows actual damage — a missed window that still connects
+      // gets the normal hit; only a true no-contact gets the miss cue.
+      if (dealtAny) {
+        if (qte === 'perfect') audio.critHit();
+        else audio.hit();
+      } else if (qte === 'miss') {
+        audio.miss();
       }
     };
     this.showBanners(snap);
@@ -876,12 +1023,17 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
         break;
       }
     }
-    if (snap.playerHP < prevPlayerHP && type !== 'withdraw') {
+    // HP lost beyond the skill's own cost is real damage; the cost itself is a
+    // price, not a hit — never present it with the damage-taken feedback.
+    const hpLost = prevPlayerHP - snap.playerHP;
+    const netDamage = hpLost - hpCost;
+    if (netDamage > 0 && type !== 'withdraw') {
       audio.damageTaken();
       this.setPlayerPose('hit');
       if (this.statPanel) this.flashTarget(this.statPanel.container, 0xb0453f);
-      const dmg = prevPlayerHP - snap.playerHP;
-      this.floatingText(this.fxAnchor.x, this.fxAnchor.y, `-${dmg}`, PALETTE_HEX.danger);
+      this.floatingText(this.fxAnchor.x, this.fxAnchor.y, `-${netDamage}`, PALETTE_HEX.danger);
+    } else if (hpCost > 0) {
+      this.floatingText(this.fxAnchor.x, this.fxAnchor.y - 26, `-${hpCost} HP (cost)`, PALETTE_HEX.player);
     }
     this.lastPlayerHP = snap.playerHP;
 
@@ -1059,20 +1211,42 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
     disp.playSequence([this.sentinelTransformed ? 'enemy_sentinel_victory2' : 'enemy_sentinel_victory1'], 350);
   }
 
-  /** Player victorious: play the sentinel's defeat animation, then continue. */
-  private playSentinelDefeat(onDone: () => void): void {
-    if (this.sceneData.bossId !== 'sentinel') {
+  /** Boss defeated: play its defeat1→defeat2→defeat3 sequence when the art exists,
+ *  otherwise a readable fade-and-sink death beat, then continue to the aftermath. */
+  private playBossDefeat(onDone: () => void): void {
+    if (this.sceneData.mode !== 'boss') {
       onDone();
       return;
     }
-    const disp = this.enemyDisplays.find((d) => d.defId === 'sentinel');
+    const disp = this.enemyDisplays.find((d) => d.defId === this.sceneData.bossId)
+      ?? this.enemyDisplays.find((d) => d.container.visible);
     if (!disp) {
       onDone();
       return;
     }
     disp.container.setVisible(true);
     disp.nameGroup.setVisible(true);
-    disp.playSequence(['enemy_sentinel_defeat1', 'enemy_sentinel_defeat2', 'enemy_sentinel_defeat3'], 400, onDone);
+
+    const frames = [
+      `enemy_${disp.defId}_defeat1`,
+      `enemy_${disp.defId}_defeat2`,
+      `enemy_${disp.defId}_defeat3`,
+    ].filter((f) => this.textures.exists(f));
+    if (frames.length === 3) {
+      disp.playSequence(frames, 400, onDone);
+      return;
+    }
+
+    // Fallback death beat while per-boss defeat art is still pending.
+    this.cameras.main.shake(200, 0.006);
+    this.tweens.add({
+      targets: [disp.container, disp.nameGroup],
+      alpha: 0.22,
+      y: '+=20',
+      duration: 900,
+      ease: 'Sine.easeIn',
+      onComplete: () => onDone(),
+    });
   }
 
   private shakeTarget(container: Phaser.GameObjects.Container, intensity = 6): void {
@@ -1163,40 +1337,82 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
     this.overlayMenu?.destroy();
     this.overlayTexts.forEach((t) => t.destroy());
     this.overlayTexts = [];
+    this.scanPanel?.destroy();
+    this.scanPanel = undefined;
     this.overlayBg = undefined;
     this.overlayMenu = undefined;
   }
 
-  private openProbeMenu() {
+  private openScanModal() {
     const snap = this.engine.snapshot();
-    if (snap.phase !== 'player' || !this.selectedTarget) return;
-    const target = this.selectedTarget;
-    this.overlayBg?.destroy();
-    this.overlayMenu?.destroy();
-    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive().setDepth(35);
+    if (snap.phase !== 'player' || this.enemyPhaseActive || this.transformCutscene) return;
+    const targetKey = this.selectedTarget ?? snap.enemies.find((e) => e.alive)?.key ?? null;
+    if (!targetKey) return;
+    const view = snap.enemies.find((e) => e.key === targetKey);
+    const info = this.engine.getScanInfo(targetKey);
+    if (!view || !info) return;
+
+    this.closeOverlay();
+    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive().setDepth(35);
     this.overlayBg.on('pointerdown', () => this.closeOverlay());
-    const probes: Array<{ id: string; label: string; subtitle: string }> = [
-      { id: 'observe_body', label: 'Observe Body', subtitle: 'Exact stats and every damage multiplier.' },
-      { id: 'observe_mind', label: 'Observe Mind', subtitle: 'Pattern, tendency triggers, phase timing.' },
-      { id: 'observe_weapon', label: 'Observe Weapon', subtitle: 'Attack type and next move in detail.' },
-      { id: 'observe_memory', label: 'Observe Memory', subtitle: 'Lore and weakness hints.' },
-      { id: 'observe_resonance', label: 'Observe Resonance', subtitle: 'Boss phase thresholds.' },
-      { id: 'observe_behavior', label: 'Observe Behavior', subtitle: 'Full action pool and tells.' },
-    ];
-    this.overlayMenu = createChoiceMenu(
-      this,
-      GAME_WIDTH / 2,
-      GAME_HEIGHT / 2,
-      probes.map((p) => ({
-        label: p.label,
-        subtitle: p.subtitle,
-        onSelect: () => {
-          this.closeOverlay();
-          this.doAction('probe', () => this.engine.probe(target, p.id));
-        },
-      })),
-      { width: 460, spacing: 56 },
-    );
+
+    const PANEL_W = 620;
+    const panel = this.add.container(SCAN_BASE.x, SCAN_BASE.y).setDepth(36);
+    const back = this.add.rectangle(0, 0, PANEL_W, 376, 0x14171b, 0.96).setStrokeStyle(2, 0xc9a24b).setOrigin(0.5);
+    panel.add(back);
+
+    panel.add(this.add.text(0, -150, `SCAN — ${view.name}`, { fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.gold, fontStyle: 'bold' }).setOrigin(0.5));
+    panel.add(this.add
+      .text(0, -116, `LV ${view.level}    ·    MAX HP ${info.maxHp}    ·    MAX MP ${info.maxMp}`, {
+        fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone, align: 'center',
+      })
+      .setOrigin(0.5));
+
+    // 8 affinity chips — unknown slots render as dim `*`.
+    const chipW = 58;
+    const chipStart = -4 * chipW - chipW / 2;
+    const chips: Phaser.GameObjects.GameObject[] = [this.add
+      .text(-PANEL_W / 2 + 18, -86, 'AFFINITIES', { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted })
+      .setOrigin(0, 0.5)];
+    for (let i = 0; i < DAMAGE_TYPES.length; i++) {
+      const t = DAMAGE_TYPES[i];
+      const known = view.knownSlots.includes(t);
+      const kind = known ? (view.affinities[t] ?? '-') : undefined;
+      const cx = chipStart + i * chipW + chipW / 2;
+      const chipBg = this.add.rectangle(cx, -44, chipW - 6, 22, 0x21252c).setStrokeStyle(1, 0x3a3f46).setOrigin(0.5);
+      const top = this.add
+        .text(cx, -52, DAMAGE_TYPE_ABBREV[t], { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted })
+        .setOrigin(0.5);
+      const resultText = known && kind ? kind.toUpperCase() : '?';
+      const resultColor = known && kind ? `#${AFFINITY_HEX[kind].toString(16).padStart(6, '0')}` : '#555555';
+      const result = this.add
+        .text(cx, -38, resultText, {
+          fontFamily: FONT_MONO,
+          fontSize: '12px',
+          fontStyle: 'bold',
+          color: resultColor,
+        })
+        .setOrigin(0.5);
+      chips.push(chipBg, top, result);
+    }
+    panel.add(chips);
+
+    panel.add(this.add.text(-PANEL_W / 2 + 18, -8, 'MOVE POOL', { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted }).setOrigin(0, 0.5));
+    info.moves.forEach((m, i) => {
+      const y = 22 + i * 34;
+      panel.add(this.add
+        .text(-PANEL_W / 2 + 24, y, m.label, { fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.gold })
+        .setOrigin(0, 0.5));
+      panel.add(this.add
+        .text(-PANEL_W / 2 + 24 + 150, y, m.description || '', { fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted, wordWrap: { width: PANEL_W - 190 } })
+        .setOrigin(0, 0.5));
+    });
+
+    panel.add(this.add
+      .text(0, 376 / 2 - 16, 'Click anywhere to close — Scan costs nothing.', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted })
+      .setOrigin(0.5));
+    panel.setSize(PANEL_W, 376);
+    this.scanPanel = panel;
   }
 
   private showInsightModal() {
@@ -1323,14 +1539,7 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
 
   private beginNextRound() {
     try {
-      const prevHP = this.lastPlayerHP;
       const next = this.engine.beginRound();
-      if (next.lastActors.length > 0) {
-        this.enemyPhaseActive = true;
-        this.enemyPhaseLeadIn = 0;
-        this.displayedPlayerHP = prevHP;
-        this.afterEnemyPhase = undefined;
-      }
       this.refresh(next);
       this.lastPlayerHP = next.playerHP;
     } catch (err) {
@@ -1417,7 +1626,8 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
     audio.victory();
     this.setPlayerPose('victory');
     player.enemiesKilled += this.engine.getEnemiesKilled();
-    store.commitArchiveGains(this.engine.getArchiveGains());
+    store.commitDiscoveries(this.engine.getDiscoveryGains() as Record<string, import('@data/types').EnemyAffinities>);
+    store.commitBestiaryKills(this.engine.getKillsByDef());
     const xp = this.engine.getXpEarned();
     const levelsGained = store.addXp(xp);
 
@@ -1425,8 +1635,9 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
       player.bossesDefeated.push(this.sceneData.bossId);
       store.recordCheckpoint();
       store.persist();
-      this.playSentinelDefeat(() => {
-        fadeToScene(this, 'Landmark', { stage: 'aftermath', bossId: this.sceneData.bossId, combatFlags: this.engine.getFlags() });
+      this.playBossDefeat(() => {
+        // Hold the death beat on screen before cutting to the aftermath.
+        this.time.delayedCall(700, () => fadeToScene(this, 'Landmark', { stage: 'aftermath', bossId: this.sceneData.bossId, combatFlags: this.engine.getFlags() }));
       });
       return;
     }
@@ -1479,7 +1690,6 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
       },
       () => {
         modal.destroy();
-        useGameStore.getState().awardSkillPoint();
         onDone();
       },
       () => { modal.destroy(); onDone(); },
@@ -1561,15 +1771,10 @@ this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH,
     this.setupLayoutDrag(this.battlefieldLabelText!, 'battlefieldLabel', BATTLEFIELD_LABEL_BASE);
     this.setupLayoutDrag(this.statPanel!.container, 'statPanel', STAT_PANEL_BASE, 258.7, 106);
     this.setupLayoutDrag(this.playerRowText!, 'playerRow', PLAYER_ROW_BASE);
-    this.setupLayoutDrag(this.apPips!.container, 'apPips', AP_PIPS_BASE, 184.7, 32.7);
-    this.setupLayoutDrag(this.insightText!, 'insightText', INSIGHT_TEXT_BASE);
-    this.setupLayoutDrag(this.insightBtn!.container, 'insightBtn', INSIGHT_BTN_BASE, 130, 28);
-    this.insightBtn!.container.list.forEach((o) => o.disableInteractive());
     this.setupLayoutDrag(this.playerSprite!, 'playerSprite', PLAYER_SPRITE_BASE);
     this.allyDisplay && this.setupLayoutDrag(this.allyDisplay.container, 'allySprite', ALLY_SPRITE_BASE, 170, 200);
     this.setupLayoutDrag(this.playerShadow!, 'playerShadow', PLAYER_SHADOW_BASE);
     this.setupLayoutDrag(this.tooltipPanel!.container, 'tooltipPanel', TOOLTIP_PANEL_BASE, 534.7, 61.2);
-    this.combatLogPanel && this.setupLayoutDrag(this.combatLogPanel.container, 'combatLog', COMBAT_LOG_BASE, COMBAT_LOG_HIT.w, COMBAT_LOG_HIT.h);
     this.setupLayoutDrag(this.turnOrderPanel!.container, 'turnOrder', TURN_ORDER_BASE, 135.3, 156.5);
 
     const rowCenter = ENEMY_ROW_CENTER;

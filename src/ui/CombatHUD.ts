@@ -70,6 +70,12 @@ export function createEnemyDisplay(
     })
     .setOrigin(0.5, 0.5);
   nameGroup.add([namePill, nameText]);
+  const downedPill = scene.add.container(0, 102).setVisible(false);
+  const downedBg = scene.add.rectangle(0, 0, 76, 18, 0x0b0d10, 0.85).setStrokeStyle(1, 0xc9a24b).setOrigin(0.5);
+  const downedText = scene.add
+    .text(0, 0, 'DOWNED', { fontFamily: FONT_MONO, fontSize: '11px', color: '#e9c876', fontStyle: 'bold' })
+    .setOrigin(0.5);
+  downedPill.add([downedBg, downedText]);
   const hpBg = scene.add.rectangle(-BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0x0b0d10, 0.45).setOrigin(0, 0.5);
   const hpFg = scene.add.rectangle(-BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0xb10000).setOrigin(0, 0.5).setStrokeStyle(1, 0x0b0d10);
   const diamond = scene.add.graphics({ x: 0, y: DIAMOND_Y });
@@ -81,7 +87,7 @@ export function createEnemyDisplay(
     { x: -12, y: 0 },
   ], true);
   diamond.setVisible(false);
-  container.add([shadow, token, hpBg, hpFg, diamond]);
+  container.add([shadow, token, hpBg, hpFg, downedPill, diamond]);
   token.on('pointerdown', onClick);
   token.on('pointerover', () => { if (!selected) token.setScale(baseScaleX * 1.06, baseScaleY * 1.06); });
   token.on('pointerout', () => { if (!selected) token.setScale(baseScaleX, baseScaleY); });
@@ -200,11 +206,12 @@ export function createEnemyDisplay(
       }
       container.setVisible(view.alive);
       nameGroup.setVisible(view.alive);
-      nameText.setText(view.tendency ? `${view.tendency} ${view.name}` : view.name);
+      downedPill.setVisible(view.alive && view.statuses.some((s) => s.id === 'downed'));
+      nameText.setText((view as unknown as Record<string, unknown>).tendency ? `${(view as unknown as Record<string, unknown>).tendency} ${view.name}` : view.name);
       fitNamePill(namePill, nameText);
       const pct = Math.max(0, view.hp / view.maxHp);
       hpFg.width = BAR_W * pct;
-      if (view.weakWindowTurns > 0) {
+      if ((view.weakWindowTurns ?? 0) > 0) {
         token.setTint(0xc9a24b);
         if (!wasWindowOpen) {
           wasWindowOpen = true;
@@ -245,11 +252,11 @@ export interface ApPipsHandle {
 const PIP_XS = [-42, -15.3, 11.4, 38.1, 64.8];
 const PIP_R = 7;
 
-export function createApPips(scene: Phaser.Scene, x: number, y: number): ApPipsHandle {
+export function createApPips(scene: Phaser.Scene, x: number, y: number, labelText = 'AP'): ApPipsHandle {
   const container = scene.add.container(x, y).setDepth(10);
   const outer = scene.add.rectangle(0, 0, 184.7, 32.7, 0xc9a24b).setStrokeStyle(2, 0x0b0d10).setOrigin(0.5);
   const inner = scene.add.rectangle(0, 0, 178.7, 27.3, 0x0b0d10).setOrigin(0.5);
-  const label = scene.add.text(-72, 3.5, 'AP', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+  const label = scene.add.text(-72, 3.5, labelText, { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold }).setOrigin(0.5);
   const dots: Phaser.GameObjects.Arc[] = [];
   for (const px of PIP_XS) {
     const d = scene.add.circle(px, 0, PIP_R, 0x0b0d10).setStrokeStyle(2, 0xc9a24b);

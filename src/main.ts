@@ -15,7 +15,7 @@ import { EndingScene } from '@scenes/EndingScene';
 import { GameOverScene } from '@scenes/GameOverScene';
 import { SettingsScene } from '@scenes/SettingsScene';
 import { InventoryScene } from '@scenes/InventoryScene';
-import { SkillTreeScene } from '@scenes/SkillTreeScene';
+import { LoadoutScene } from '@scenes/LoadoutScene';
 import { TutorialScene } from '@scenes/TutorialScene';
 import { PathPointPickerScene } from '@scenes/PathPointPickerScene';
 import { NodePreviewScene } from '@scenes/dev/NodePreviewScene';
@@ -50,7 +50,7 @@ const config: Phaser.Types.Core.GameConfig = {
     GameOverScene,
     SettingsScene,
     InventoryScene,
-    SkillTreeScene,
+    LoadoutScene,
     PathPointPickerScene,
     NodePreviewScene,
   ],

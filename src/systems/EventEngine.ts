@@ -26,7 +26,6 @@ export function buildEventCtx(player: PlayerState, rng: () => number): EventAppl
       const { newLevel, levelsGained } = computeLevelUp(player.xp, player.level);
       if (levelsGained > 0) {
         player.level = newLevel;
-        player.skillPoints += levelsGained;
       }
     },
   };

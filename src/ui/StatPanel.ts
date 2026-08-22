@@ -77,16 +77,12 @@ export function createStatPanel(scene: Phaser.Scene, x: number, y: number): Stat
   const mpText = scene.add.text(valueX, 13, '', { fontFamily: FONT_MONO, fontSize: '10px', color: '#64b5f5', ...STROKE }).setOrigin(1, 0.5);
 
   const momentumLabel = scene.add.text(labelX, 38.7, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '10px', color: PALETTE_HEX.gold, ...STROKE }).setOrigin(0, 0.5);
-  const momentumDots: Phaser.GameObjects.Arc[] = [];
-  for (let i = 0; i < 3; i++) {
-    momentumDots.push(scene.add.circle(-20.7 + i * 21.2, 38.7, 3.5, 0x0b0d10).setStrokeStyle(1, 0x0b0d10));
-  }
-  const fatigueText = scene.add.text(valueX, 38.7, '', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.gold, ...STROKE }).setOrigin(1, 0.5);
+  const momentumBar = bar(scene, container, -68.7, 38.7, barW, 9.7, 0xb967bc);
 
   container.add([
     headerText, levelText,
     xpLabel, xpText, hpLabel, hpText, mpLabel, mpText,
-    momentumLabel, fatigueText, ...momentumDots,
+    momentumLabel,
   ]);
 
   return {
@@ -103,8 +99,7 @@ export function createStatPanel(scene: Phaser.Scene, x: number, y: number): Stat
       hpText.setText(`${player.currentHP}/${player.derived.maxHP}`);
       mpBar.setPct(player.currentMP / Math.max(1, player.derived.maxMP));
       mpText.setText(`${player.currentMP}/${player.derived.maxMP}`);
-      momentumDots.forEach((d, i) => d.setFillStyle(i < Math.max(0, Math.min(3, player.momentum)) ? 0xb967bc : 0x0b0d10));
-      fatigueText.setText(`FAT ${Math.round(player.fatigue)}%`);
+      momentumBar.setPct(Math.max(0, Math.min(1, player.momentum / 5)));
     },
     destroy: () => container.destroy(),
   };

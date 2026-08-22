@@ -13,7 +13,7 @@ import { resolveTrap } from '@systems/EventEngine';
 import { TRAPS } from '@data/events';
 import { sanitizeFightEnemies } from '@data/enemies';
 import { MINOR_LANDMARKS } from '@data/minorLandmarks';
-import { DISCOVERABLE_SKILLS } from '@data/skills';
+import { DISCOVERABLE_SKILLS, NAMED_SKILLS } from '@data/skills';
 import { shardsForNodeVisit, applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
 import { createDiceRoller } from '@ui/DiceRoller';
@@ -325,8 +325,8 @@ export class BoardScene extends Phaser.Scene {
       { icon: 'icon_character', label: 'Character', onClick: () => fadeToScene(this, 'Inventory') },
       { icon: 'icon_codex', label: 'Codex', onClick: () => fadeToScene(this, 'LoreCodex') },
       {
-        icon: 'icon_skills', label: 'Skills', onClick: () => fadeToScene(this, 'SkillTree'),
-        badge: () => { const p = useGameStore.getState().player; return p && p.skillPoints > 0 ? String(p.skillPoints) : null; },
+        icon: 'icon_skills', label: 'Loadout', onClick: () => fadeToScene(this, 'Loadout'),
+        badge: () => null,
       },
       { icon: 'icon_shop', label: 'Shop', onClick: () => fadeToScene(this, 'ShardShop') },
       { icon: 'icon_menu', label: 'Menu', onClick: () => fadeToScene(this, 'Menu') },
@@ -672,7 +672,7 @@ export class BoardScene extends Phaser.Scene {
     const enemies = sanitizeFightEnemies(
       hostileKey && AMBUSH_TABLE[hostileKey] ? AMBUSH_TABLE[hostileKey] : ['sable_zealot', 'sable_zealot'],
       page,
-      Math.random,
+      player.resonance,
     );
     useGameStore.setState({ game: { ...game, pendingNodeIndex: target } });
 
@@ -763,6 +763,17 @@ export class BoardScene extends Phaser.Scene {
     useGameStore.setState({
       game: { ...game, currentNodeIndex: target, currentPage: page, path: [...game.path, target], landings: game.landings + 1, nodes: updatedNodes, deathNodeIndex: null },
     });
+
+    // Chapter loadout unlocks (revamp): crossing into a new chapter grants its skills.
+    if (nextChapter > prevChapter) {
+      const learned = useGameStore.getState().grantChapterSkills(nextChapter);
+      if (learned.length > 0) {
+        const names = learned.map((id) => NAMED_SKILLS[id]?.name ?? id).join(', ');
+        this.log(`New techniques surface in your memory: ${names}.`);
+        audio.levelUp();
+      }
+    }
+
     this.drawBoard(updatedNodes, page);
     this.playerPanel?.update(player);
     this.factionPanel?.update(player.faction);
