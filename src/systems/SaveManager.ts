@@ -1,8 +1,8 @@
 import type { GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
-import { CLASS_OF_PRESET, closestPresetName } from '@data/stats';
+import { MAX_EQUIPPED_SKILLS } from '@data/types';
 
 const STORAGE_KEY = 'hollow_beneath_save_v1';
-const VERSION = 5;
+const VERSION = 6;
 
 function simpleChecksum(payload: string): string {
   let hash = 0;
@@ -23,7 +23,8 @@ export function defaultMeta(): MetaState {
     bossesEverDefeated: [],
     deathCount: 0,
     lastRunStats: null,
-    enemyArchive: {},
+    discoveredAffinities: {},
+    bestiaryKills: {},
   };
 }
 
@@ -41,22 +42,34 @@ export function saveGame(meta: MetaState, activeRun: SaveBlob['activeRun']): voi
   }
 }
 
-/** Upgrades older save blobs to the current VERSION by injecting defaults for new player fields. */
+/**
+ * Upgrades older save blobs to the current VERSION.
+ * v6 = combat revamp: classes/AP/fatigue/insight/fear/position/skill points are gone;
+ * skills use a 6-slot equipped loadout; meta gains Bestiary discovery records.
+ */
 function migrateBlob(blob: SaveBlob): SaveBlob {
   if (blob.version >= VERSION) return blob;
-  const player = blob.activeRun?.player as (PlayerState & Record<string, unknown>) | null | undefined;
+  const player = blob.activeRun?.player as ((PlayerState & Record<string, unknown>) & { skillPoints?: unknown }) | null | undefined;
   if (player) {
-    if (!player.classId) player.classId = CLASS_OF_PRESET[closestPresetName(player.stats)] ?? 'balanced';
-    if (typeof player.fatigue !== 'number') player.fatigue = 0;
-    if (typeof player.insight !== 'number') player.insight = 0;
-    if (typeof player.fearGauge !== 'number') player.fearGauge = 0;
-    if (!player.position) player.position = 'middle';
-    // Phase 5: v3 saves predate companions.
+    // Legacy fields are dropped silently — the revamp removed them outright.
+    delete (player as Record<string, unknown>).classId;
+    delete (player as Record<string, unknown>).fatigue;
+    delete (player as Record<string, unknown>).insight;
+    delete (player as Record<string, unknown>).fearGauge;
+    delete (player as Record<string, unknown>).position;
+    player.skillPoints = undefined;
+    if (!Array.isArray(player.skillsKnown)) player.skillsKnown = [];
+    // First loadout: the six most recently learned skills.
+    if (!Array.isArray(player.equippedSkills)) {
+      player.equippedSkills = player.skillsKnown.slice(-MAX_EQUIPPED_SKILLS);
+    }
     if (!Array.isArray(player.companions)) player.companions = [];
   }
-  // Phase 6c: v4 saves predate the persistent enemy archive.
-  if (blob.meta && (!blob.meta.enemyArchive || typeof blob.meta.enemyArchive !== 'object')) {
-    blob.meta = { ...blob.meta, enemyArchive: {} };
+  if (blob.meta) {
+    const m = blob.meta as MetaState & Record<string, unknown>;
+    if (!m.discoveredAffinities || typeof m.discoveredAffinities !== 'object') m.discoveredAffinities = {};
+    if (!m.bestiaryKills || typeof m.bestiaryKills !== 'object') m.bestiaryKills = {};
+    delete m.enemyArchive;
   }
   blob.version = VERSION;
   return blob;

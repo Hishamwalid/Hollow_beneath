@@ -1,6 +1,13 @@
 # THE HOLLOW BENEATH — Artist Asset Overview
 
-*What every texture key in the code should become. All visuals are currently procedurally generated shapes; this document maps each key to its target art asset.*
+*What every texture key in the code should become. Most visuals are still procedurally generated shapes, but the first production batch is integrated; this document maps each remaining key to its target art asset.*
+
+> **DELIVERED SO FAR (August 2026):** fonts (Cinzel / IM Fell English / Courier Prime),
+> player combat frame set (7 poses + face + board pin), Dust Wight + Echo Skeleton sets,
+> Argent Sentinel animation set (17 frames incl. transform/victory/defeat), chapter maps
+> `map1–map5`, `stage1_background` (hand-authored Stage 1 board), 3 stage-1 combat
+> backgrounds, book panel UI, one board token. See
+> `docs/ART_ASSET_CHECKLIST_DETAILED.md` §0/§6/§9 for per-file status.
 
 ---
 
@@ -122,15 +129,17 @@ public/assets/
 
 ## Recommended Priority Order
 
-1. **Fonts** — Swap Georgia→Crimson Text, Courier New→VT323 (2 files, highest impact per effort)
-2. **UI panels** — Unified stone/parchment texture on all 12 panels (frames every single screen)
+*(Updated August 2026 — items 1 and 6 are done; stage-1 art batch is in.)*
+
+1. ~~**Fonts**~~ — ✅ Delivered: Cinzel / IM Fell English / Courier Prime (WOFF2, `Hollow*` families)
+2. **UI panels** — Unified stone/parchment texture on all 12 panels (frames every single screen; book panel already delivered as the reference style)
 3. **Title screen** — One background, outsized first-impression impact
-4. **Lyra Vane** board token (56×56 face of the game)
+4. ~~**Lyra Vane combat frames**~~ — ✅ Delivered (7 poses + face + board pin); board token (`tok_player`) still open
 5. **Node icons** — Legibility polish on 6 existing shapes
-6. **2–3 sample enemy sprites** to lock the pipeline before mass-producing 12
-7. **Remaining enemies + all 5 bosses**
-8. **SFX** — 17 wired cues + 5 new ones = 22 total (or source audio files for the composer)
-9. **Page backgrounds** — 10 backgrounds for 20 pages (paired)
+6. ~~**Sample enemy sprites**~~ — ✅ Delivered for stage 1: Dust Wight + Echo Skeleton + full Argent Sentinel set; **continue with remaining stages 2–5 enemies + other 4 bosses**
+7. **Remaining enemies + bosses** — 10 standard + 4 boss sprite sets (follow the Sentinel frame pattern: idle/attack/hit/guard/victory/transform/defeat + faces)
+8. **SFX** — 22 wired cues still synthesized (or source audio files for the composer); no music yet
+9. **Board backgrounds for stages 2–5** — follow the delivered Stage 1 pattern (`stage<N>_background` + path JSON via PathPointPickerScene)
 10. **Faction emblems, particles, remaining UI icons**
 
 ---

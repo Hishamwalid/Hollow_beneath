@@ -1,6 +1,12 @@
 # THE HOLLOW BENEATH — Full Overhaul Plan
 ### Storytelling × Understandability × Fun
 
+> **STATUS: HISTORICAL — COMPLETE (2026).** Phases 0/A/B/C/D below were all implemented and
+> verified during the content + audit passes (see docs/CHANGELOG_CONTENT_PASS.md). The combat
+> system has since been replaced wholesale by the Echo Combat Architecture — current plan and
+> status live in **docs/BATTLE_ROADMAP.md** (complete) and **docs/AGENTS.md** §13. Keep this
+> file as a design record; do not treat open items here as pending work.
+
 Based on comparison between current codebase and the GDD v2 specification (see `docs/THE_HOLLOW_BENEATH_Art_Audio_Asset_Checklist.md` for the reconciled asset inventory).
 
 ---

@@ -1,16 +1,14 @@
 /**
- * PART 5 — ALLY TRACKING (Phase 5).
- * Persisted across encounters: loyalty, corruption resistance per region,
- * and any bond flags an ally has accumulated (revives used, signatures shown).
- * Pure functions operate on plain state so save/load and tests stay trivial.
+ * ALLY TRACKING — non-combat companion meta (revamp: allies no longer fight).
+ * Persists loyalty, region bonds and narrative hooks for recruitment flavor
+ * and shard rewards. Pure functions so save/load and tests stay trivial.
  */
 import type { CompanionState } from '@data/types';
 import { ALLY_DEFS, LOYALTY_MAX, tierForLoyalty, type AllyId } from './AllyDefs';
 
-/** Region a companion is anchored to in the save (their "home" node / estate wing). */
+/** Region a companion is anchored to in the save. */
 export type BoundRegion = 'keth_vor' | 'dominion' | 'sable_edge' | 'covenant_deep';
 
-/** Persisted companion record (defined in the data layer for save compatibility). */
 export type AllySaveState = CompanionState;
 
 export function freshAllyState(id: AllyId): AllySaveState {
@@ -18,7 +16,6 @@ export function freshAllyState(id: AllyId): AllySaveState {
     id,
     loyalty: 0,
     spentHooks: [],
-    combatCooldowns: [],
     boundRegions: [],
     battlesTogether: 0,
   };
@@ -31,13 +28,12 @@ export function mergeAllyStates(base: AllySaveState | undefined, incoming: AllyS
     ...incoming,
     loyalty: Math.max(0, Math.min(LOYALTY_MAX, incoming.loyalty)),
     spentHooks: [...new Set([...base.spentHooks, ...incoming.spentHooks])],
-    combatCooldowns: [...incoming.combatCooldowns],
     boundRegions: [...new Set([...base.boundRegions, ...incoming.boundRegions])],
     battlesTogether: Math.max(base.battlesTogether, incoming.battlesTogether),
   };
 }
 
-/** Loyalty earned from an engagement: better on a win, sweetened by bonds. Returns the raw delta. */
+/** Loyalty earned from fighting alongside the player in spirit (win/loss). */
 export function loyaltyGain(state: AllySaveState, won: boolean): number {
   const winBonus = won ? 12 : 4;
   const bondBonus = state.boundRegions.length > 0 ? 4 : 0;
@@ -46,40 +42,10 @@ export function loyaltyGain(state: AllySaveState, won: boolean): number {
   return delta;
 }
 
-/** Corruption decay: allies shed a small fraction of dread each rest (faster when loyal). */
-export function corruptionDecay(state: AllySaveState): number {
-  return Math.max(0, Math.round(0.5 + state.loyalty / 10));
-}
-
-/** Faster gains in the region the ally bonded with (used by lore events). */
-export function regionBondMultiplier(state: AllySaveState, region: BoundRegion): number {
-  return state.boundRegions.includes(region) ? 1.5 : 1;
-}
-
-/** Grants a bond in a region if not already held; small loyalty bump for the trust shown. */
+/** Grants a bond in a region if not already held; small loyalty bump for trust shown. */
 export function bindRegion(state: AllySaveState, region: BoundRegion): AllySaveState {
   if (state.boundRegions.includes(region)) return state;
   return { ...state, boundRegions: [...state.boundRegions, region], loyalty: Math.min(LOYALTY_MAX, state.loyalty + 5) };
-}
-
-/** Marks/clears combat cooldowns that gate once-per-fight ally abilities. */
-export function hasCooldown(state: AllySaveState, abilityId: string): boolean {
-  return state.combatCooldowns.includes(abilityId);
-}
-
-export function setCooldown(state: AllySaveState, abilityId: string, used: boolean): AllySaveState {
-  if (used && !state.combatCooldowns.includes(abilityId)) {
-    return { ...state, combatCooldowns: [...state.combatCooldowns, abilityId] };
-  }
-  if (!used) {
-    return { ...state, combatCooldowns: state.combatCooldowns.filter((c) => c !== abilityId) };
-  }
-  return state;
-}
-
-/** Whether the ally accompanies the player into combat (nominal loyalty). */
-export function accompaniesIn(loyalty: number): boolean {
-  return loyalty >= 15;
 }
 
 /** Marks a hook with a given id (once-per-bond narrative events). */

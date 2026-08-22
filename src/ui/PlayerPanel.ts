@@ -1,6 +1,5 @@
 import Phaser from 'phaser';
 import type { PlayerState } from '@data/types';
-import { CLASSES } from '@data/classes';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 
 function bar(
@@ -48,10 +47,9 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
 
   const infoY = portraitY + portraitSize + 14;
   const levelText = scene.add.text(16, infoY, 'Level 1', { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold });
-  const classText = scene.add.text(width - 16, infoY, '', { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted }).setOrigin(1, 0);
-  const skillPointsText = scene.add.text(16, infoY + 20, 'Skill Points: 0', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted });
-  const shardsText = scene.add.text(16, infoY + 38, 'Echo Shards: 0', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold });
-  container.add([levelText, classText, skillPointsText, shardsText]);
+  const skillsText = scene.add.text(width - 16, infoY, '', { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted }).setOrigin(1, 0);
+  const shardsText = scene.add.text(16, infoY + 20, 'Echo Shards: 0', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold });
+  container.add([levelText, skillsText, shardsText]);
 
   const barsY = infoY + 64;
   const barW = width - 92;
@@ -76,9 +74,7 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
     container,
     update: (player: PlayerState) => {
       levelText.setText(`Level: ${player.level}`);
-      const cls = CLASSES.find((c) => c.id === player.classId);
-      classText.setText(cls?.archetype ?? cls?.name ?? '');
-      skillPointsText.setText(`Skill Points: ${player.skillPoints}`);
+      skillsText.setText(`Loadout ${player.equippedSkills.length}/6`);
       shardsText.setText(`Echo Shards: ${player.echoShards}`);
       hpBar.setPct(player.currentHP / Math.max(1, player.derived.maxHP));
       hpText.setText(`${player.currentHP}/${player.derived.maxHP}`);

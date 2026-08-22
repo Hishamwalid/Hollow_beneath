@@ -1,4 +1,4 @@
-import type { ClassId, DerivedStats, Equipment, StatBlock } from './types';
+import type { DerivedStats, Equipment, StatBlock } from './types';
 import { ITEMS } from './items';
 
 export const POINT_BUY_TOTAL = 30;
@@ -52,16 +52,6 @@ export const PRESET_BUILDS: Record<string, StatBlock> = {
   Ranger: { str: 5, dex: 10, con: 4, int: 4, will: 7 },
   Guardian: { str: 6, dex: 4, con: 10, int: 3, will: 7 },
   Shadow: { str: 4, dex: 7, con: 5, int: 6, will: 8 },
-};
-
-/** Class-locked identity per preset (Ultimate Battle System Part 8). */
-export const CLASS_OF_PRESET: Record<string, ClassId> = {
-  Balanced: 'balanced',
-  Warrior: 'warrior',
-  Scholar: 'scholar',
-  Ranger: 'ranger',
-  Guardian: 'guardian',
-  Shadow: 'shadow',
 };
 
 const STAT_KEYS: Array<keyof StatBlock> = ['str', 'dex', 'con', 'int', 'will'];

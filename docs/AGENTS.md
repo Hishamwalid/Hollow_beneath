@@ -8,7 +8,7 @@
 
 - **Name**: THE HOLLOW BENEATH
 - **Version**: `0.1.0-mvp` (`package.json`)
-- **State**: MVP with placeholder art/audio — all visuals are procedural shapes, all SFX are Web Audio tones
+- **State**: Post "Echo" revamp (`docs/COMBAT_SYSTEM_REVAMP.md`) — solo, one action/turn, QTE + Scan/discrete affinities, chapter loadouts; Battle UI layout & action images unchanged via compat shims. The prior architecture had placeholder shapes/tones plus the Stage 1 hand-authored map; real fonts + Stage 1 art integrated
 - **Platform**: Browser (desktop-first, 1280×800)
 - **Stack**: Vite 5.4 + TypeScript 5.5 + Phaser 3.70 + Zustand 4.5
 - **Runtime**: Node.js ≥18 (for build/tools only — game runs in browser)
@@ -112,12 +112,14 @@ ROOT/
       BoardGenerator.ts       generateBoard(rng) → BoardNode[]. 200 nodes, weighted by type.
                               Exports: generateBoard, pageForIndex, CHECKPOINT_INDICES,
                               CAPTURE_INDICES, NODE_TYPE_WEIGHTS
-      CombatEngine.ts         Core turn-based combat. Class: CombatEngine.
-                              Methods: beginRound(), attack(), useSkill(), guard(), useItem(),
-                              analyze(), sunder(), withdraw(), endPlayerPhase(), resolveMomentum(),
-                              checkCrisis(), resolveCrisis(), resolveBravery(), checkDesperation()
-                              Types: CombatSetup, CombatSnapshot, CombatPhase ('player'|
-                              'momentum_choice'|'crisis'|'victory'|'defeat'|'fled'), CombatAction
+      CombatEngine.ts         Revamped "Echo" combat. Class: CombatEngine (~1400 lines).
+                              Methods: beginRound(), attack() (instant, no timing bar),
+                              useSkill() (offensive skills park a QTE), resolveQte(quality),
+                              guard(), useItem(), endTurn()/endPlayerPhase(),
+                              resolveMomentum(), getScanInfo(), getDiscoveryGains(),
+                              getKillsByDef(), getLog(), getXpEarned().
+                              Types: CombatSetup, CombatSnapshot (qte/lastActors/
+                              enemyPhaseDamage), CombatPhase, QteQuality, EnemyView
       EventEngine.ts          Event resolution. Exports: buildEventCtx(), resolveEventChoice(),
                               pickEvent(), resolveTrap(). Types: EventApplyCtx
       ResonanceSystem.ts      Resonance tier math. Exports: resonanceTier(), TIER_LABELS,
@@ -202,9 +204,11 @@ ROOT/
                               Config: x, y, width, height. Reads text speed from SettingsManager.
       ChoiceMenu.ts           createChoiceMenu(scene, x, y, choices, callback, options?) → Container
                               Choices: { label, disabled, tooltip }[]. Adaptive positioning to stay on-screen.
-      CombatHUD.ts            createEnemyDisplay(), createApPips(num), createActionBar(actions),
-                              createSpeedBar(entities). All return Containers. ~183 lines.
-      StatPanel.ts            Creates HP/MP/XP/Resonance/faction bars. Tweened animations.
+      CombatHUD.ts            createEnemyDisplay() (sprite + name pill + HP bar + DOWNED
+                              pill + target diamond), createActionGrid() (2×3 action grid),
+                              createApPips(label?), createTurnOrderPanel(),
+                              createTooltipPanel(). All return handles with update()/destroy().
+      StatPanel.ts            PLAYER panel: XP / HP / MP / MOMENTUM bars. Tweened animations.
                               Returns { container, update(player) }.
       DiceRoller.ts           createDiceRoller(scene, x, y, result, callback?) → animation controller
       NodePreview.ts          createNodePreview(scene, node) → tooltip overlay
@@ -420,7 +424,11 @@ Unused variable warnings are **off** — don't add `_` prefixes or remove unused
 
 ---
 
-## 13. Current Status (from PLAN_OVERHAUL.md)
+## 13. Current Status (August 2026)
+
+> Revamped "Echo" combat (`docs/COMBAT_SYSTEM_REVAMP.md`) supersedes the BATTLE_ROADMAP architecture. One action/turn, QTE (skills only), Scan/discrete affinities, chapter loadouts, Guard +6 MP, Down/1-More, reactions, movepool AI. Battle UI rebuilt on the Battle-UI frame: action grid, turn order panel, free Scan modal, QTE timing bar, LOG button + on-screen message toasts. Save v6. Smoketest 165+/0; build green. See `CHANGELOG_CONTENT_PASS.md` for the post-revamp UX/balance pass and below for historical phases.
+
+## 13b. Historical Status (from PLAN_OVERHAUL.md)
 
 ### Completed (as of July 2026)
 - ✅ Phase A: Board expansion (200 nodes), Level-Up system, Skill Tree, MP system, Equipment UI, Fog of War, Turn Order indicator
@@ -496,6 +504,7 @@ Unused variable warnings are **off** — don't add `_` prefixes or remove unused
 ## 16. Documentation Files (docs/)
 
 | File | Purpose |
+| `docs/COMBAT_SYSTEM_REVAMP.md` | **Current combat spec — Solo, QTE + Scan/discrete affinities, chapter loadouts** |
 |------|---------|
 | `docs/PLAN_OVERHAUL.md` | Full development plan, phases A-D, estimated times |
 | `docs/CHANGELOG_CONTENT_PASS.md` | Complete record of every fix and addition |

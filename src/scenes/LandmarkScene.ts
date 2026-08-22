@@ -203,6 +203,7 @@ export class LandmarkScene extends Phaser.Scene {
     }
     if (rewards.skillUnlock && !player.skillsKnown.includes(rewards.skillUnlock)) {
       player.skillsKnown.push(rewards.skillUnlock);
+      if (player.equippedSkills.length < 6) player.equippedSkills.push(rewards.skillUnlock);
       notes.push(`Skill: ${NAMED_SKILLS[rewards.skillUnlock]?.name ?? rewards.skillUnlock}`);
     }
     if (rewards.loreFragment && !player.loreFragments.includes(rewards.loreFragment)) {

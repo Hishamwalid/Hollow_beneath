@@ -1,702 +1,511 @@
 import type { EnemyDef, EnemyTurnContext } from './types';
 
-function basicAttack(ctx: EnemyTurnContext, type: EnemyTurnContext['self']['attackType'], power = 1.0, label = 'attacks'): string {
-  const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * power)), type, ctx.self.name);
-  return `${ctx.self.name} ${label} for ${dmg} damage.`;
+// ============================================================================
+// Move helpers — thin wrappers over the turn context so movepools stay terse.
+// ============================================================================
+
+function hitPlayer(ctx: EnemyTurnContext, power: number, type: EnemyTurnContext['self']['attackType'], label: string, opts?: { critChance?: number; accMult?: number }): string {
+  const raw = Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * power));
+  const dmg = ctx.applyDamageToPlayer(raw, type, `${ctx.self.name} — ${label}`, opts);
+  return dmg === 0
+    ? `${ctx.self.name} uses ${label} — it does nothing.`
+    : `${ctx.self.name} uses ${label} for ${dmg} damage.`;
 }
 
+function magicHitPlayer(ctx: EnemyTurnContext, power: number, type: 'flame' | 'frost' | 'shock' | 'sacred' | 'shadow', label: string, opts?: { guaranteed?: boolean }): string {
+  const raw = Math.max(3, Math.round((ctx.self.matk - ctx.player.mdef / 2) * power));
+  const dmg = ctx.applyDamageToPlayer(raw, type, `${ctx.self.name} — ${label}`, { guaranteed: opts?.guaranteed });
+  return `${ctx.self.name} uses ${label} for ${dmg} damage.`;
+}
+
+function heavyHit(ctx: EnemyTurnContext, power: number, type: EnemyTurnContext['self']['attackType'], label: string, opts?: { bypassGuard?: boolean; critChance?: number }): string {
+  const raw = Math.max(5, Math.round((ctx.self.atk - ctx.player.def / 2) * power));
+  const dmg = ctx.applyDamageToPlayer(raw, type, `${ctx.self.name} — ${label}`, { bypassGuard: opts?.bypassGuard, critChance: opts?.critChance });
+  return `${ctx.self.name} unleashes ${label} for ${dmg} damage!`;
+}
+
+// ============================================================================
+// STAGE ROSTERS (Combat System Revamp §4)
+// ============================================================================
+
 export const ENEMIES: Record<string, EnemyDef> = {
+  // ---- Stage 1: Surface Threshold ------------------------------------------
+  dust_wight: {
+    id: 'dust_wight',
+    name: 'Dust Wight',
+    level: 2,
+    hp: 61, mp: 30, atk: 10, matk: 4, def: 8, mdef: 6, spd: 9,
+    attackType: 'slash',
+    affinities: { slash: 'wk', pierce: 'str', blunt: 'null', flame: 'rep' },
+    xp: 14,
+    description: 'A desert-dusted remnant wrapped in funerary linen.',
+    moves: [
+      {
+        id: 'dust_slap', label: 'Dust Slab', weight: 3,
+        description: 'Basic Slash damage.',
+        resolve(ctx) { return hitPlayer(ctx, 1.0, 'slash', 'Dust Slap'); },
+      },
+      {
+        id: 'sand_armor', label: 'Sand Armor', weight: 1,
+        description: 'Raises its own Defense by 20% for 2 turns.',
+        condition: (ctx) => !ctx.self.statuses.some((s) => s.id === 'defense_up') && ctx.turn > 1,
+        resolve(ctx) {
+          ctx.applyStatusToSelf('defense_up', 2);
+          return `${ctx.self.name} packs sand into its wrappings. (Defense +20%, 2 turns)`;
+        },
+      },
+    ],
+  },
+
   echo_skeleton: {
     id: 'echo_skeleton',
     name: 'Echo-bleached Skeleton',
-    hp: 35, atk: 10, matk: 4, def: 6, mdef: 3, spd: 12,
+    level: 2,
+    hp: 48, mp: 20, atk: 11, matk: 4, def: 6, mdef: 5, spd: 12,
     attackType: 'slash',
-    affinities: { blunt: 1.5, sacred: 2.0, slash: 0.5, shadow: 0 },
+    affinities: { blunt: 'wk', flame: 'wk', pierce: 'str' },
     xp: 12,
     description: 'Bones that remember standing, if nothing else.',
-    tendency: 'hunter',
-    intents: [
+    moves: [
       {
-        id: 'rattle', label: 'Rattle Ribs', weight: 2,
-        description: 'A shrill clatter of old bone that puts Fear on you (Fear, 1 turn).',
+        id: 'bone_cleave', label: 'Bone Cleave', weight: 3,
+        description: 'High-crit Slash attack.',
+        resolve(ctx) { return hitPlayer(ctx, 1.0, 'slash', 'Bone Cleave', { critChance: 0.3 }); },
+      },
+      {
+        id: 'rattle', label: 'Rattle', weight: 1,
+        description: 'Low Blunt damage with a chance to inflict Fear.',
         resolve(ctx) {
-          ctx.applyStatusToPlayer('fear', 1);
-          return `${ctx.self.name} rattles its ribs. You flinch (Fear, 1 turn).`;
+          const line = hitPlayer(ctx, 0.6, 'blunt', 'Rattle');
+          if (ctx.rng() < 0.15) {
+            ctx.applyStatusToPlayer('fear', 1);
+            return `${line} The clatter leaves you shaken. (Fear, 1 turn)`;
+          }
+          return line;
         },
       },
-      {
-        id: 'bone_slash', label: 'Bone Slash', weight: 98,
-        description: 'A simple, sweeping slash from a blade of pale bone.',
-        resolve(ctx) { return basicAttack(ctx, 'slash'); },
-      },
     ],
-    act(ctx) {
-      if (ctx.rng() < 0.2) {
-        ctx.applyStatusToPlayer('fear', 1);
-        return `${ctx.self.name} rattles its ribs. You flinch (Fear, 1 turn).`;
-      }
-      return basicAttack(ctx, 'slash');
-    },
   },
 
   venn_custodian: {
     id: 'venn_custodian',
     name: 'Venn Custodian',
-    hp: 60, atk: 14, matk: 8, def: 12, mdef: 8, spd: 8,
+    level: 5,
+    hp: 85, mp: 40, atk: 15, matk: 10, def: 13, mdef: 10, spd: 9,
     attackType: 'blunt',
-    affinities: { shock: 1.5, frost: 1.2, blunt: 0.5, pierce: 0.8 },
-    xp: 25,
+    affinities: { frost: 'wk', slash: 'str', pierce: 'str', blunt: 'str', shock: 'drn' },
+    xp: 26,
     description: 'An Archive golem, still shelving books no one wrote.',
-    tendency: 'tactician',
-    intents: [
+    moves: [
       {
-        id: 'sealing_protocol', label: 'Sealing Protocol', weight: 999,
-        description: 'If you cast magic last round, it intones an Archival ban and Silences you (1 turn).',
-        condition: (ctx) => ctx.self.flags.playerCastMagicLastTurn === 1,
+        id: 'chilling_touch', label: 'Chilling Touch', weight: 2,
+        description: 'Frost damage. Inflicts Chilled.',
         resolve(ctx) {
-          ctx.applyStatusToPlayer('silence', 1);
-          ctx.self.flags.playerCastMagicLastTurn = 0;
-          return `${ctx.self.name} intones "Sealing Protocol." You are Silenced (1 turn).`;
+          const line = magicHitPlayer(ctx, 1.1, 'frost', 'Chilling Touch');
+          ctx.applyStatusToPlayer('chilled', 2);
+          return `${line} You are Chilled. (2 turns)`;
         },
       },
       {
-        id: 'rewrite_battlefield', label: 'Rewrite Battlefield', weight: 999,
-        description: 'At low health it re-writes itself — swapping its shock and frost resistances.',
-        condition: (ctx) => ctx.self.hp / ctx.self.maxHp < 0.4 && !ctx.self.flags.reshelved,
+        id: 'barrier', label: 'Barrier', weight: 1,
+        description: 'Grants an absorption shield to itself or an ally.',
+        condition: (ctx) => ctx.turn > 1,
         resolve(ctx) {
-          ctx.self.flags.reshelved = 1;
-          const s = ctx.self.affinities.shock;
-          const f = ctx.self.affinities.frost;
-          ctx.self.affinities.shock = f;
-          ctx.self.affinities.frost = s;
-          return `${ctx.self.name} performs "Rewrite Battlefield" — its weaknesses shift.`;
+          const wounded = ctx.allies.find((a) => a.hp > 0 && a.hp / a.maxHp < 0.6);
+          const target = wounded ?? ctx.self;
+          target.statuses.push({ id: 'barrier', stacks: 1, turnsRemaining: 99, meta: { amount: 22 } });
+          return `${ctx.self.name} raises a Barrier around ${target === ctx.self ? 'itself' : target.name}. (Absorbs 22)`;
         },
       },
       {
-        id: 'archive_bludgeon', label: 'Archive Bludgeon', weight: 90,
+        id: 'archive_bludgeon', label: 'Archive Bludgeon', weight: 3,
         description: 'A methodical swing of a shelving-weight fist.',
-        resolve(ctx) { return basicAttack(ctx, 'blunt'); },
+        resolve(ctx) { return hitPlayer(ctx, 1.0, 'blunt', 'Archive Bludgeon'); },
       },
     ],
-    act(ctx) {
-      const hpPct = ctx.self.hp / ctx.self.maxHp;
-      if (ctx.self.flags.playerCastMagicLastTurn === 1) {
-        ctx.applyStatusToPlayer('silence', 1);
-        ctx.self.flags.playerCastMagicLastTurn = 0;
-        return `${ctx.self.name} intones "Sealing Protocol." You are Silenced (1 turn).`;
-      }
-      if (hpPct < 0.4 && !ctx.self.flags.reshelved) {
-        ctx.self.flags.reshelved = 1;
-        const s = ctx.self.affinities.shock;
-        const f = ctx.self.affinities.frost;
-        ctx.self.affinities.shock = f;
-        ctx.self.affinities.frost = s;
-        return `${ctx.self.name} performs "Rewrite Battlefield" — its weaknesses shift.`;
-      }
-      return basicAttack(ctx, 'blunt');
-    },
   },
 
   sable_zealot: {
     id: 'sable_zealot',
     name: 'Sable Zealot',
-    hp: 45, atk: 12, matk: 10, def: 8, mdef: 10, spd: 14,
-    attackType: 'sacred',
-    affinities: { shadow: 1.5, pierce: 1.2, sacred: 0.5, flame: 0.8 },
-    xp: 18,
+    level: 5,
+    hp: 62, mp: 25, atk: 14, matk: 11, def: 8, mdef: 11, spd: 14,
+    attackType: 'slash',
+    affinities: { flame: 'wk', blunt: 'wk', sacred: 'rep' },
+    xp: 20,
     description: 'Ash-marked, certain, and not entirely wrong.',
-    tendency: 'sage',
-    intents: [
+    moves: [
       {
-        id: 'healing_prayer', label: 'Healing Prayer', weight: 900,
-        description: 'Chants a rite that restores a wounded ally for 20 HP.',
-        condition: (ctx) => !!ctx.allies.find((a) => a.hp > 0 && a.hp / a.maxHp < 0.4),
+        id: 'frenzied_slash', label: 'Frenzied Slash', weight: 2,
+        description: 'Two rapid hits — costs it 10% of its own HP.',
         resolve(ctx) {
-          const woundedAlly = ctx.allies.find((a) => a.hp > 0 && a.hp / a.maxHp < 0.4);
-          if (!woundedAlly) return `${ctx.self.name} begins to pray, but no ally needs it.`;
-          woundedAlly.hp = Math.min(woundedAlly.maxHp, woundedAlly.hp + 20);
-          return `${ctx.self.name} chants a Healing Prayer over ${woundedAlly.name} (+20 HP).`;
+          const cost = Math.round(ctx.self.maxHp * 0.1);
+          ctx.damageSelf(cost);
+          const d1 = ctx.applyDamageToPlayer(Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * 0.7)), 'slash', `${ctx.self.name} — Frenzied Slash`);
+          const d2 = ctx.applyDamageToPlayer(Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * 0.7)), 'slash', `${ctx.self.name} — Frenzied Slash`);
+          return `${ctx.self.name} tears into you twice (${d1}, ${d2}), tearing its own robes bloody in the process.`;
         },
       },
       {
-        id: 'dispel_holy', label: 'Dispel Holy', weight: 900,
-        description: 'Strips all of your active buffs at once.',
-        condition: (ctx) => ctx.player.statuses.some((s) => ['focus', 'fortify', 'blessing', 'haste', 'barrier', 'reflection'].includes(s.id)),
-        resolve(ctx) {
-          ctx.removePlayerBuffs();
-          return `${ctx.self.name} casts Dispel Holy. Your buffs are stripped away.`;
-        },
-      },
-      {
-        id: 'punishing_strike', label: 'Punishing Strike', weight: 500,
-        description: 'A heavy, ash-stained melee blow.',
-        resolve(ctx) { return basicAttack(ctx, 'sacred', 1.15, 'lands a Punishing Strike'); },
+        id: 'reckless_flail', label: 'Reckless Flail', weight: 2,
+        description: 'Heavy Blunt damage with reduced accuracy.',
+        resolve(ctx) { return hitPlayer(ctx, 1.5, 'blunt', 'Reckless Flail', { accMult: 0.7 }); },
       },
     ],
-    act(ctx) {
-      const woundedAlly = ctx.allies.find((a) => a.hp > 0 && a.hp / a.maxHp < 0.4);
-      if (woundedAlly) {
-        woundedAlly.hp = Math.min(woundedAlly.maxHp, woundedAlly.hp + 20);
-        return `${ctx.self.name} chants a Healing Prayer over ${woundedAlly.name} (+20 HP).`;
-      }
-      if (ctx.player.statuses.some((s) => ['focus', 'fortify', 'blessing', 'haste', 'barrier', 'reflection'].includes(s.id))) {
-        ctx.removePlayerBuffs();
-        return `${ctx.self.name} casts Dispel Holy. Your buffs are stripped away.`;
-      }
-      return basicAttack(ctx, 'sacred', 1.15, 'lands a Punishing Strike');
-    },
   },
 
   ash_seer: {
     id: 'ash_seer',
     name: 'Ash Covenant Seer',
-    hp: 55, atk: 8, matk: 16, def: 5, mdef: 14, spd: 18,
-    attackType: 'shadow',
-    affinities: { sacred: 1.5, flame: 1.2, shadow: 0.5, frost: 0.8 },
-    xp: 22,
-    description: 'Crystal blooms where its eyes used to focus on one thing at a time.',
-    tendency: 'caster',
-    intents: [
-      {
-        id: 'darken_veil', label: 'Shroud the Field', weight: 70,
-        condition: (ctx) => !ctx.self.flags.shroudField,
-        description: 'Once: casts a Shadow Veil over the whole field (3 turns).',
-        resolve(ctx) {
-          ctx.self.flags.shroudField = 1;
-          ctx.applyBattlefieldState('shadow_veil', 3);
-          return `${ctx.self.name} shroud the field — Shadow Veil settles over the fight.`;
-        },
-      },
-      {
-        id: 'weave_curse', label: 'Weave Curse', weight: 999,
-        condition: (ctx) => (ctx.turn - 1) % 3 === 0,
-        description: 'Every third turn: a Curse that compounds against you (Curse, 3 turns).',
-        resolve(ctx) {
-          ctx.applyStatusToPlayer('curse', 3);
-          return `${ctx.self.name} weaves a Curse upon you.`;
-        },
-      },
-      {
-        id: 'copy_last_motion', label: 'Copy Last Motion', weight: 999,
-        condition: (ctx) => (ctx.turn - 1) % 3 === 1,
-        description: 'Mimics whatever you just did back at you as shadow damage.',
-        resolve(ctx) {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shadow', ctx.self.name);
-          return `${ctx.self.name} copies your last motion back at you for ${dmg} damage.`;
-        },
-      },
-      {
-        id: 'hallucinate', label: 'Hallucinate', weight: 999,
-        condition: (ctx) => (ctx.turn - 1) % 3 === 2,
-        description: 'Every third turn: you hallucinate your own attack patterns (Confuse, 2 turns).',
-        resolve(ctx) {
-          ctx.applyStatusToPlayer('confuse', 2);
-          return `${ctx.self.name} makes you Hallucinate (Confuse, 2 turns).`;
-        },
-      },
-    ],
-    act(ctx) {
-      const cycle = (ctx.turn - 1) % 3;
-      if (cycle === 0) {
-        ctx.applyStatusToPlayer('curse', 3);
-        return `${ctx.self.name} weaves a Curse upon you.`;
-      }
-      if (cycle === 1) {
-        const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shadow', ctx.self.name);
-        return `${ctx.self.name} copies your last motion back at you for ${dmg} damage.`;
-      }
-      ctx.applyStatusToPlayer('confuse', 2);
-      return `${ctx.self.name} makes you Hallucinate (Confuse, 2 turns).`;
-    },
-  },
-
-  memory_wraith: {
-    id: 'memory_wraith',
-    name: 'Memory Wraith',
-    hp: 40, atk: 0, matk: 14, def: 4, mdef: 12, spd: 20,
-    dodge: 50,
+    level: 6,
+    hp: 58, mp: 50, atk: 10, matk: 15, def: 7, mdef: 13, spd: 11,
     attackType: 'shock',
-    affinities: { sacred: 1.5, slash: 1.2, shock: 0, shadow: 0.5 },
-    xp: 20,
-    minResonance: 25,
-    description: 'Only visible once the static gets loud enough.',
-    tendency: 'manipulator',
-    intents: [
+    affinities: { shock: 'wk', pierce: 'wk', flame: 'null' },
+    xp: 22,
+    description: 'Crystalline growths refract your face wrong.',
+    moves: [
       {
-        id: 'memory_lapse', label: 'Memory Lapse', weight: 100,
-        description: 'Shock damage plus a random memory-wipe debuff (Weakness, Defense Down, or Slow).',
+        id: 'spark_arc', label: 'Spark Arc', weight: 3,
+        description: 'Shock damage; Superconducts Chilled targets (Stun).',
         resolve(ctx) {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shock', ctx.self.name);
-          const debuffs: Array<'weakness' | 'defense_down' | 'slow'> = ['weakness', 'defense_down', 'slow'];
-          const pick = debuffs[Math.floor(ctx.rng() * debuffs.length)];
-          ctx.applyStatusToPlayer(pick, 2);
-          return `${ctx.self.name} inflicts a Memory Lapse — ${dmg} damage and ${pick.replace('_', ' ')}.`;
+          const chilled = ctx.player.statuses.some((s) => s.id === 'chilled');
+          const line = magicHitPlayer(ctx, 1.2, 'shock', 'Spark Arc');
+          if (chilled) {
+            ctx.applyStatusToPlayer('stun', 1);
+            return `${line} SUPERCONDUCT — the arc finds the frost in your veins. (Stun, 1 turn)`;
+          }
+          return line;
+        },
+      },
+      {
+        id: 'siphon', label: 'Siphon', weight: 2,
+        description: 'Steals 5 MP from you.',
+        condition: (ctx) => ctx.player.mp > 0,
+        resolve(ctx) {
+          const stolen = ctx.drainPlayerMp(5);
+          return `${ctx.self.name} drinks your breath of thought. (-${stolen} MP)`;
         },
       },
     ],
-    act(ctx) {
-      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shock', ctx.self.name);
-      const debuffs: Array<'weakness' | 'defense_down' | 'slow'> = ['weakness', 'defense_down', 'slow'];
-      const pick = debuffs[Math.floor(ctx.rng() * debuffs.length)];
-      ctx.applyStatusToPlayer(pick, 2);
-      return `${ctx.self.name} inflicts a Memory Lapse — ${dmg} damage and ${pick.replace('_', ' ')}.`;
-    },
-  },
-
-  sable_inquisitor: {
-    id: 'sable_inquisitor',
-    name: 'Sable Inquisitor',
-    hp: 75, atk: 16, matk: 12, def: 14, mdef: 16, spd: 15,
-    attackType: 'sacred',
-    affinities: { shadow: 1.5, shock: 1.2, sacred: 0.25, flame: 0.5 },
-    xp: 35,
-    description: 'Judgment with a schedule to keep.',
-    tendency: 'coward',
-    intents: [
-      {
-        id: 'judgment_opener', label: 'Judgment', weight: 999,
-        condition: (ctx) => ctx.turn === 1,
-        description: 'Opens with a heavy holy blow and Seal Mind (2 turns).',
-        resolve(ctx) {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * 1.2)), 'sacred', ctx.self.name);
-          ctx.applyStatusToPlayer('seal_mind', 2);
-          return `${ctx.self.name} opens with Judgment — ${dmg} damage, Seal Mind (2 turns).`;
-        },
-      },
-      {
-        id: 'summon_zealot', label: 'Summon Zealot', weight: 999,
-        condition: (ctx) => ctx.turn > 1 && ctx.self.hp / ctx.self.maxHp < 0.5 && !ctx.self.flags.summoned,
-        description: 'When wounded, calls a Sable Zealot to its side.',
-        resolve(ctx) {
-          ctx.self.flags.summoned = 1;
-          ctx.spawnAlly('sable_zealot', 30);
-          return `${ctx.self.name} summons a Sable Zealot.`;
-        },
-      },
-      {
-        id: 'judgment_blow', label: 'Judgment Blow', weight: 900,
-        description: 'A measured, painful holy strike.',
-        resolve(ctx) { return basicAttack(ctx, 'sacred'); },
-      },
-    ],
-    act(ctx) {
-      if (ctx.turn === 1) {
-        const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * 1.2)), 'sacred', ctx.self.name);
-        ctx.applyStatusToPlayer('seal_mind', 2);
-        return `${ctx.self.name} opens with Judgment — ${dmg} damage, Seal Mind (2 turns).`;
-      }
-      const hpPct = ctx.self.hp / ctx.self.maxHp;
-      if (hpPct < 0.5 && !ctx.self.flags.summoned) {
-        ctx.self.flags.summoned = 1;
-        ctx.spawnAlly('sable_zealot', 30);
-        return `${ctx.self.name} summons a Sable Zealot.`;
-      }
-      return basicAttack(ctx, 'sacred');
-    },
-  },
-
-  ash_mutant: {
-    id: 'ash_mutant',
-    name: 'Ash Covenant Mutant',
-    hp: 90, atk: 18, matk: 10, def: 10, mdef: 8, spd: 12,
-    attackType: 'shadow',
-    affinities: { sacred: 1.5, frost: 1.2, shadow: 0.25 },
-    xp: 40,
-    description: "Translated past the point of a body that agrees with itself.",
-    tendency: 'berserker',
-    intents: [
-      {
-        id: 'enrage', label: 'Enrage', weight: 999,
-        condition: (ctx) => ctx.self.hp / ctx.self.maxHp < 0.3 && !ctx.self.flags.enraged,
-        description: 'At low health: Attack sharply up, Defense down.',
-        resolve(ctx) {
-          ctx.self.flags.enraged = 1;
-          ctx.self.atk = Math.round(ctx.self.atk * 1.5);
-          ctx.self.def = Math.round(ctx.self.def * 0.7);
-          return `${ctx.self.name} enrages — Attack sharply up, Defense down.`;
-        },
-      },
-      {
-        id: 'devour', label: 'Devour', weight: 900,
-        description: 'Cries the same hunger as you do: shadow damage, healing half back.',
-        resolve(ctx) {
-          const raw = Math.max(3, Math.round(ctx.self.atk - ctx.player.def / 2));
-          const dmg = ctx.applyDamageToPlayer(raw, 'shadow', ctx.self.name);
-          ctx.healSelf(Math.round(dmg * 0.5));
-          return `${ctx.self.name} Devours you for ${dmg} damage, healing half of it back.`;
-        },
-      },
-    ],
-    act(ctx) {
-      const hpPct = ctx.self.hp / ctx.self.maxHp;
-      if (hpPct < 0.3 && !ctx.self.flags.enraged) {
-        ctx.self.flags.enraged = 1;
-        ctx.self.atk = Math.round(ctx.self.atk * 1.5);
-        ctx.self.def = Math.round(ctx.self.def * 0.7);
-        return `${ctx.self.name} enrages — Attack sharply up, Defense down.`;
-      }
-      const raw = Math.max(3, Math.round(ctx.self.atk - ctx.player.def / 2));
-      const dmg = ctx.applyDamageToPlayer(raw, 'shadow', ctx.self.name);
-      ctx.healSelf(Math.round(dmg * 0.5));
-      return `${ctx.self.name} Devours you for ${dmg} damage, healing half of it back.`;
-    },
-  },
-
-  echo_soldier: {
-    id: 'echo_soldier',
-    name: 'Dominion Echo-Soldier',
-    hp: 80, atk: 20, matk: 6, def: 16, mdef: 10, spd: 16,
-    attackType: 'pierce',
-    affinities: { blunt: 1.5, shock: 1.2, pierce: 0.25, slash: 0.5 },
-    xp: 38,
-    description: 'A soldier for an empire that no longer issues orders.',
-    tendency: 'guardian',
-    intents: [
-      {
-        id: 'empires_memory', label: "Empire's Memory", weight: 999,
-        condition: (ctx) => ctx.turn % 3 === 0 && ctx.allies.some((a) => a.hp > 0),
-        description: 'Every third round it bolsters its allies — Attack +20% for the whole line.',
-        resolve(ctx) {
-          ctx.allies.forEach((a) => {
-            if (a.hp > 0) a.atk = Math.round(a.atk * 1.2);
-          });
-          ctx.self.atk = Math.round(ctx.self.atk * 1.2);
-          return `${ctx.self.name} invokes Empire's Memory — all allies' Attack +20%.`;
-        },
-      },
-      {
-        id: 'formation_thrust', label: 'Formation Thrust', weight: 900,
-        description: 'A disciplined phalanx thrust.',
-        resolve(ctx) { return basicAttack(ctx, 'pierce'); },
-      },
-    ],
-    act(ctx) {
-      if (ctx.turn % 3 === 0 && ctx.allies.some((a) => a.hp > 0)) {
-        ctx.allies.forEach((a) => {
-          if (a.hp > 0) a.atk = Math.round(a.atk * 1.2);
-        });
-        ctx.self.atk = Math.round(ctx.self.atk * 1.2);
-        return `${ctx.self.name} invokes Empire's Memory — all allies' Attack +20%.`;
-      }
-      return basicAttack(ctx, 'pierce');
-    },
-  },
-
-  dust_wight: {
-    id: 'dust_wight',
-    name: 'Dust Wight',
-    hp: 22, atk: 7, matk: 2, def: 3, mdef: 2, spd: 10,
-    attackType: 'pierce',
-    affinities: { flame: 1.5, blunt: 1.3, sacred: 1.3, pierce: 0.7 },
-    xp: 8,
-    description: 'Something small that learned to survive on what the Loom leaves behind.',
-    tendency: 'hunter',
-    intents: [
-      {
-        id: 'dirty_claw', label: 'Dirty Claw', weight: 25,
-        description: 'A quick rip that draws Bleed (2 turns).',
-        resolve(ctx) {
-          ctx.applyStatusToPlayer('bleed', 2);
-          return `${ctx.self.name} claws at you. Bleeding (2 turns).`;
-        },
-      },
-      {
-        id: 'gnaw', label: 'Gnaw', weight: 75,
-        description: 'A persistent, hungry gnaw.',
-        resolve(ctx) { return basicAttack(ctx, 'pierce', 0.9, 'gnaws'); },
-      },
-    ],
-    act(ctx) {
-      if (ctx.rng() < 0.25) {
-        ctx.applyStatusToPlayer('bleed', 2);
-        return `${ctx.self.name} claws at you. Bleeding (2 turns).`;
-      }
-      return basicAttack(ctx, 'pierce', 0.9, 'gnaws');
-    },
   },
 
   dust_road_raider: {
     id: 'dust_road_raider',
     name: 'Dust-Road Raider',
-    hp: 38, atk: 13, matk: 4, def: 5, mdef: 4, spd: 20,
-    dodge: 20,
+    level: 8,
+    hp: 95, mp: 25, atk: 18, matk: 8, def: 11, mdef: 9, spd: 16,
     attackType: 'pierce',
-    affinities: { blunt: 1.4, shock: 1.2, pierce: 0.6, slash: 0.8 },
-    xp: 16,
-    description: 'Not everyone on the Dust Road walked away from the Archive as clean as Sera Voss did.',
-    tendency: 'aggressor',
-    intents: [
+    affinities: { pierce: 'wk', flame: 'wk', blunt: 'str' },
+    xp: 34,
+    description: 'Human combatant in layered desert fabrics — answers to no faction.',
+    moves: [
       {
-        id: 'press_advantage', label: 'Press Advantage', weight: 1000,
-        condition: (ctx) => ctx.player.hp / ctx.player.maxHp < 0.5,
-        description: 'When you are hurt it abandons caution for a heavy, open blow.',
-        resolve(ctx) {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * 1.3)), 'pierce', ctx.self.name);
-          return `${ctx.self.name} presses the advantage for ${dmg} damage.`;
-        },
+        id: 'quick_stride', label: 'Quick Stride', weight: 3,
+        description: 'A blindingly fast Pierce attack.',
+        resolve(ctx) { return hitPlayer(ctx, 1.1, 'pierce', 'Quick Stride'); },
       },
       {
-        id: 'hamstring', label: 'Hamstring', weight: 420,
-        description: 'A low cut that slows your footing (Slow, 2 turns).',
+        id: 'pocket_sand', label: 'Pocket Sand', weight: 2,
+        description: 'Reduces your Accuracy by 20% for 2 turns.',
+        condition: (ctx) => !ctx.player.statuses.some((s) => s.id === 'blind'),
         resolve(ctx) {
-          ctx.applyStatusToPlayer('slow', 2);
-          return `${ctx.self.name} hamstrings your footing. Slowed (2 turns).`;
+          ctx.applyStatusToPlayer('blind', 2);
+          return `${ctx.self.name} flings a fistful of road-dust into your eyes. (Accuracy -30%, 2 turns)`;
         },
-      },
-      {
-        id: 'fast_low_strike', label: 'Fast Low Strike', weight: 700,
-        description: 'A quick, low strike, hard to read at speed.',
-        resolve(ctx) { return basicAttack(ctx, 'pierce', 1.0, 'strikes fast and low'); },
       },
     ],
-    act(ctx) {
-      const hpPct = ctx.player.hp / ctx.player.maxHp;
-      if (hpPct < 0.5 && ctx.rng() < 0.5) {
-        const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round((ctx.self.atk - ctx.player.def / 2) * 1.3)), 'pierce', ctx.self.name);
-        return `${ctx.self.name} presses the advantage for ${dmg} damage.`;
-      }
-      if (ctx.rng() < 0.3) {
-        ctx.applyStatusToPlayer('slow', 2);
-        return `${ctx.self.name} hamstrings your footing. Slowed (2 turns).`;
-      }
-      return basicAttack(ctx, 'pierce', 1.0, 'strikes fast and low');
-    },
   },
 
   archive_cipher_wraith: {
     id: 'archive_cipher_wraith',
     name: 'Archive Cipher-Wraith',
-    hp: 50, atk: 6, matk: 15, def: 6, mdef: 12, spd: 16,
-    attackType: 'shock',
-    affinities: { shadow: 1.5, flame: 1.2, shock: 0.5, frost: 0.8 },
-    xp: 24,
-    description: 'A cataloguer that redacted itself once too often.',
-    tendency: 'manipulator',
-    intents: [
+    level: 8,
+    hp: 80, mp: 60, atk: 9, matk: 17, def: 9, mdef: 15, spd: 12,
+    attackType: 'shadow',
+    affinities: { sacred: 'wk', slash: 'null', shadow: 'drn' },
+    xp: 36,
+    description: 'A spectral text that reads you while you fail to read it.',
+    moves: [
       {
-        id: 'redact', label: 'Redact', weight: 680,
-        condition: (ctx) => ctx.player.statuses.some((s) => ['focus', 'fortify', 'blessing', 'haste', 'barrier', 'reflection'].includes(s.id)),
-        description: 'Strips your buffs and files them away, healing itself.',
+        id: 'erase_memory', label: 'Erase Memory', weight: 3,
+        description: 'Light Shadow damage and drains 8 MP.',
         resolve(ctx) {
-          ctx.removePlayerBuffs();
-          ctx.healSelf(Math.round(ctx.self.maxHp * 0.1));
-          return `${ctx.self.name} redacts your advantages and files them away, healing itself.`;
+          const line = magicHitPlayer(ctx, 1.0, 'shadow', 'Erase Memory');
+          const drained = ctx.drainPlayerMp(8);
+          return `${line} A page of you goes blank. (-${drained} MP)`;
         },
       },
       {
-        id: 'strike_out_lines', label: 'Strike Out Relevant Lines', weight: 350,
-        description: 'Blinds you for 2 turns.',
+        id: 'cipher_barrier', label: 'Cipher Barrier', weight: 2,
+        description: 'Nullifies the next skill targeted at it.',
+        condition: (ctx) => !ctx.self.flags.nullify_next_skill && ctx.turn > 1,
         resolve(ctx) {
-          ctx.applyStatusToPlayer('blind', 2);
-          return `${ctx.self.name} strikes out your relevant lines. Blinded (2 turns).`;
-        },
-      },
-      {
-        id: 'cross_reference', label: 'Cross-Reference', weight: 700,
-        description: 'Shock damage drawn from your most-used techniques.',
-        resolve(ctx) {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shock', ctx.self.name);
-          return `${ctx.self.name} cross-references your weaknesses for ${dmg} damage.`;
+          ctx.self.flags.nullify_next_skill = 1;
+          return `${ctx.self.name} rewrites itself into unreadable cipher. Your next skill will be erased.`;
         },
       },
     ],
-    act(ctx) {
-      if (ctx.player.statuses.some((s) => ['focus', 'fortify', 'blessing', 'haste', 'barrier', 'reflection'].includes(s.id)) && ctx.rng() < 0.5) {
-        ctx.removePlayerBuffs();
-        ctx.healSelf(Math.round(ctx.self.maxHp * 0.1));
-        return `${ctx.self.name} redacts your advantages and files them away, healing itself.`;
-      }
-      if (ctx.rng() < 0.35) {
-        ctx.applyStatusToPlayer('blind', 2);
-        return `${ctx.self.name} strikes out your relevant lines. Blinded (2 turns).`;
-      }
-      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shock', ctx.self.name);
-      return `${ctx.self.name} cross-references your weaknesses for ${dmg} damage.`;
-    },
+  },
+
+  memory_wraith: {
+    id: 'memory_wraith',
+    name: 'Memory Wraith',
+    level: 8,
+    hp: 88, mp: 70, atk: 10, matk: 18, def: 8, mdef: 14, spd: 13,
+    attackType: 'shadow',
+    affinities: { shadow: 'wk', flame: 'wk', sacred: 'rep', shock: 'drn' },
+    xp: 40,
+    minResonance: 25,
+    description: 'Someone else\'s best day, still hungry.',
+    moves: [
+      {
+        id: 'void_drain', label: 'Void Drain', weight: 3,
+        description: 'Shadow damage; drains 10% of your Max MP.',
+        resolve(ctx) {
+          const line = magicHitPlayer(ctx, 1.1, 'shadow', 'Void Drain');
+          const pctDrain = Math.max(1, Math.round(ctx.player.maxMp * 0.1));
+          const drained = ctx.drainPlayerMp(pctDrain);
+          return `${line} It swallows ${drained} MP whole.`;
+        },
+      },
+      {
+        id: 'mind_shatter', label: 'Mind Shatter', weight: 2,
+        description: 'Magic attack with a high chance to inflict Confusion.',
+        resolve(ctx) {
+          const line = magicHitPlayer(ctx, 1.0, 'shadow', 'Mind Shatter');
+          if (ctx.rng() < 0.5) {
+            ctx.applyStatusToPlayer('confuse', 2);
+            return `${line} Your own memories turn on you. (Confusion, 2 turns)`;
+          }
+          return line;
+        },
+      },
+    ],
+  },
+
+  sable_inquisitor: {
+    id: 'sable_inquisitor',
+    name: 'Sable Inquisitor',
+    level: 12,
+    hp: 130, mp: 45, atk: 22, matk: 14, def: 15, mdef: 13, spd: 14,
+    attackType: 'pierce',
+    affinities: { shadow: 'wk', slash: 'wk', sacred: 'null', frost: 'str' },
+    xp: 52,
+    description: 'Masked Sable elite with flame motifs worked into heavier armor.',
+    moves: [
+      {
+        id: 'judgment_pierce', label: 'Judgment Pierce', weight: 3,
+        description: 'Heavy Pierce damage that ignores 30% of your Defense.',
+        resolve(ctx) {
+          const effDef = ctx.player.def * 0.7;
+          const raw = Math.max(5, Math.round((ctx.self.atk - effDef / 2) * 1.4));
+          const dmg = ctx.applyDamageToPlayer(raw, 'pierce', `${ctx.self.name} — Judgment Pierce`);
+          return `Judgment falls. ${dmg} damage, straight through your guard-work.`;
+        },
+      },
+      {
+        id: 'interdict', label: 'Interdict', weight: 2,
+        description: 'Prevents you from healing for 2 turns.',
+        condition: (ctx) => !ctx.player.statuses.some((s) => s.id === 'heal_block') && ctx.turn > 1,
+        resolve(ctx) {
+          ctx.applyStatusToPlayer('heal_block', 2);
+          return `"Interdict." The Inquisitor's seal closes over you. (Healing blocked, 2 turns)`;
+        },
+      },
+    ],
+  },
+
+  ash_mutant: {
+    id: 'ash_mutant',
+    name: 'Ash Covenant Mutant',
+    level: 12,
+    hp: 145, mp: 30, atk: 24, matk: 10, def: 13, mdef: 11, spd: 10,
+    attackType: 'blunt',
+    affinities: { frost: 'wk', pierce: 'wk', flame: 'drn', shock: 'null' },
+    xp: 54,
+    description: 'Further along the Covenant\'s translation than anyone should be.',
+    moves: [
+      {
+        id: 'mutated_slam', label: 'Mutated Slam', weight: 3,
+        description: 'Heavy Blunt damage with a 25% crit rate.',
+        resolve(ctx) { return hitPlayer(ctx, 1.3, 'blunt', 'Mutated Slam', { critChance: 0.25 }); },
+      },
+      {
+        id: 'acid_spit', label: 'Acid Spit', weight: 2,
+        description: 'Reduces your Defense by 40% for 2 turns.',
+        condition: (ctx) => !ctx.player.statuses.some((s) => s.id === 'armour_break'),
+        resolve(ctx) {
+          ctx.applyStatusToPlayer('armour_break', 2);
+          return `${ctx.self.name} retches corrosive ash across your armor. (Defense -50%, 2 turns)`;
+        },
+      },
+    ],
+  },
+
+  echo_soldier: {
+    id: 'echo_soldier',
+    name: 'Dominion Echo-Soldier',
+    level: 12,
+    hp: 150, mp: 35, atk: 21, matk: 9, def: 17, mdef: 12, spd: 11,
+    attackType: 'slash',
+    affinities: { sacred: 'wk', blunt: 'wk', slash: 'rep', pierce: 'str' },
+    xp: 55,
+    description: 'Ancient armored construct — spear and shield, weathered metal.',
+    moves: [
+      {
+        id: 'shield_wall', label: 'Shield Wall', weight: 2,
+        description: 'Locks shields — raises Defense on itself and allies.',
+        condition: (ctx) => ctx.turn > 1 && !ctx.allies.every((a) => a.statuses.some((s) => s.id === 'defense_up')),
+        resolve(ctx) {
+          for (const a of [ctx.self, ...ctx.allies]) {
+            if (a.hp > 0) a.statuses.push({ id: 'defense_up', stacks: 1, turnsRemaining: 2 });
+          }
+          return `${ctx.self.name} locks formation. The wall hums. (Allies: Defense +20%, 2 turns)`;
+        },
+      },
+      {
+        id: 'counter_stance', label: 'Counter Stance', weight: 2,
+        description: 'Reflects incoming attacks for 1 turn.',
+        condition: (ctx) => ctx.turn > 1 && !ctx.self.statuses.some((s) => s.id === 'reflection'),
+        resolve(ctx) {
+          ctx.applyStatusToSelf('reflection', 1);
+          return `${ctx.self.name} sets its feet. "Come." (Reflection, 1 turn)`;
+        },
+      },
+      {
+        id: 'spear_thrust', label: 'Spear Thrust', weight: 3,
+        description: 'Disciplined Pierce attack.',
+        resolve(ctx) { return hitPlayer(ctx, 1.05, 'pierce', 'Spear Thrust'); },
+      },
+    ],
   },
 
   the_unread: {
     id: 'the_unread',
     name: 'The Unread',
-    hp: 65, atk: 4, matk: 22, def: 8, mdef: 18, spd: 24,
-    dodge: 15,
+    level: 14,
+    hp: 170, mp: 90, atk: 20, matk: 24, def: 14, mdef: 16, spd: 15,
     attackType: 'shadow',
-    affinities: { sacred: 1.4, shadow: 0.3, shock: 0.7 },
-    xp: 45,
+    affinities: { sacred: 'wk', slash: 'null', pierce: 'null', blunt: 'null', shadow: 'drn', flame: 'rep' },
+    xp: 80,
     minResonance: 50,
-    description: 'Not a creature. A sentence the Loom never finished, wearing a shape to say it in.',
-    tendency: 'caster',
-    intents: [
+    description: 'Apex predator of the deep stacks. Loom-touched. Wrong silhouette.',
+    moves: [
       {
-        id: 'reads_you_first', label: 'Reads You First', weight: 900,
-        condition: (ctx) => ctx.turn === 1,
-        description: 'Opens by reading you: shadow damage plus Seal Mind (2 turns).',
+        id: 'page_tear', label: 'Page Tear', weight: 3,
+        description: 'True damage — bypasses shields entirely.',
         resolve(ctx) {
-          ctx.applyStatusToPlayer('seal_mind', 2);
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shadow', ctx.self.name);
-          return `${ctx.self.name} reads you first, then answers — ${dmg} damage, Seal Mind (2 turns).`;
+          const raw = Math.max(8, Math.round(ctx.self.matk * 0.9));
+          const dmg = ctx.applyDamageToPlayer(raw, 'shadow', `${ctx.self.name} — Page Tear`, { bypassGuard: true, guaranteed: true });
+          return `It tears a page out of the air — out of you. ${dmg} true damage.`;
         },
       },
       {
-        id: 'true_ending', label: 'The Sentence\'s True Ending', weight: 900,
-        condition: (ctx) => ctx.turn > 1 && ctx.self.hp / ctx.self.maxHp < 0.5 && !ctx.self.flags.unraveled,
-        description: 'At low health it unspools the sentence that binds you — Weakness (3 turns).',
+        id: 'blank_slate', label: 'Blank Slate', weight: 2,
+        description: 'Strips your buffs and drains Momentum.',
+        condition: (ctx) => ctx.turn >= 3 && (ctx.player.statuses.length > 0),
         resolve(ctx) {
-          ctx.self.flags.unraveled = 1;
-          ctx.applyStatusToPlayer('weakness', 3);
-          return `${ctx.self.name} finds the sentence's true ending. Weakness (3 turns).`;
-        },
-      },
-      {
-        id: 'uninvited', label: 'Uninvited', weight: 900,
-        description: 'Continues speaking out loud. Shadow damage.',
-        resolve: (ctx) => {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shadow', ctx.self.name);
-          return `${ctx.self.name} continues, uninvited, for ${dmg} damage.`;
+          ctx.removePlayerBuffs();
+          ctx.reducePlayerMomentum(1);
+          return `The Unread revises you. Buffs stripped; your momentum smudges.`;
         },
       },
     ],
-    act(ctx) {
-      if (ctx.turn === 1) {
-        ctx.applyStatusToPlayer('seal_mind', 2);
-        const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shadow', ctx.self.name);
-        return `${ctx.self.name} reads you first, then answers — ${dmg} damage, Seal Mind (2 turns).`;
-      }
-      const hpPct = ctx.self.hp / ctx.self.maxHp;
-      if (hpPct < 0.5 && !ctx.self.flags.unraveled) {
-        ctx.self.flags.unraveled = 1;
-        ctx.applyStatusToPlayer('weakness', 3);
-        return `${ctx.self.name} finds the sentence's true ending. Weakness (3 turns).`;
-      }
-      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef * 0.3)), 'shadow', ctx.self.name);
-      return `${ctx.self.name} continues, uninvited, for ${dmg} damage.`;
-    },
   },
-};
 
-// ---- Minor summons used by boss fights (Sable Inquisitor's ally, Reflection's Echoes) ----
-
-export const SUMMON_ENEMIES: Record<string, EnemyDef> = {
+  // ---- Summons & NPCs ---------------------------------------------------------
   echo_of_hunger: {
-    id: 'echo_of_hunger', name: 'Echo of Hunger', hp: 60, atk: 10, matk: 4, def: 6, mdef: 6, spd: 12,
-    attackType: 'shadow', affinities: { sacred: 1.3 }, xp: 0,
-    description: 'You remember the bread. It remembers being eaten.',
-    tendency: 'sage',
-    intents: [
-      {
-        id: 'feed', label: 'Feed', weight: 100,
-        description: 'Shadow damage, and it heals itself for the memory of it.',
-        resolve(ctx) {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.atk - ctx.player.def / 2)), 'shadow', ctx.self.name);
-          ctx.healSelf(Math.round(dmg * 0.4));
-          return `${ctx.self.name} feeds on the memory for ${dmg} damage, healing itself.`;
-        },
-      },
-    ],
-    act(ctx) {
-      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.atk - ctx.player.def / 2)), 'shadow', ctx.self.name);
-      ctx.healSelf(Math.round(dmg * 0.4));
-      return `${ctx.self.name} feeds on the memory for ${dmg} damage, healing itself.`;
-    },
+    id: 'echo_of_hunger',
+    name: 'Echo of Hunger',
+    level: 10,
+    hp: 60, mp: 20, atk: 18, matk: 6, def: 8, mdef: 8, spd: 13,
+    attackType: 'slash',
+    affinities: { sacred: 'wk' },
+    xp: 20,
+    description: 'A shard of appetite wearing your posture.',
+    moves: [{
+      id: 'gnaw', label: 'Gnaw', weight: 1,
+      resolve(ctx) { return hitPlayer(ctx, 1.1, 'slash', 'Gnaw'); },
+    }],
   },
   echo_of_emptiness: {
-    id: 'echo_of_emptiness', name: 'Echo of Emptiness', hp: 60, atk: 8, matk: 8, def: 8, mdef: 8, spd: 12,
-    attackType: 'shadow', affinities: { sacred: 1.3 }, xp: 0,
-    description: 'What you burned burns back.',
-    tendency: 'manipulator',
-    intents: [
-      {
-        id: 'hollow_out', label: 'Hollow Out', weight: 100,
-        description: 'Shadow damage and a brief Silence.',
-        resolve(ctx) {
-          ctx.applyStatusToPlayer('silence', 1);
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef / 2)), 'shadow', ctx.self.name);
-          return `${ctx.self.name} hollows your options for ${dmg} damage and briefly Silences you.`;
-        },
-      },
-    ],
-    act(ctx) {
-      ctx.applyStatusToPlayer('silence', 1);
-      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.matk - ctx.player.mdef / 2)), 'shadow', ctx.self.name);
-      return `${ctx.self.name} hollows your options for ${dmg} damage and briefly Silences you.`;
-    },
+    id: 'echo_of_emptiness',
+    name: 'Echo of Emptiness',
+    level: 10,
+    hp: 65, mp: 30, atk: 10, matk: 18, def: 8, mdef: 10, spd: 12,
+    attackType: 'shadow',
+    affinities: { sacred: 'wk' },
+    xp: 20,
+    description: 'A shard of absence shaped like a person-shaped hole.',
+    moves: [{
+      id: 'hollow_touch', label: 'Hollow Touch', weight: 1,
+      resolve(ctx) { return magicHitPlayer(ctx, 1.1, 'shadow', 'Hollow Touch'); },
+    }],
   },
   echo_of_harmony: {
-    id: 'echo_of_harmony', name: 'Echo of Harmony', hp: 60, atk: 9, matk: 9, def: 7, mdef: 9, spd: 14,
-    attackType: 'shadow', affinities: { sacred: 1.3 }, xp: 0,
-    description: 'A voice that never sang alone.',
-    tendency: 'aggressor',
-    intents: [
-      {
-        id: 'harmonize', label: 'Harmonize', weight: 100,
-        description: 'A chord of shadow damage.',
-        resolve(ctx) {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.atk - ctx.player.def / 2)), 'shadow', ctx.self.name);
-          return `${ctx.self.name} harmonizes against you for ${dmg} damage.`;
-        },
-      },
-    ],
-    act(ctx) {
-      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.atk - ctx.player.def / 2)), 'shadow', ctx.self.name);
-      return `${ctx.self.name} harmonizes against you for ${dmg} damage.`;
-    },
+    id: 'echo_of_harmony',
+    name: 'Echo of Harmony',
+    level: 10,
+    hp: 70, mp: 40, atk: 14, matk: 14, def: 10, mdef: 12, spd: 12,
+    attackType: 'sacred',
+    affinities: { shadow: 'wk' },
+    xp: 22,
+    description: 'A shard of the chord that agreed too easily.',
+    moves: [{
+      id: 'discord_note', label: 'Dissonant Note', weight: 1,
+      resolve(ctx) { return magicHitPlayer(ctx, 1.0, 'sacred', 'Dissonant Note'); },
+    }],
   },
   echo_of_cleanliness: {
-    id: 'echo_of_cleanliness', name: 'Echo of Cleanliness', hp: 60, atk: 10, matk: 6, def: 9, mdef: 9, spd: 10,
-    attackType: 'sacred', affinities: { shadow: 1.3 }, xp: 0,
-    description: 'Scrubbed white. It does not remember hurting.',
-    tendency: 'aggressor',
-    intents: [
-      {
-        id: 'scrub', label: 'Scrub Clean', weight: 100,
-        description: 'A clean, straightforward strike that stifles your Resonance.',
-        resolve(ctx) {
-          const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.atk - ctx.player.def / 2)), 'sacred', ctx.self.name);
-          return `${ctx.self.name} strikes for ${dmg} damage. Your Resonance skills feel muted.`;
-        },
-      },
-    ],
-    act(ctx) {
-      const dmg = ctx.applyDamageToPlayer(Math.max(3, Math.round(ctx.self.atk - ctx.player.def / 2)), 'sacred', ctx.self.name);
-      return `${ctx.self.name} strikes for ${dmg} damage. Your Resonance skills feel muted.`;
-    },
+    id: 'echo_of_cleanliness',
+    name: 'Echo of Cleanliness',
+    level: 10,
+    hp: 68, mp: 35, atk: 15, matk: 12, def: 11, mdef: 11, spd: 12,
+    attackType: 'slash',
+    affinities: { sacred: 'wk' },
+    xp: 22,
+    description: 'A shard that cannot abide being touched.',
+    moves: [{
+      id: 'scrub', label: 'Scrub', weight: 1,
+      resolve(ctx) { return hitPlayer(ctx, 1.05, 'slash', 'Scrub'); },
+    }],
   },
   sera_voss: {
     id: 'sera_voss',
     name: 'Sera Voss',
-    hp: 70, atk: 16, matk: 6, def: 8, mdef: 8, spd: 22,
-    attackType: 'pierce',
-    affinities: { blunt: 1.3, pierce: 0.6 },
-    xp: 15,
-    description: 'Ten years off the Archive payroll and still faster than you.',
-    tendency: 'hunter',
-    intents: [
-      {
-        id: 'trade_knife', label: 'Trade Knife', weight: 100,
-        description: 'A fast, deceptively light throw.',
-        resolve(ctx) {
-          return basicAttack(ctx, 'pierce', 1.0, 'throws a trade-knife');
-        },
-      },
-    ],
-    act(ctx) {
-      return basicAttack(ctx, 'pierce', 1.0, 'throws a trade-knife');
-    },
+    level: 4,
+    hp: 90, mp: 30, atk: 14, matk: 8, def: 10, mdef: 9, spd: 13,
+    attackType: 'slash',
+    affinities: {},
+    xp: 0,
+    description: 'Expedition fighter — camp-trained, road-hardened.',
+    moves: [{
+      id: 'camp_knife', label: 'Camp Knife', weight: 1,
+      resolve(ctx) { return hitPlayer(ctx, 1.0, 'slash', 'Camp Knife'); },
+    }],
   },
 };
 
-/** Which enemies are eligible per page range, for BoardGenerator's combat-node resolution.
- *  Each stage (4 pages = 1 chapter) has an exclusive roster; later stages also reuse
- *  earlier elite pools. Resonance only tightens availability (never unlocks earlier). */
-export function enemiesForPage(page: number, resonance: number): string[] {
-  const stage = stageForPage(page);
-  const pool = [...STAGE_ENEMY_POOLS[stage - 1]];
-  if (stage >= 3 && resonance >= 25) pool.push('memory_wraith');
-  if (stage >= 5 && resonance >= 50) pool.push('the_unread');
-  return pool;
+export const SUMMON_ENEMIES: Record<string, EnemyDef> = {
+  echo_of_hunger: ENEMIES.echo_of_hunger,
+  echo_of_emptiness: ENEMIES.echo_of_emptiness,
+  echo_of_harmony: ENEMIES.echo_of_harmony,
+  echo_of_cleanliness: ENEMIES.echo_of_cleanliness,
+  sera_voss: ENEMIES.sera_voss,
+};
+
+// ============================================================================
+// Stage pools — which enemies can appear where (see docs/ENEMY_ROSTER_BY_STAGE.md)
+// ============================================================================
+
+export function stageForPage(page: number): number {
+  if (page <= 3) return 1;
+  if (page <= 7) return 2;
+  if (page <= 11) return 3;
+  if (page <= 15) return 4;
+  return 5;
 }
 
-/** Exclusive per-stage rosters (stage 5 reuses stages 3–4 elites). */
 const STAGE_ENEMY_POOLS: string[][] = [
   ['dust_wight', 'echo_skeleton'],
   ['venn_custodian', 'sable_zealot', 'ash_seer'],
@@ -705,45 +514,24 @@ const STAGE_ENEMY_POOLS: string[][] = [
   ['dust_road_raider', 'archive_cipher_wraith', 'sable_inquisitor', 'ash_mutant', 'echo_soldier'],
 ];
 
-/** 1-based stage (1–5) for a page: pages 1–3, 4–7, 8–11, 12–15, 16–20. */
-export function stageForPage(page: number): number {
-  return Math.min(5, Math.floor(page / 4) + 1);
-}
-
-/** Stage an enemy belongs to (1–5). 0 = exempt — never substituted by sanitizeFightEnemies. */
 export function stageForEnemy(id: string): number {
-  switch (id) {
-    case 'dust_wight':
-    case 'echo_skeleton':
-      return 1;
-    case 'venn_custodian':
-    case 'sable_zealot':
-    case 'ash_seer':
-      return 2;
-    case 'dust_road_raider':
-    case 'archive_cipher_wraith':
-    case 'memory_wraith':
-      return 3;
-    case 'sable_inquisitor':
-    case 'ash_mutant':
-    case 'echo_soldier':
-      return 4;
-    case 'the_unread':
-      return 5;
-    default:
-      return 0; // sera_voss (NPC event fight), summons, unknown — pass through
+  for (let i = 0; i < STAGE_ENEMY_POOLS.length; i++) {
+    if (STAGE_ENEMY_POOLS[i].includes(id)) return i + 1;
   }
+  return 1;
 }
 
-/** Stage-scrubs a scripted fight (event choice, ambush) so each stage only sees its own
- *  roster. Enemies belonging to a later stage are replaced by a random member of the
- *  current stage's pool; exempt enemies (stageForEnemy === 0) pass through unchanged. */
-export function sanitizeFightEnemies(enemyIds: string[], page: number, rng: () => number): string[] {
+/** Combat pool for a page + Resonance level. */
+export function enemiesForPage(page: number, resonance: number): string[] {
   const stage = stageForPage(page);
-  const pool = STAGE_ENEMY_POOLS[stage - 1];
-  return enemyIds.map((id) => {
-    const need = stageForEnemy(id);
-    if (need === 0 || need <= stage) return id;
-    return pool[Math.floor(rng() * pool.length)] ?? id;
-  });
+  const pool = [...STAGE_ENEMY_POOLS[stage - 1]];
+  if (stage >= 3 && resonance >= 25) pool.push('memory_wraith');
+  if (stage >= 5 && resonance >= 50) pool.push('the_unread');
+  return pool;
+}
+
+/** Scrubs scripted fights so later-stage enemies never appear early. */
+export function sanitizeFightEnemies(enemyIds: string[], page: number, resonance: number): string[] {
+  const pool = enemiesForPage(page, resonance);
+  return enemyIds.map((id) => (pool.includes(id) || SUMMON_ENEMIES[id] || !ENEMIES[id] ? id : pool[Math.floor(Math.random() * pool.length)]));
 }

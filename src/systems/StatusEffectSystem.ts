@@ -48,25 +48,25 @@ export function removeStatus(statuses: StatusInstance[], id: StatusId): void {
 
 /** Removes all "beneficial" statuses — used by Dispel Holy-type effects. */
 export function removeAllBuffs(statuses: StatusInstance[]): void {
-  const buffIds = ['focus', 'barrier', 'regeneration', 'fortify', 'blessing', 'haste', 'reflection', 'brace', 'echo_surge', 'atk_up'];
+  const buffIds = ['focus', 'barrier', 'regeneration', 'fortify', 'blessing', 'haste', 'reflection', 'brace', 'echo_surge', 'atk_up', 'defense_up'];
   for (let i = statuses.length - 1; i >= 0; i--) {
     if (buffIds.includes(statuses[i].id)) statuses.splice(i, 1);
   }
 }
 
-/** Removes every debuff (Defense-down, slow, armour break, weakness, DoT-control). */
+const DEBUFF_IDS = ['weakness', 'defense_down', 'slow', 'armour_break', 'seal_mind', 'fragile_perception', 'exhausted', 'slowed', 'sacred_mark', 'heal_block'];
+
+/** Removes every debuff. */
 export function removeAllDebuffs(statuses: StatusInstance[]): void {
-  const debuffIds = ['weakness', 'defense_down', 'slow', 'armour_break', 'seal_mind', 'fragile_perception', 'exhausted'];
   for (let i = statuses.length - 1; i >= 0; i--) {
-    if (debuffIds.includes(statuses[i].id)) statuses.splice(i, 1);
+    if (DEBUFF_IDS.includes(statuses[i].id)) statuses.splice(i, 1);
   }
 }
 
 /** Removes a single debuff (arbitrary choice). */
 export function removeDebuffs(statuses: StatusInstance[]): void {
-  const debuffIds = ['weakness', 'defense_down', 'slow', 'armour_break', 'seal_mind', 'fragile_perception', 'exhausted'];
   for (let i = statuses.length - 1; i >= 0; i--) {
-    if (debuffIds.includes(statuses[i].id)) {
+    if (DEBUFF_IDS.includes(statuses[i].id)) {
       statuses.splice(i, 1);
       return;
     }
@@ -118,6 +118,7 @@ export function statMultiplier(statuses: StatusInstance[], stat: 'atk' | 'def' |
   if (stat === 'mdef' && hasStatus(statuses, 'fortify')) mult *= 1.3;
   if (stat === 'spd' && hasStatus(statuses, 'haste')) mult *= 1.25;
   if (stat === 'atk' && hasStatus(statuses, 'atk_up')) mult *= 1.25;
+  if (stat === 'def' && hasStatus(statuses, 'defense_up')) mult *= 1.2;
   if (stat === 'atk' && hasStatus(statuses, 'weakness')) mult *= 0.8;
   if (stat === 'def' && hasStatus(statuses, 'defense_down')) mult *= 0.7;
   if (stat === 'mdef' && hasStatus(statuses, 'defense_down')) mult *= 0.7;

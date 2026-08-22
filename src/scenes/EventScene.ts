@@ -88,7 +88,7 @@ export class EventScene extends Phaser.Scene {
     this.choiceMenu?.destroy();
     this.choiceMenu = undefined;
 
-    const resolution = resolveEventChoice(player, choice, Math.random);
+    const resolution = resolveEventChoice(player, choice, () => Math.random());
     useGameStore.getState().persist();
 
     this.dialog?.destroy();
@@ -103,7 +103,7 @@ export class EventScene extends Phaser.Scene {
       }
       if (resolution.combat) {
         const page = Math.max(1, Math.ceil((currentGame?.currentNodeIndex ?? 1) / 10));
-        const enemyIds = sanitizeFightEnemies(resolution.combat.enemyIds, page, Math.random);
+        const enemyIds = sanitizeFightEnemies(resolution.combat.enemyIds, page, currentPlayer.resonance);
         fadeToScene(this, 'Combat', {
           mode: 'event',
           enemyIds,

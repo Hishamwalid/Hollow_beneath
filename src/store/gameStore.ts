@@ -1,28 +1,34 @@
 import { create } from 'zustand';
 import type { EquipmentBonuses } from '@data/stats';
-import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES, getEquipmentBonuses } from '@data/stats';
+import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES, getEquipmentBonuses, STAT_MAX } from '@data/stats';
 import { STARTING_FACTIONS } from '@data/factions';
 import { STARTING_INVENTORY } from '@data/items';
-import { STAT_MAX } from '@data/stats';
-import type { GameState, PlayerState, StatBlock, BestRunStats, RunStats, Equipment, ClassId } from '@data/types';
+import type {
+  AffinityKind,
+  BestRunStats,
+  DamageType,
+  Equipment,
+  GameState,
+  MetaState,
+  PlayerState,
+  RunStats,
+  StatBlock,
+} from '@data/types';
+import { MAX_EQUIPPED_SKILLS } from '@data/types';
 import { generateBoard } from '@systems/BoardGenerator';
 import { mulberry32, randomSeed } from '@systems/rng';
 import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } from '@systems/SaveManager';
 import { applyUnlocksToNewRun, deathRefund, shardsForEnding } from '@systems/EchoShardSystem';
 import { computeLevelUp, MAX_LEVEL } from '@systems/LevelSystem';
 import { settingsManager } from '@systems/SettingsManager';
-import { addArchiveFragment } from '@systems/combat/ArchiveSystem';
-import { SKILL_TREES } from '@data/skillTree';
-import { CLASSES } from '@data/classes';
 import { TOTAL_MAJOR_BOSSES } from '@data/bosses';
 import { getLoreFragment, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { resonanceTier, TIER_LABELS } from '@systems/ResonanceSystem';
+import { chapterGrantSkills } from '@data/skills';
 
-export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0, classId: ClassId = 'balanced'): PlayerState {
+export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0): PlayerState {
   const derived = computeDerivedStats(stats, STARTING_EQUIPMENT_BONUSES as EquipmentBonuses);
-  const classDef = CLASSES.find((c) => c.id === classId);
-  const skillsKnown = classDef ? [classDef.passive.id, classDef.signature.id] : [];
-  const skillTreePurchases = classDef ? { [classId]: 2 } : {};
+  const granted = chapterGrantSkills(1);
   const player: PlayerState = {
     stats,
     derived,
@@ -30,9 +36,8 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     currentMP: derived.maxMP,
     level: 1,
     xp: 0,
-    skillPoints: 0,
-    skillTreePurchases,
-    skillsKnown,
+    skillsKnown: [...granted],
+    equippedSkills: granted.slice(0, MAX_EQUIPPED_SKILLS),
     resonance: 0,
     resonancePeak: 0,
     faction: { ...STARTING_FACTIONS },
@@ -45,11 +50,6 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     enemiesKilled: 0,
     bossesDefeated: [],
     momentum: 0,
-    classId,
-    fatigue: 0,
-    insight: 0,
-    fearGauge: 0,
-    position: 'middle',
     echoShards: 0,
     unlocks: [...purchasedUnlocks],
     gold: 50,
@@ -63,7 +63,7 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
 function computeRunStatsImpl(
   player: PlayerState,
   game: GameState,
-  meta: ReturnType<typeof defaultMeta>,
+  meta: MetaState,
   earnedShards: number,
   endingId: string | null,
 ): RunStats {
@@ -96,12 +96,12 @@ function computeRunStatsImpl(
 }
 
 interface GameStore {
-  meta: ReturnType<typeof defaultMeta>;
+  meta: MetaState;
   player: PlayerState | null;
   game: GameState | null;
 
   initFromDisk: () => void;
-  startNewRun: (stats: StatBlock, classId?: ClassId) => void;
+  startNewRun: (stats: StatBlock) => void;
   loadActiveRun: () => boolean;
   persist: () => void;
   recordCheckpoint: () => void;
@@ -110,14 +110,14 @@ interface GameStore {
   playerHistorySet: () => Set<string>;
   addXp: (amount: number) => number;
   awardStatPoint: (stat: keyof StatBlock) => void;
-  awardSkillPoint: () => void;
-  consumeSkillPoint: () => void;
-  purchaseSkillTreeTier: (treeId: string, skillId: string) => boolean;
-  resetSkillTreePurchases: () => void;
-  computeRunStats: () => RunStats | null;
   equipItem: (slot: keyof Equipment, itemId: string | null) => void;
-  /** Phase 6c: merge per-fight archive gains (enemyId -> fragments) into the persistent catalogue. */
-  commitArchiveGains: (gains: Record<string, number>) => void;
+  learnSkill: (skillId: string) => boolean;
+  equipSkill: (skillId: string) => boolean;
+  unequipSkill: (skillId: string) => boolean;
+  grantChapterSkills: (chapter: number) => string[];
+  commitDiscoveries: (gains: Record<string, Partial<Record<DamageType, AffinityKind>>>) => void;
+  commitBestiaryKills: (kills: Record<string, number>) => void;
+  computeRunStats: () => RunStats | null;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -130,12 +130,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ meta, player: activeRun?.player ?? null, game: activeRun?.game ?? null });
   },
 
-  startNewRun: (stats: StatBlock, classId?: ClassId) => {
+  startNewRun: (stats: StatBlock) => {
     const { meta } = get();
     const seed = randomSeed();
     const rng = mulberry32(seed);
-    const player = createStartingPlayer(stats, meta.purchasedUnlocks, meta.totalRuns, classId);
+    const player = createStartingPlayer(stats, meta.purchasedUnlocks, meta.totalRuns);
     const nodes = generateBoard(rng);
+    // A fresh descent forgets the Bestiary: all affinity slots start unknown again.
     const game: GameState = {
       currentNodeIndex: 0,
       currentPage: 0,
@@ -155,7 +156,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       isDead: false,
       endingAchieved: null,
     };
-    set({ player, game });
+    set({
+      player,
+      game,
+      meta: { ...meta, discoveredAffinities: {}, bestiaryKills: {} },
+    });
     get().persist();
   },
 
@@ -189,6 +194,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!player || !game) return;
     const refund = deathRefund(player.echoShards);
     const runStats = computeRunStatsImpl(player, game, meta, refund, null);
+    // Bank Bestiary progress even on death.
+    for (const [id, aff] of Object.entries(meta.discoveredAffinities)) {
+      void id; void aff; // discoveries are merged at combat end via commitDiscoveries
+    }
     const newMeta = {
       ...meta,
       echoShards: meta.echoShards + refund,
@@ -196,8 +205,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       loreFragmentsSeen: Array.from(new Set([...meta.loreFragmentsSeen, ...player.loreFragments])),
       lastRunStats: runStats,
     };
-    // Phase 6d: Ironman mode is permadeath — a death ends the run outright,
-    // with no checkpoint mercy, even if a checkpoint exists.
     const ironman = settingsManager.get().difficulty === 'ironman';
     if (ironman || game.checkpointPage === 0) {
       set({ meta: newMeta, player: null, game: null });
@@ -235,7 +242,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (game.currentPage === meta.bestRun.page && runTime < meta.bestRun.time);
     const runStats = computeRunStatsImpl(player, game, meta, earned, endingId);
     runStats.isNewBest = isBetter && meta.bestRun.page > 0;
-    const newMeta = {
+    const newMeta: MetaState = {
       ...meta,
       echoShards: meta.echoShards + earned,
       totalRuns: meta.totalRuns + 1,
@@ -256,16 +263,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!player) return 0;
     if (player.level >= MAX_LEVEL) return 0;
     player.xp += amount;
-    const { newLevel, levelsGained } = computeLevelUp(player.xp, player.level);
+    const { levelsGained } = computeLevelUp(player.xp, player.level);
     const actualLevels = Math.min(levelsGained, MAX_LEVEL - player.level);
     if (actualLevels > 0) {
       player.level += actualLevels;
-      player.skillPoints += actualLevels;
       if (player.level >= MAX_LEVEL) player.xp = 0;
-      set({ player: { ...player } });
-    } else {
-      set({ player: { ...player } });
     }
+    set({ player: { ...player } });
     return actualLevels;
   },
 
@@ -274,55 +278,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!player) return;
     if (player.stats[stat] >= STAT_MAX) return;
     player.stats[stat] += 1;
-    const bonuses = getEquipmentBonuses(player.equipment);
-    const oldHP = player.currentHP;
-    const oldMP = player.currentMP;
-    player.derived = computeDerivedStats(player.stats, bonuses);
-    player.currentHP = Math.min(oldHP, player.derived.maxHP);
-    player.currentMP = Math.min(oldMP, player.derived.maxMP);
+    player.derived = computeDerivedStats(player.stats, getEquipmentBonuses(player.equipment));
+    player.currentHP = Math.min(player.currentHP, player.derived.maxHP);
+    player.currentMP = Math.min(player.currentMP, player.derived.maxMP);
     set({ player: { ...player } });
     get().persist();
-  },
-
-  awardSkillPoint: () => {
-    const { player } = get();
-    if (!player) return;
-    player.skillPoints += 1;
-    set({ player: { ...player } });
-  },
-
-  consumeSkillPoint: () => {
-    const { player } = get();
-    if (!player) return;
-    if (player.skillPoints > 0) player.skillPoints -= 1;
-    set({ player: { ...player } });
-  },
-
-  purchaseSkillTreeTier: (treeId: string, skillId: string) => {
-    const { player } = get();
-    if (!player) return false;
-    const tree = SKILL_TREES.find((t) => t.id === treeId);
-    if (!tree) return false;
-    const node = tree.nodes.find((n) => n.id === skillId);
-    if (!node) return false;
-    const bought = player.skillTreePurchases[treeId] ?? 0;
-    const nodeTierIndex = tree.nodes.indexOf(node);
-    if (nodeTierIndex !== bought) return false;
-    if (player.skillPoints < node.cost) return false;
-    if (player.skillsKnown.includes(skillId)) return false;
-    player.skillPoints -= node.cost;
-    player.skillTreePurchases[treeId] = (player.skillTreePurchases[treeId] ?? 0) + 1;
-    player.skillsKnown.push(skillId);
-    set({ player: { ...player } });
-    get().persist();
-    return true;
-  },
-
-  resetSkillTreePurchases: () => {
-    const { player } = get();
-    if (!player) return;
-    player.skillTreePurchases = {};
-    set({ player: { ...player } });
   },
 
   equipItem: (slot: keyof Equipment, itemId: string | null) => {
@@ -335,28 +295,95 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const invIdx = player.inventory.findIndex((i) => i.id === itemId);
       if (invIdx === -1) return;
       const invEntry = player.inventory[invIdx];
-      if (invEntry.qty > 1) {
-        invEntry.qty -= 1;
-      } else {
-        player.inventory.splice(invIdx, 1);
-      }
+      if (invEntry.qty > 1) invEntry.qty -= 1;
+      else player.inventory.splice(invIdx, 1);
     }
     if (currentId !== null) {
       const existing = player.inventory.find((i) => i.id === currentId);
-      if (existing) {
-        existing.qty += 1;
-      } else {
-        player.inventory.push({ id: currentId, qty: 1 });
-      }
+      if (existing) existing.qty += 1;
+      else player.inventory.push({ id: currentId, qty: 1 });
     }
     player.equipment = { ...player.equipment, [slot]: itemId };
-    const bonuses = getEquipmentBonuses(player.equipment);
-    const oldMaxHP = player.derived.maxHP;
-    const oldMaxMP = player.derived.maxMP;
-    player.derived = computeDerivedStats(player.stats, bonuses);
+    player.derived = computeDerivedStats(player.stats, getEquipmentBonuses(player.equipment));
     player.currentHP = Math.min(player.currentHP, player.derived.maxHP);
     player.currentMP = Math.min(player.currentMP, player.derived.maxMP);
     set({ player: { ...player } });
+    get().persist();
+  },
+
+  learnSkill: (skillId: string) => {
+    const { player } = get();
+    if (!player || player.skillsKnown.includes(skillId)) return false;
+    player.skillsKnown.push(skillId);
+    if (player.equippedSkills.length < MAX_EQUIPPED_SKILLS) {
+      player.equippedSkills.push(skillId);
+    }
+    set({ player: { ...player } });
+    get().persist();
+    return true;
+  },
+
+  equipSkill: (skillId: string) => {
+    const { player } = get();
+    if (!player || !player.skillsKnown.includes(skillId)) return false;
+    if (player.equippedSkills.includes(skillId)) return true;
+    if (player.equippedSkills.length >= MAX_EQUIPPED_SKILLS) return false;
+    player.equippedSkills.push(skillId);
+    set({ player: { ...player } });
+    get().persist();
+    return true;
+  },
+
+  unequipSkill: (skillId: string) => {
+    const { player } = get();
+    if (!player) return false;
+    const idx = player.equippedSkills.indexOf(skillId);
+    if (idx === -1) return false;
+    player.equippedSkills.splice(idx, 1);
+    set({ player: { ...player } });
+    get().persist();
+    return true;
+  },
+
+  grantChapterSkills: (chapter: number) => {
+    const { player } = get();
+    if (!player) return [];
+    const grants = chapterGrantSkills(chapter);
+    const newlyLearned: string[] = [];
+    for (const id of grants) {
+      if (!player.skillsKnown.includes(id)) {
+        player.skillsKnown.push(id);
+        newlyLearned.push(id);
+      }
+    }
+    while (player.equippedSkills.length < MAX_EQUIPPED_SKILLS) {
+      const next = player.skillsKnown.find((s) => !player.equippedSkills.includes(s));
+      if (!next) break;
+      player.equippedSkills.push(next);
+    }
+    set({ player: { ...player } });
+    get().persist();
+    return newlyLearned;
+  },
+
+  commitDiscoveries: (gains: Record<string, Partial<Record<DamageType, AffinityKind>>>) => {
+    const { meta } = get();
+    const nextAffinities: Record<string, Partial<Record<DamageType, AffinityKind>>> = { ...meta.discoveredAffinities };
+    for (const [defId, slots] of Object.entries(gains)) {
+      const existing = nextAffinities[defId] ?? {};
+      nextAffinities[defId] = { ...existing, ...slots };
+    }
+    set({ meta: { ...meta, discoveredAffinities: nextAffinities } });
+    get().persist();
+  },
+
+  commitBestiaryKills: (kills: Record<string, number>) => {
+    const { meta } = get();
+    const nextKills: Record<string, number> = { ...meta.bestiaryKills };
+    for (const [id, count] of Object.entries(kills)) {
+      nextKills[id] = (nextKills[id] ?? 0) + count;
+    }
+    set({ meta: { ...meta, bestiaryKills: nextKills } });
     get().persist();
   },
 
@@ -364,15 +391,5 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { player, game, meta } = get();
     if (!player || !game) return null;
     return computeRunStatsImpl(player, game, meta, player.echoShards, game.endingAchieved);
-  },
-
-  commitArchiveGains: (gains) => {
-    const { meta } = get();
-    const nextArchive = { ...meta.enemyArchive };
-    for (const [enemyId, count] of Object.entries(gains)) {
-      for (let i = 0; i < count; i++) addArchiveFragment(nextArchive, enemyId);
-    }
-    set({ meta: { ...meta, enemyArchive: nextArchive } });
-    get().persist();
   },
 }));
