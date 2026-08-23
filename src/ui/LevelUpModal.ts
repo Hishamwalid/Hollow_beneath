@@ -6,7 +6,29 @@ import type { StatBlock } from '@data/types';
 
 export interface LevelUpModalHandle {
   container: Phaser.GameObjects.Container;
+  /** Keyboard nav: move focus up/down among the modal's rows. */
+  nav: (dir: 'up' | 'down') => void;
+  /** Activate the focused row. */
+  confirm: () => void;
   destroy: () => void;
+}
+
+/** Shared focus plumbing for the level-up family of modals. */
+function makeNav(rows: { select: () => void; setFocused: (f: boolean) => void }[]) {
+  let idx = -1;
+  return {
+    nav: (dir: 'up' | 'down') => {
+      if (rows.length === 0) return;
+      const cur = idx < 0 ? (dir === 'down' ? -1 : 0) : idx;
+      if (idx >= 0) rows[idx].setFocused(false);
+      idx = dir === 'down' ? Math.min(rows.length - 1, cur + 1) : Math.max(0, cur - 1);
+      rows[idx].setFocused(true);
+    },
+    confirm: () => {
+      const i = idx >= 0 ? idx : 0;
+      rows[i]?.select();
+    },
+  };
 }
 
 export function showLevelUpModal(
@@ -64,8 +86,13 @@ export function showLevelUpModal(
   }).setOrigin(0.5).setDepth(101);
   container.add(subtext);
 
+  const rows = [
+    { select: onStatPoint, setFocused: (f: boolean) => { statBtnBg.setFillStyle(f ? 0x3a3e44 : 0x2a2e33); statBtnBg.setStrokeStyle(1.5, 0xc9a24b, f ? 1 : 0.5); } },
+    { select: onSkillPoint, setFocused: (f: boolean) => { skillBtnBg.setFillStyle(f ? 0x3a3e44 : 0x2a2e33); skillBtnBg.setStrokeStyle(1.5, 0xc9a24b, f ? 1 : 0.5); } },
+  ];
   return {
     container,
+    ...makeNav(rows),
     destroy: () => container.destroy(),
   };
 }
@@ -95,6 +122,7 @@ export function showStatChoiceModal(
   ];
 
   const startY = GAME_HEIGHT / 2 - 85;
+  const rowBgs: { bg: Phaser.GameObjects.Rectangle; select: () => void }[] = [];
   stats.forEach((s, i) => {
     const y = startY + i * 42;
     const rowBg = scene.add.rectangle(0, y, 320, 36, 0x2a2e33).setStrokeStyle(1, 0x555555, 0.4).setDepth(111);
@@ -104,15 +132,24 @@ export function showStatChoiceModal(
     const descText = scene.add.text(40, y, s.desc, {
       fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5).setDepth(112);
+    const pick = () => { container.destroy(); onPick(s.key); };
     rowBg.setInteractive({ useHandCursor: true })
       .on('pointerover', () => rowBg.setFillStyle(0x3a3e44))
       .on('pointerout', () => rowBg.setFillStyle(0x2a2e33))
-      .on('pointerdown', () => { container.destroy(); onPick(s.key); });
+      .on('pointerdown', pick);
     container.add([rowBg, nameText, descText]);
+    rowBgs.push({ bg: rowBg, select: pick });
   });
 
   return {
     container,
+    ...makeNav(rowBgs.map((r) => ({
+      select: r.select,
+      setFocused: (f: boolean) => {
+        r.bg.setFillStyle(f ? 0x3a3e44 : 0x2a2e33);
+        r.bg.setStrokeStyle(f ? 1.5 : 1, f ? 0xc9a24b : 0x555555, f ? 1 : 0.4);
+      },
+    }))),
     destroy: () => container.destroy(),
   };
 }

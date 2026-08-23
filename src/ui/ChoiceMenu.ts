@@ -1,16 +1,24 @@
 import Phaser from 'phaser';
-import { createButton } from './Button';
+import { createButton, type Button } from './Button';
 import { GAME_HEIGHT } from '@/config';
 
 export interface ChoiceMenuItem {
   label: string;
   subtitle?: string;
+  /** Optional right-aligned secondary text (e.g. element abbrev + MP cost). */
+  rightLabel?: string;
   disabled?: boolean;
   onSelect: () => void;
 }
 
 export interface ChoiceMenu {
   container: Phaser.GameObjects.Container;
+  /** Keyboard focus: highlight a row like hover (null clears). */
+  setFocused: (index: number | null) => void;
+  /** Activates a focused row's action (no-op while disabled). */
+  activate: (index: number) => void;
+  /** Number of rows. */
+  length: number;
   destroy: () => void;
 }
 
@@ -45,6 +53,8 @@ export function createChoiceMenu(
 
   const container = scene.add.container(x, startY).setDepth(40);
 
+  const buttons: Button[] = [];
+  let focused = -1;
   items.forEach((item, i) => {
     const btn = createButton(scene, 0, i * spacing, item.label, item.onSelect, {
       width,
@@ -55,10 +65,22 @@ export function createChoiceMenu(
     btn.container.setAlpha(0);
     scene.tweens.add({ targets: btn.container, alpha: 1, duration: 220, delay: i * 55, ease: 'Sine.easeOut' });
     container.add(btn.container);
+    buttons.push(btn);
   });
 
   return {
     container,
+    setFocused: (index) => {
+      if (focused >= 0) buttons[focused]?.setFocused(false);
+      focused = index ?? -1;
+      if (index === null || !buttons[index] || items[index].disabled) { focused = -1; return; }
+      buttons[index].setFocused(true);
+    },
+    activate: (index) => {
+      const it = items[index];
+      if (it && !it.disabled) it.onSelect();
+    },
+    length: items.length,
     destroy: () => container.destroy(),
   };
 }
