@@ -76,8 +76,8 @@ export function createStatPanel(scene: Phaser.Scene, x: number, y: number): Stat
   const mpBar = bar(scene, container, -68.7, 13, barW, 9.7, 0x64b5f5);
   const mpText = scene.add.text(valueX, 13, '', { fontFamily: FONT_MONO, fontSize: '10px', color: '#64b5f5', ...STROKE }).setOrigin(1, 0.5);
 
-  const momentumLabel = scene.add.text(labelX, 38.7, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '10px', color: PALETTE_HEX.gold, ...STROKE }).setOrigin(0, 0.5);
-  const momentumBar = bar(scene, container, -68.7, 38.7, barW, 9.7, 0xb967bc);
+  const momentumLabel = scene.add.text(labelX, 38.7, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '9px', color: PALETTE_HEX.gold, ...STROKE }).setOrigin(0, 0.5);
+  const momentumBar = bar(scene, container, -52, 38.7, 122, 9.7, 0xb967bc);
 
   container.add([
     headerText, levelText,

@@ -14,7 +14,7 @@ import { maybePickWhisper } from '@systems/WhisperSystem';
 import { showWhisper } from '@ui/WhisperOverlay';
 import { addResonanceEffects } from '@systems/ResonanceFX';
 import { createStatPanel } from '@ui/StatPanel';
-import { createEnemyDisplay, createActionGrid, createTurnOrderPanel, createTooltipPanel, createAllyDisplay, type EnemyDisplay, type ActionGridItem, type TooltipPanelHandle, type AllyDisplay, ENEMY_NAME_X, ENEMY_NAME_Y } from '@ui/CombatHUD';
+import { createEnemyDisplay, createActionGrid, createTurnOrderPanel, createTooltipPanel, createAllyDisplay, createBossBar, type EnemyDisplay, type ActionGridItem, type ActionGridHandle, type TooltipPanelHandle, type AllyDisplay } from '@ui/CombatHUD';
 import { createQteBar, type QteBarHandle, type QteQuality } from '@ui/QteBar';
 import { createChoiceMenu, type ChoiceMenu, type ChoiceMenuItem } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
@@ -68,8 +68,9 @@ const ENEMY_DMG_AT = 300;
 /** Pause after the last actor settles before re-enabling the player. */
 const ENEMY_SETTLE_HOLD_MS = 450;
 
-/** Player actions that require an explicit target when more than one enemy stands. */
-const TARGETED_ACTIONS = new Set(['attack', 'scan', 'sunder', 'skill', 'resonance', 'deep_analyze']);
+/** Player actions that require an explicit target when more than one enemy stands.
+ *  Basic strikes (attack/sunder) skip this — they hit the selected enemy immediately. */
+const TARGETED_ACTIONS = new Set(['scan', 'skill', 'resonance', 'deep_analyze']);
 
 /** Handpicked UI position offsets (mirrors the board node-editor workflow). Loaded
  *  from src/data/combatLayout.json; edited live via `?editlayout=1`. */
@@ -160,6 +161,36 @@ export class CombatScene extends Phaser.Scene {
   /** Modal title/flavor texts that closeOverlay must clean up (they aren't children of the menu). */
   private overlayTexts: Phaser.GameObjects.Text[] = [];
   private turnOrderPanel?: ReturnType<typeof createTurnOrderPanel>;
+  private bossBar?: ReturnType<typeof createBossBar>;
+  private inlineMenu?: Phaser.GameObjects.Container;
+  private momentumMenu?: Phaser.GameObjects.Container;
+  /** Keyboard navigation state (arrows/WASD move focus, Enter/Space activate). */
+  private gridHandle?: ActionGridHandle;
+  private gridFocus = -1;
+  private inlineRows: {
+    bg: Phaser.GameObjects.Rectangle;
+    t: Phaser.GameObjects.Text;
+    right?: Phaser.GameObjects.Text;
+    rightChips?: Phaser.GameObjects.Rectangle[];
+    disabled: boolean;
+    onSelect: () => void;
+    onHover?: () => void;
+  }[] = [];
+  private inlineFocus = -1;
+  private momentumButtons: { bg: Phaser.GameObjects.Rectangle; t: Phaser.GameObjects.Text; sub: Phaser.GameObjects.Text; onSelect: () => void }[] = [];
+  private momentumFocus = -1;
+  /** Alive-enemy keys the open Scan modal can cycle through (←/→). */
+  private scanCycle?: { keys: string[]; index: number };
+  /** Keyboard focus index for choice-menu overlays (crisis/insight/victory menus). */
+  private overlayFocus = -1;
+  /** Level-up / stat-choice modal keyboard handle. */
+  private kbdModal?: { nav: (dir: 'up' | 'down') => void; confirm: () => void };
+  /** Single-button screens (e.g. victory summary Continue) activatable with Enter. */
+  private kbdSingle?: () => void;
+  /** Nav key listeners (removed on scene shutdown so they never leak). */
+  private kbHandlers: [string, () => void][] = [];
+  private targetingMode = false;
+  private pendingTargeted?: { type: string; fn: () => CombatSnapshot; hpCost: number };
   private resultShown = false;
   private fxAnchor = { ...FX_ANCHOR_BASE };
   private playerShadow?: Phaser.GameObjects.Ellipse;
@@ -306,6 +337,9 @@ export class CombatScene extends Phaser.Scene {
     });
     const toAdj = layoutAdj('turnOrder');
     this.turnOrderPanel = createTurnOrderPanel(this, TURN_ORDER_BASE.x + toAdj.dx, TURN_ORDER_BASE.y + toAdj.dy);
+    if (data.mode === 'boss' || initialSnap.enemies.some((e) => e.isBoss)) {
+      this.bossBar = createBossBar(this, FRAME_X + FRAME_W / 2, FRAME_Y + 44);
+    }
 
     if (new URLSearchParams(window.location.search).get('combatdebug') === '1') {
       this.debugOverlay = this.add
@@ -324,6 +358,33 @@ export class CombatScene extends Phaser.Scene {
     if (whisper) showWhisper(this, GAME_WIDTH / 2, 96, whisper.text, 600);
 
     if (EDIT_LAYOUT) this.setupLayoutEditor();
+
+    // Global keyboard navigation: arrows/WASD move focus, Enter/Space activate.
+    const kb = this.input.keyboard;
+    kb?.addCapture(['SPACE', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'ENTER']);
+    const NAV_KEYS: Array<[string, 'up' | 'down' | 'left' | 'right']> = [
+      ['keydown-UP', 'up'], ['keydown-W', 'up'],
+      ['keydown-DOWN', 'down'], ['keydown-S', 'down'],
+      ['keydown-LEFT', 'left'], ['keydown-A', 'left'],
+      ['keydown-RIGHT', 'right'], ['keydown-D', 'right'],
+    ];
+    this.kbHandlers = [['keydown-ESC', () => {
+      if (this.scanPanel) { this.closeOverlay(); return; }
+      if (this.momentumMenu) return; // a momentum choice is mandatory
+      if (this.inlineMenu) { this.closeInlineMenu(); return; }
+      this.cancelTargeting();
+    }]];
+    NAV_KEYS.forEach(([evt, dir]) => this.kbHandlers.push([evt, () => this.navMove(dir)]));
+    this.kbHandlers.push(['keydown-ENTER', () => this.navConfirm()]);
+    this.kbHandlers.push(['keydown-SPACE', () => this.navConfirm()]);
+    this.kbHandlers.forEach(([evt, fn]) => kb?.on(evt, fn));
+    // Scene shutdown must drop every nav listener — stale handlers surviving a
+    // restart (or Vite HMR) would double-fire actions in later fights.
+    this.events.once('shutdown', () => {
+      this.kbHandlers.forEach(([evt, fn]) => this.input.keyboard?.off(evt, fn));
+      this.kbHandlers = [];
+    });
+    this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => { if (ptr.rightButtonDown()) this.cancelTargeting(); });
 
     this.refresh(initialSnap);
     if (data.mode === 'boss') this.showBossEntry();
@@ -360,29 +421,21 @@ export class CombatScene extends Phaser.Scene {
     const rowY = this.enemyRowY();
     snap.enemies.forEach((e, i) => {
       const disp = createEnemyDisplay(this, startX + i * spacing, rowY, e.isBoss, () => {
+        // While the scan modal is open, clicking an enemy switches the scanned target.
+        if (this.scanPanel) {
+          if (e.alive) this.openScanModal(e.key);
+          return;
+        }
+        if (this.targetingMode && this.pendingTargeted) {
+          this.confirmTargetedAction(e.key);
+          return;
+        }
         this.selectedTarget = e.key;
         this.updateTargetHighlight(this.engine.snapshot());
       });
       disp.update(e);
+      if (e.isBoss) disp.setHpBarVisible(false);
       this.lastEnemyViews.set(e.key, e);
-      this.placeEnemyName(disp);
-      if (EDIT_LAYOUT) {
-        const pillAdj = layoutAdj('enemyNamePill');
-        disp.nameGroup.setData('pillBase', {
-          x: disp.nameGroup.x + pillAdj.dx,
-          y: disp.nameGroup.y + pillAdj.dy,
-        });
-        this.setupLayoutDrag(
-          disp.nameGroup,
-          'enemyName',
-          {
-            x: disp.container.x + ENEMY_NAME_X + layoutAdj('enemyName').dx,
-            y: disp.container.y + ENEMY_NAME_Y + layoutAdj('enemyName').dy,
-          },
-          140,
-          60,
-        );
-      }
       this.enemyDisplays.push(disp);
       this.enemyKeyMap.set(e.key, disp);
     });
@@ -394,17 +447,12 @@ export class CombatScene extends Phaser.Scene {
     this.enemyDisplays.forEach((d, i) => d.setSelected(snap.enemies[i]?.key === this.selectedTarget));
   }
 
-  private shortTurnName(name: string): string {
-    let n = name.replace(/^The /, '').trim();
-    if (n.length > 13) n = `${n.slice(0, 12)}…`;
-    return n;
-  }
 
   private turnOrderNames(snap: CombatSnapshot): Map<string, string> {
     const names = new Map<string, string>();
     names.set('player', 'Player');
-    for (const e of snap.enemies) names.set(e.key, this.shortTurnName(e.name));
-    for (const a of snap.allies) names.set(`ally_${a.id}`, this.shortTurnName(a.name));
+    for (const e of snap.enemies) names.set(e.key, e.name);
+    for (const a of snap.allies) names.set(`ally_${a.id}`, a.name);
     return names;
   }
 
@@ -619,14 +667,11 @@ export class CombatScene extends Phaser.Scene {
         if (isBoss) continue; // bosses stay for their defeat sequence
         // Regular foes drain, then dissolve away before the result shows.
         this.tweens.add({
-          targets: [disp.container, disp.nameGroup],
+          targets: disp.container,
           alpha: 0,
           delay: 250,
           duration: 450,
-          onComplete: () => {
-            disp.container.setVisible(false);
-            disp.nameGroup.setVisible(false);
-          },
+          onComplete: () => disp.container.setVisible(false),
         });
       }
       this.updateTargetHighlight(snap);
@@ -637,6 +682,7 @@ export class CombatScene extends Phaser.Scene {
       });
       this.updateTargetHighlight(snap);
     }
+    this.updateBossBar(snap);
     this.checkSentinelTransform(snap);
     this.buildActionGrid(snap);
     if (this.transformCutscene) return;
@@ -705,8 +751,10 @@ export class CombatScene extends Phaser.Scene {
     if (this.toastBusy || this.toastQueue.length === 0) return;
     const line = this.toastQueue.shift()!;
     this.toastBusy = true;
+    // Drop below the boss HP bar when one is on screen so the two never collide.
+    const toastY = this.bossBar && this.bossBar.container.visible ? FRAME_Y + 96 : LOG_TOAST.y;
     const t = this.add
-      .text(LOG_TOAST.x, LOG_TOAST.y, line, {
+      .text(LOG_TOAST.x, toastY, line, {
         fontFamily: FONT_BODY,
         fontSize: '15px',
         color: PALETTE_HEX.bone,
@@ -718,7 +766,7 @@ export class CombatScene extends Phaser.Scene {
       .setAlpha(0);
     // Boxed presentation so the message reads cleanly over the battlefield art.
     const bg = this.add
-      .rectangle(LOG_TOAST.x, LOG_TOAST.y, Math.max(t.width + 36, 120), t.height + 14, 0x0b0d10, 0.88)
+      .rectangle(LOG_TOAST.x, toastY, Math.max(t.width + 36, 120), t.height + 14, 0x0b0d10, 0.88)
       .setStrokeStyle(1, 0xc9a24b)
       .setOrigin(0.5)
       .setDepth(30)
@@ -801,11 +849,12 @@ export class CombatScene extends Phaser.Scene {
     ];
 
     const gridAdj = layoutAdj('actionGrid');
-    const { container } = createActionGrid(this, ACTION_GRID_BASE.x + gridAdj.dx, ACTION_GRID_BASE.y + gridAdj.dy, items, this.tooltipPanel!);
-    this.actionGridContainer = container;
+    this.gridHandle = createActionGrid(this, ACTION_GRID_BASE.x + gridAdj.dx, ACTION_GRID_BASE.y + gridAdj.dy, items, this.tooltipPanel!);
+    this.actionGridContainer = this.gridHandle.container;
+    this.gridFocus = -1;
     if (EDIT_LAYOUT) {
-      container.list.forEach((o) => o.disableInteractive());
-      this.setupLayoutDrag(container, 'actionGrid', ACTION_GRID_BASE, 590, 250);
+      this.gridHandle.container.list.forEach((o) => o.disableInteractive());
+      this.setupLayoutDrag(this.gridHandle.container, 'actionGrid', ACTION_GRID_BASE, 590, 250);
     }
   }
 
@@ -829,6 +878,7 @@ export class CombatScene extends Phaser.Scene {
       return {
         label: sk.name,
         subtitle: `${sk.description}${sk.damageType ? ` (${sk.damageType})` : ''}${costs.length ? ` · ${costs.join(' ')}` : ''}`,
+        rightLabel: [sk.damageType ? DAMAGE_TYPE_ABBREV[sk.damageType] : '', costs.join(' ')].filter(Boolean).join(' · '),
         disabled: !canAct || !mpOk || !hpOk,
         onSelect: () => { this.closeOverlay(); this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined), hpCost); },
       };
@@ -839,27 +889,17 @@ export class CombatScene extends Phaser.Scene {
       return;
     }
 
-    this.overlayBg?.destroy();
-    this.overlayMenu?.destroy();
-    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive().setDepth(35);
-    this.overlayBg.on('pointerdown', () => this.closeOverlay());
-    this.overlayMenu = createChoiceMenu(
-      this,
-      GAME_WIDTH / 2,
-      GAME_HEIGHT / 2 - Math.min(menuItems.length - 1, 4) * 28,
-      menuItems,
-      { width: 520, spacing: 56 },
-    );
-    this.previewWindup();
+    this.openInlineMenu(menuItems, 'SKILLS');
+
   }
 
-  private doAction(type: string, fn: () => CombatSnapshot, hpCost = 0) {
+  private doAction(type: string, fn: () => CombatSnapshot, hpCost = 0, skipTargeting = false) {
     if (this.enemyPhaseActive || this.transformCutscene || this.qteActive) return;
     try {
       audio.click();
       const before = this.engine.snapshot();
-      if (TARGETED_ACTIONS.has(type) && !this.selectedTarget && before.enemies.filter((e) => e.alive).length > 1) {
-        this.tooltipPanel?.show('Click an enemy to select your target first');
+      if (!skipTargeting && TARGETED_ACTIONS.has(type) && before.enemies.filter((e) => e.alive).length > 1) {
+        this.beginTargeting(type, fn, hpCost);
         return;
       }
       const prevHP = this.lastPlayerHP;
@@ -892,6 +932,330 @@ export class CombatScene extends Phaser.Scene {
       this.tooltipPanel?.show(`Error: ${err instanceof Error ? err.message : String(err)}`);
       try { this.refresh(this.engine.snapshot()); } catch (_) { /* noop */ }
     }
+  }
+
+  /** Move-first targeting: park the chosen action until an enemy is clicked. */
+  private beginTargeting(type: string, fn: () => CombatSnapshot, hpCost: number) {
+    this.pendingTargeted = { type, fn, hpCost };
+    this.targetingMode = true;
+    this.gridHandle?.setFocus(null);
+    this.gridFocus = -1;
+    this.tooltipPanel?.show('Choose a target — click an enemy to execute (←/→ cycle · ENTER confirm · ESC cancel)');
+    this.updateTargetHighlight(this.engine.snapshot());
+  }
+
+  private confirmTargetedAction(key: string) {
+    const pending = this.pendingTargeted;
+    if (!pending) return;
+    this.pendingTargeted = undefined;
+    this.targetingMode = false;
+    this.selectedTarget = key;
+    this.tooltipPanel?.hide();
+    this.updateTargetHighlight(this.engine.snapshot());
+    this.doAction(pending.type, pending.fn, pending.hpCost, true);
+  }
+
+  private cancelTargeting() {
+    if (!this.targetingMode) return;
+    this.pendingTargeted = undefined;
+    this.targetingMode = false;
+    this.tooltipPanel?.hide();
+    this.updateTargetHighlight(this.engine.snapshot());
+  }
+
+  /** Global keyboard navigation, routed by the topmost open UI layer. */
+  private navMove(dir: 'up' | 'down' | 'left' | 'right'): void {
+    // Scan modal: ←/→ cycle through alive enemies.
+    if (this.scanPanel) {
+      const cyc = this.scanCycle;
+      if ((dir === 'left' || dir === 'right') && cyc && cyc.keys.length > 1) {
+        cyc.index = (cyc.index + (dir === 'right' ? 1 : -1) + cyc.keys.length) % cyc.keys.length;
+        audio.click();
+        this.openScanModal(cyc.keys[cyc.index]);
+      }
+      return;
+    }
+    // Targeting mode: ←/→ move the reticle between alive enemies.
+    if (this.targetingMode) {
+      const alive = this.engine.snapshot().enemies.filter((e) => e.alive);
+      if (alive.length === 0) return;
+      const idx = Math.max(0, alive.findIndex((e) => e.key === this.selectedTarget));
+      const next = alive[(idx + (dir === 'right' || dir === 'down' ? 1 : -1) + alive.length) % alive.length];
+      this.selectedTarget = next.key;
+      audio.click();
+      this.updateTargetHighlight(this.engine.snapshot());
+      return;
+    }
+    // Momentum grid: 2-column layout.
+    if (this.momentumMenu) {
+      const n = this.momentumButtons.length;
+      if (n === 0) return;
+      const cols = 2;
+      let i = this.momentumFocus < 0 ? 0 : this.momentumFocus;
+      if (dir === 'right') i = Math.min(n - 1, i + 1);
+      else if (dir === 'left') i = Math.max(0, i - 1);
+      else if (dir === 'down') i = Math.min(n - 1, i + cols);
+      else i = Math.max(0, i - cols);
+      this.applyMomentumFocus(i);
+      return;
+    }
+    // Inline skill/item menu rows (skipping unusable rows).
+    if (this.inlineMenu) {
+      if (dir !== 'up' && dir !== 'down') return;
+      const n = this.inlineRows.length;
+      if (n === 0) return;
+      const step = dir === 'down' ? 1 : -1;
+      let i = this.inlineFocus < 0 ? (dir === 'down' ? -1 : 0) : this.inlineFocus;
+      let tries = n;
+      do {
+        i = (i + step + n) % n;
+        tries--;
+      } while (tries > 0 && this.inlineRows[i].disabled);
+      this.applyInlineFocus(i);
+      return;
+    }
+    // Level-up / stat-choice modals.
+    if (this.kbdModal) {
+      if (dir === 'up' || dir === 'down') this.kbdModal.nav(dir);
+      return;
+    }
+    // Choice-menu overlays (crisis / insight / victory menus).
+    if (this.overlayMenu) {
+      const n = this.overlayMenu.length;
+      if (n === 0) return;
+      if (dir !== 'up' && dir !== 'down') return;
+      this.overlayFocus = this.overlayFocus < 0
+        ? (dir === 'down' ? 0 : n - 1)
+        : (this.overlayFocus + (dir === 'down' ? 1 : -1) + n) % n;
+      this.overlayMenu.setFocused(this.overlayFocus);
+      return;
+    }
+    // Single-button screens: arrows have nothing to move between.
+    if (this.kbdSingle) return;
+    // Action grid (2 columns × 3 rows), skipping unusable cells.
+    if (!this.gridHandle || this.enemyPhaseActive || this.qteActive || this.transformCutscene) return;
+    if (this.engine.snapshot().phase !== 'player') return;
+    const count = 6;
+    const cols = 2;
+    let i = this.gridFocus < 0 ? 0 : this.gridFocus;
+    if (dir === 'right') i = Math.floor(i / cols) * cols + ((i % cols) + 1) % cols;
+    else if (dir === 'left') i = Math.floor(i / cols) * cols + ((i % cols) + cols - 1) % cols;
+    else if (dir === 'down') i = Math.min(count - 1, i + cols);
+    else i = Math.max(0, i - cols);
+    // Only land on usable cells — hop in the travel direction until one is found.
+    if (!this.gridHandle.isEnabled(i)) {
+      const step = dir === 'up' || dir === 'left' ? -1 : 1;
+      let tries = count;
+      while (tries-- > 0 && !this.gridHandle.isEnabled(((i % count) + count) % count)) {
+        i = (((i + step) % count) + count) % count;
+      }
+    }
+    if (!this.gridHandle.isEnabled(i)) {
+      this.setFocusGrid(-1);
+      return;
+    }
+    this.setFocusGrid(i);
+  }
+
+  /** Enter/Space on the focused element of the active layer. */
+  private navConfirm(): void {
+    // Never act while a strike is pending, the enemy phase runs, or a cutscene plays.
+    if (this.qteActive || this.enemyPhaseActive || this.transformCutscene) return;
+    if (this.scanPanel) return;
+    if (this.targetingMode) {
+      if (this.selectedTarget) {
+        audio.click();
+        this.confirmTargetedAction(this.selectedTarget);
+      }
+      return;
+    }
+    if (this.momentumMenu) {
+      const b = this.momentumButtons[this.momentumFocus];
+      if (b) { audio.click(); b.onSelect(); }
+      return;
+    }
+    if (this.inlineMenu) {
+      const r = this.inlineRows[this.inlineFocus];
+      if (r && !r.disabled) {
+        audio.click();
+        const sel = r.onSelect;
+        this.closeInlineMenu();
+        sel();
+      }
+      return;
+    }
+    // Level-up / stat-choice modals.
+    if (this.kbdModal) {
+      audio.click();
+      this.kbdModal.confirm();
+      return;
+    }
+    // Choice-menu overlays (crisis / insight / victory menus).
+    if (this.overlayMenu) {
+      const idx = this.overlayFocus >= 0 ? this.overlayFocus : 0;
+      audio.click();
+      this.overlayMenu.activate(idx);
+      return;
+    }
+    // Single-button screens (victory summary Continue).
+    if (this.kbdSingle) {
+      audio.click();
+      const go = this.kbdSingle;
+      this.kbdSingle = undefined;
+      go();
+      return;
+    }
+    if (this.gridFocus >= 0 && this.gridHandle && !this.qteActive) {
+      if (this.engine.snapshot().phase !== 'player') return;
+      this.gridHandle.activate(this.gridFocus);
+    }
+  }
+
+  private setFocusGrid(index: number): void {
+    if (!this.gridHandle) { this.gridFocus = -1; return; }
+    this.gridFocus = index;
+    this.gridHandle.setFocus(index);
+  }
+
+  private applyInlineFocus(index: number): void {
+    if (this.inlineFocus === index) return;
+    const prev = this.inlineRows[this.inlineFocus];
+    if (prev && !prev.disabled) {
+      prev.bg.setFillStyle(0x21252a);
+      prev.t.setColor('#ffffff');
+      prev.right?.setColor(PALETTE_HEX.goldBright);
+    }
+    this.inlineFocus = index;
+    const cur = this.inlineRows[index];
+    if (cur && !cur.disabled) {
+      cur.bg.setFillStyle(0xc9a24b);
+      cur.t.setColor('#0b0d10');
+      cur.right?.setColor('#0b0d10');
+    }
+  }
+
+  private applyMomentumFocus(index: number): void {
+    if (this.momentumFocus === index) return;
+    const prev = this.momentumButtons[this.momentumFocus];
+    if (prev) {
+      prev.bg.setFillStyle(0x21252a);
+      prev.t.setColor('#ffffff');
+      prev.sub.setColor(PALETTE_HEX.boneMuted);
+    }
+    this.momentumFocus = index;
+    const cur = this.momentumButtons[index];
+    if (cur) {
+      cur.bg.setFillStyle(0xc9a24b);
+      cur.t.setColor('#0b0d10');
+      cur.sub.setColor('#0b0d10');
+    }
+  }
+
+  private updateBossBar(snap: CombatSnapshot) {
+    if (!this.bossBar) return;
+    const boss = snap.enemies.find((e) => e.isBoss);
+    if (!boss) {
+      this.bossBar.container.setVisible(false);
+      return;
+    }
+    this.bossBar.container.setVisible(true);
+    this.bossBar.update(boss.name, boss.hp, boss.maxHp);
+  }
+
+  /** Skill/item menu expanded in place over the action grid. Grows only, stays in-frame.
+   *  BACK lives on a top-left arrow icon; rows carry optional right-aligned meta text. */
+  private openInlineMenu(items: ChoiceMenuItem[], title: string) {
+    this.closeInlineMenu();
+    this.gridHandle?.setFocus(null);
+    this.gridFocus = -1;
+    const gridAdj = layoutAdj('actionGrid');
+    const cx = ACTION_GRID_BASE.x + gridAdj.dx - 86.6;
+    const cy = ACTION_GRID_BASE.y + gridAdj.dy - 19.3;
+    const baseW = 409.3;
+    const baseH = 182.7;
+    const btnW = 368;
+    const btnH = 40;
+    const gap = 6;
+    const headerH = 56; // title row + breathing room under it
+    const rows = items.length;
+    const needH = headerH + rows * btnH + Math.max(0, rows - 1) * gap + 10;
+    const h = Math.max(baseH, needH);
+    const w = Math.max(baseW, btnW + 36);
+    const frameBottom = FRAME_Y + FRAME_H - 12;
+    const menuY = Math.min(cy, frameBottom - h / 2);
+    const menu = this.add.container(cx, menuY).setDepth(20);
+    menu.add(this.add.rectangle(0, 0, w, h, 0x9b741e).setStrokeStyle(2, 0x0b0d10).setOrigin(0.5));
+    menu.add(this.add.rectangle(0, 0, w - 6, h - 6, 0x14171b).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0.5));
+    menu.add(this.add.text(0, -h / 2 + 26, title, { fontFamily: FONT_SERIF, fontSize: '17px', color: PALETTE_HEX.gold }).setOrigin(0.5));
+    // Back button (top-left, boxed) replaces the old bottom BACK row.
+    const backBox = this.add.rectangle(-w / 2 + 20, -h / 2 + 26, 30, 30, 0x21252a).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0.5);
+    const backIcon = this.add.text(backBox.x, backBox.y, '←', { fontFamily: FONT_SERIF, fontSize: '18px', color: '#ffffff' }).setOrigin(0.5);
+    backBox.setInteractive({ useHandCursor: true });
+    backBox.on('pointerover', () => { backBox.setFillStyle(0xc9a24b); backIcon.setColor('#0b0d10'); });
+    backBox.on('pointerout', () => { backBox.setFillStyle(0x21252a); backIcon.setColor('#ffffff'); });
+    backBox.on('pointerdown', () => { audio.click(); this.closeInlineMenu(); });
+    menu.add(backBox);
+    menu.add(backIcon);
+
+    this.inlineRows = [];
+    this.inlineFocus = -1;
+    const mkRow = (y: number, item: ChoiceMenuItem) => {
+      const c = this.add.container(0, y);
+      const bg = this.add.rectangle(0, 0, btnW, btnH, 0x21252a).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0.5);
+      const t = this.add.text(-btnW / 2 + 12, 0, item.label, { fontFamily: FONT_SERIF, fontSize: '13px', color: '#ffffff', wordWrap: { width: btnW - 150 } }).setOrigin(0, 0.5);
+      c.add(bg);
+      c.add(t);
+      let right: Phaser.GameObjects.Text | undefined;
+      const rightChips: Phaser.GameObjects.Rectangle[] = [];
+      if (item.rightLabel) {
+        // One chip per part (element / MP cost), laid out from the right edge.
+        const parts = item.rightLabel.split(' · ').filter(Boolean);
+        let cursor = btnW / 2 - 14;
+        for (let p = parts.length - 1; p >= 0; p--) {
+          const txt = this.add.text(0, 0, parts[p], { fontFamily: FONT_MONO, fontSize: '12px', fontStyle: 'bold', color: PALETTE_HEX.goldBright });
+          const chipW = txt.width + 14;
+          const chipX = cursor - chipW / 2;
+          cursor = chipX - 6;
+          const chip = this.add.rectangle(chipX, 0, chipW, 20, 0x0b0d10, 0.9).setStrokeStyle(1, 0xc9a24b, 0.8);
+          txt.setPosition(chipX, 0).setOrigin(0.5, 0.5);
+          rightChips.push(chip);
+          c.add(chip);
+          c.add(txt);
+          if (!right) right = txt;
+        }
+      }
+      const entry = {
+        bg,
+        t,
+        right,
+        rightChips,
+        disabled: !!item.disabled,
+        onSelect: item.onSelect,
+        onHover: item.subtitle ? () => this.tooltipPanel?.show(item.subtitle!) : undefined,
+      };
+      if (entry.disabled) {
+        bg.setAlpha(0.4);
+        t.setAlpha(0.5);
+        right?.setAlpha(0.5);
+        rightChips.forEach((ch) => ch.setAlpha(0.5));
+      } else {
+        bg.setInteractive({ useHandCursor: true });
+        bg.on('pointerover', () => this.applyInlineFocus(this.inlineRows.indexOf(entry)));
+        bg.on('pointerout', () => { this.applyInlineFocus(-1); this.tooltipPanel?.hide(); });
+        bg.on('pointerdown', () => { audio.click(); const sel = entry.onSelect; this.closeInlineMenu(); sel(); });
+      }
+      this.inlineRows.push(entry);
+      menu.add(c);
+    };
+    items.forEach((item, i) => mkRow(-h / 2 + headerH + i * (btnH + gap) + btnH / 2, item));
+    this.inlineMenu = menu;
+  }
+
+  private closeInlineMenu() {
+    this.inlineMenu?.destroy();
+    this.inlineMenu = undefined;
+    this.inlineRows = [];
+    this.inlineFocus = -1;
   }
 
   /** Called once the timing bar reports a quality: carry the strike through the engine. */
@@ -1225,7 +1589,6 @@ export class CombatScene extends Phaser.Scene {
       return;
     }
     disp.container.setVisible(true);
-    disp.nameGroup.setVisible(true);
 
     const frames = [
       `enemy_${disp.defId}_defeat1`,
@@ -1240,7 +1603,7 @@ export class CombatScene extends Phaser.Scene {
     // Fallback death beat while per-boss defeat art is still pending.
     this.cameras.main.shake(200, 0.006);
     this.tweens.add({
-      targets: [disp.container, disp.nameGroup],
+      targets: disp.container,
       alpha: 0.22,
       y: '+=20',
       duration: 900,
@@ -1312,106 +1675,149 @@ export class CombatScene extends Phaser.Scene {
   private openItemMenu() {
     const { player } = useGameStore.getState();
     if (!player) return;
-    this.overlayBg?.destroy();
-    this.overlayMenu?.destroy();
-    this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setInteractive().setDepth(35);
-    this.overlayBg.on('pointerdown', () => this.closeOverlay());
-    this.overlayMenu = createChoiceMenu(
-      this,
-      GAME_WIDTH / 2,
-      GAME_HEIGHT / 2 - player.inventory.length * 28,
-      player.inventory.map((entry) => ({
-        label: `${ITEMS[entry.id]?.name ?? entry.id} x${entry.qty}`,
-        subtitle: ITEMS[entry.id]?.description,
-        onSelect: () => {
-          this.closeOverlay();
-          this.doAction('item', () => this.engine.useItem(entry.id));
-        },
-      })),
-      { width: 420, spacing: 56 },
-    );
+    const items: ChoiceMenuItem[] = player.inventory.map((entry) => ({
+      label: (ITEMS[entry.id]?.name ?? entry.id) + ' x' + entry.qty,
+      subtitle: ITEMS[entry.id]?.description,
+      onSelect: () => {
+        this.doAction('item', () => this.engine.useItem(entry.id));
+      },
+    }));
+    this.openInlineMenu(items, 'ITEMS');
   }
 
   private closeOverlay() {
+    this.closeInlineMenu();
+    this.momentumMenu?.destroy();
+    this.momentumMenu = undefined;
     this.overlayBg?.destroy();
     this.overlayMenu?.destroy();
     this.overlayTexts.forEach((t) => t.destroy());
     this.overlayTexts = [];
     this.scanPanel?.destroy();
     this.scanPanel = undefined;
+    this.scanCycle = undefined;
+    this.overlayFocus = -1;
+    this.kbdModal = undefined;
     this.overlayBg = undefined;
     this.overlayMenu = undefined;
   }
 
-  private openScanModal() {
+  private openScanModal(targetKey?: string) {
     const snap = this.engine.snapshot();
     if (snap.phase !== 'player' || this.enemyPhaseActive || this.transformCutscene) return;
-    const targetKey = this.selectedTarget ?? snap.enemies.find((e) => e.alive)?.key ?? null;
-    if (!targetKey) return;
-    const view = snap.enemies.find((e) => e.key === targetKey);
-    const info = this.engine.getScanInfo(targetKey);
+    const aliveKeys = snap.enemies.filter((e) => e.alive).map((e) => e.key);
+    if (aliveKeys.length === 0) return;
+    const key = targetKey && aliveKeys.includes(targetKey)
+      ? targetKey
+      : (this.selectedTarget && aliveKeys.includes(this.selectedTarget) ? this.selectedTarget : aliveKeys[0]);
+    const view = snap.enemies.find((e) => e.key === key)!;
+    const info = this.engine.getScanInfo(key);
     if (!view || !info) return;
 
     this.closeOverlay();
     this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive().setDepth(35);
     this.overlayBg.on('pointerdown', () => this.closeOverlay());
+    this.scanCycle = { keys: aliveKeys, index: aliveKeys.indexOf(key) };
 
-    const PANEL_W = 620;
+    const PANEL_W = 700;
+    const PANEL_H = 430;
     const panel = this.add.container(SCAN_BASE.x, SCAN_BASE.y).setDepth(36);
-    const back = this.add.rectangle(0, 0, PANEL_W, 376, 0x14171b, 0.96).setStrokeStyle(2, 0xc9a24b).setOrigin(0.5);
-    panel.add(back);
+    panel.add(this.add.rectangle(0, 0, PANEL_W, PANEL_H, 0x14171b, 0.96).setStrokeStyle(2, 0xc9a24b).setOrigin(0.5));
+    const LX = -PANEL_W / 2 + 16; // left column x
 
-    panel.add(this.add.text(0, -150, `SCAN — ${view.name}`, { fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.gold, fontStyle: 'bold' }).setOrigin(0.5));
-    panel.add(this.add
-      .text(0, -116, `LV ${view.level}    ·    MAX HP ${info.maxHp}    ·    MAX MP ${info.maxMp}`, {
-        fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone, align: 'center',
-      })
-      .setOrigin(0.5));
+    // Name + level plate (top-left).
+    panel.add(this.add.rectangle(LX, -PANEL_H / 2 + 14, 300, 40, 0x0b0d10).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0, 0));
+    panel.add(this.add.text(LX + 12, -PANEL_H / 2 + 34, view.name, { fontFamily: FONT_SERIF, fontSize: '17px', color: PALETTE_HEX.gold }).setOrigin(0, 0.5));
+    panel.add(this.add.text(LX + 288, -PANEL_H / 2 + 34, `LV ${view.level}`, { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted }).setOrigin(1, 0.5));
 
-    // 8 affinity chips — unknown slots render as dim `*`.
-    const chipW = 58;
-    const chipStart = -4 * chipW - chipW / 2;
-    const chips: Phaser.GameObjects.GameObject[] = [this.add
-      .text(-PANEL_W / 2 + 18, -86, 'AFFINITIES', { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted })
-      .setOrigin(0, 0.5)];
+    // MAX HP / MAX MP plates.
+    const statY = -PANEL_H / 2 + 62;
+    panel.add(this.add.rectangle(LX, statY, 146, 30, 0x21252c).setStrokeStyle(1, 0x3a3f46).setOrigin(0, 0));
+    panel.add(this.add.text(LX + 10, statY + 15, `MAX HP  ${info.maxHp}`, { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5));
+    panel.add(this.add.rectangle(LX + 154, statY, 146, 30, 0x21252c).setStrokeStyle(1, 0x3a3f46).setOrigin(0, 0));
+    panel.add(this.add.text(LX + 164, statY + 15, `MAX MP  ${info.maxMp}`, { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5));
+
+    // Affinity box — 8 chips with known results (unknown slots render dim).
+    const affY = -PANEL_H / 2 + 100;
+    panel.add(this.add.rectangle(LX, affY, 380, 66, 0x101317).setStrokeStyle(1, 0x3a3f46).setOrigin(0, 0));
+    panel.add(this.add.text(LX + 8, affY + 10, 'AFFINITIES', { fontFamily: FONT_SERIF, fontSize: '9px', color: PALETTE_HEX.boneMuted }).setOrigin(0, 0.5));
+    const chipW = 45;
     for (let i = 0; i < DAMAGE_TYPES.length; i++) {
       const t = DAMAGE_TYPES[i];
       const known = view.knownSlots.includes(t);
       const kind = known ? (view.affinities[t] ?? '-') : undefined;
-      const cx = chipStart + i * chipW + chipW / 2;
-      const chipBg = this.add.rectangle(cx, -44, chipW - 6, 22, 0x21252c).setStrokeStyle(1, 0x3a3f46).setOrigin(0.5);
-      const top = this.add
-        .text(cx, -52, DAMAGE_TYPE_ABBREV[t], { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted })
-        .setOrigin(0.5);
+      const cx = LX + 8 + i * chipW + chipW / 2;
+      const cyChip = affY + 42;
+      panel.add(this.add.rectangle(cx, cyChip, chipW - 4, 24, 0x21252c).setStrokeStyle(1, 0x3a3f46).setOrigin(0.5));
+      panel.add(this.add.text(cx, cyChip - 6, DAMAGE_TYPE_ABBREV[t], { fontFamily: FONT_MONO, fontSize: '9px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5));
       const resultText = known && kind ? kind.toUpperCase() : '?';
       const resultColor = known && kind ? `#${AFFINITY_HEX[kind].toString(16).padStart(6, '0')}` : '#555555';
-      const result = this.add
-        .text(cx, -38, resultText, {
-          fontFamily: FONT_MONO,
-          fontSize: '12px',
-          fontStyle: 'bold',
-          color: resultColor,
-        })
-        .setOrigin(0.5);
-      chips.push(chipBg, top, result);
+      panel.add(this.add.text(cx, cyChip + 7, resultText, { fontFamily: FONT_MONO, fontSize: '11px', fontStyle: 'bold', color: resultColor }).setOrigin(0.5));
     }
-    panel.add(chips);
 
-    panel.add(this.add.text(-PANEL_W / 2 + 18, -8, 'MOVE POOL', { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.boneMuted }).setOrigin(0, 0.5));
-    info.moves.forEach((m, i) => {
-      const y = 22 + i * 34;
-      panel.add(this.add
-        .text(-PANEL_W / 2 + 24, y, m.label, { fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.gold })
-        .setOrigin(0, 0.5));
-      panel.add(this.add
-        .text(-PANEL_W / 2 + 24 + 150, y, m.description || '', { fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted, wordWrap: { width: PANEL_W - 190 } })
-        .setOrigin(0, 0.5));
+    // Move pool box.
+    const movesY = -PANEL_H / 2 + 174;
+    const movesH = PANEL_H / 2 - 16 - movesY;
+    panel.add(this.add.rectangle(LX, movesY, 380, movesH, 0x101317).setStrokeStyle(1, 0x3a3f46).setOrigin(0, 0));
+    panel.add(this.add.text(LX + 10, movesY + 12, 'MOVE POOL', { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.gold }).setOrigin(0, 0.5));
+    const maxMoves = Math.floor((movesH - 34) / 32);
+    info.moves.slice(0, maxMoves).forEach((m, i) => {
+      const y = movesY + 36 + i * 32;
+      panel.add(this.add.text(LX + 10, y, m.label, { fontFamily: FONT_SERIF, fontSize: '13px', color: '#e0b34f', wordWrap: { width: 130 } }).setOrigin(0, 0.5));
+      panel.add(this.add.text(LX + 145, y, m.description || '', { fontFamily: FONT_BODY, fontSize: '11px', color: PALETTE_HEX.boneMuted, wordWrap: { width: 225 } }).setOrigin(0, 0.5));
     });
+    if (info.moves.length > maxMoves) {
+      panel.add(this.add.text(LX + 10, movesY + movesH - 12, `+${info.moves.length - maxMoves} more…`, { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted }).setOrigin(0, 0.5));
+    }
+
+    // Full-body enemy art (right column), aspect-fit in a framed box.
+    const idleTex = view.defId === 'sentinel'
+      ? (this.sentinelTransformed ? 'enemy_sentinel_idle2' : 'enemy_sentinel_idle1')
+      : `enemy_${view.defId}_idle`;
+    const tex = [idleTex, `enemy_${view.defId}_idle`, 'enemy_idle'].find((t) => t && this.textures.exists(t)) ?? 'enemy_idle';
+    const portraitCx = PANEL_W / 2 - 160;
+    const portraitCy = -20;
+    panel.add(this.add.rectangle(portraitCx, portraitCy, 250, 280, 0x0b0d10).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0.5));
+    if (this.textures.exists(tex)) {
+      const img = this.add.image(portraitCx, portraitCy, tex);
+      const frame = this.textures.get(tex).getSourceImage();
+      img.setScale(Math.min(230 / (frame.width || 1), 260 / (frame.height || 1)));
+      panel.add(img);
+    }
+
+    // ◀ ▶ target cycling (only when multiple enemies stand).
+    if (aliveKeys.length > 1) {
+      const cycle = (dir: number) => {
+        const cur = this.scanCycle!;
+        cur.index = (cur.index + dir + cur.keys.length) % cur.keys.length;
+        audio.click();
+        this.openScanModal(cur.keys[cur.index]);
+      };
+      const mkArrow = (ax: number, glyph: string, dir: number) => {
+        const a = this.add.text(ax, -PANEL_H / 2 + 34, glyph, { fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+        a.setInteractive({ useHandCursor: true });
+        a.on('pointerover', () => a.setColor('#ffffff'));
+        a.on('pointerout', () => a.setColor(PALETTE_HEX.gold));
+        a.on('pointerdown', () => cycle(dir));
+        panel.add(a);
+      };
+      mkArrow(LX + 322, '◀', -1);
+      mkArrow(LX + 352, '▶', 1);
+      panel.add(this.add.text(portraitCx, portraitCy + 152, '←/→ to switch target', { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5));
+    }
+
+    // Close icon (top-right corner).
+    const closeIcon = this.add.text(PANEL_W / 2 - 18, -PANEL_H / 2 + 18, '✕', { fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    closeIcon.setInteractive({ useHandCursor: true });
+    closeIcon.on('pointerover', () => closeIcon.setColor('#ffffff'));
+    closeIcon.on('pointerout', () => closeIcon.setColor(PALETTE_HEX.gold));
+    closeIcon.on('pointerdown', () => this.closeOverlay());
+    panel.add(closeIcon);
 
     panel.add(this.add
-      .text(0, 376 / 2 - 16, 'Click anywhere to close — Scan costs nothing.', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted })
+      .text(0, PANEL_H / 2 - 14, 'Click anywhere to close — Scan costs nothing.', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5));
-    panel.setSize(PANEL_W, 376);
+    panel.setSize(PANEL_W, PANEL_H);
     this.scanPanel = panel;
   }
 
@@ -1450,32 +1856,62 @@ export class CombatScene extends Phaser.Scene {
   private showMomentumModal() {
     if (this.overlayBg || this.overlayMenu) this.closeOverlay();
     audio.momentumFull();
+    const cx = FRAME_X + FRAME_W / 2;
+    const cy = FRAME_Y + FRAME_H / 2;
     this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75).setDepth(35);
-    this.overlayTexts.push(this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 170, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold }).setOrigin(0.5).setDepth(36));
-    const choices: MomentumChoice[] = ['flow', 'harmony', 'archive', 'forgotten_technique', 'unravel', 'echo_surge', 'phase_shift', 'desperate_strike', 'overclock'];
-    this.overlayMenu = createChoiceMenu(
-      this,
-      GAME_WIDTH / 2,
-      GAME_HEIGHT / 2 - 90,
-      choices.map((c) => ({
-        label: MOMENTUM_LABELS[c].label,
-        subtitle: MOMENTUM_LABELS[c].subtitle,
-        onSelect: () => {
-          this.closeOverlay();
-          const prevHP = this.lastPlayerHP;
-          const snap = this.engine.resolveMomentum(c);
-          this.refresh(snap);
-          const healed = snap.playerHP - prevHP;
-          if (healed > 0) {
-            if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
-            this.floatingText(this.fxAnchor.x, this.fxAnchor.y, `+${healed} HP`, PALETTE_HEX.ok);
-          }
-          this.lastPlayerHP = snap.playerHP;
-          this.maybeBeginRound();
-        },
-      })),
-      { width: 420, spacing: 58 },
-    );
+    this.overlayTexts.push(this.add.text(cx, FRAME_Y + 30, 'MOMENTUM', { fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.gold }).setOrigin(0.5).setDepth(36));
+    // Situational offers: the engine surfaces 3 context-weighted choices.
+    const offered = this.engine.snapshot().momentumChoices;
+    const choices: MomentumChoice[] = offered && offered.length > 0
+      ? offered
+      : ['flow', 'harmony', 'archive'];
+    this.momentumButtons = [];
+    this.momentumFocus = -1;
+    const menu = this.add.container(cx, cy).setDepth(36);
+    const btnW = 302;
+    const btnH = 46;
+    const gapX = 14;
+    const gapY = 8;
+    const cols = 2;
+    const rows = Math.ceil(choices.length / cols);
+    const gridW = cols * btnW + gapX;
+    const gridH = rows * btnH + (rows - 1) * gapY;
+    menu.add(this.add.rectangle(0, 4, gridW + 32, gridH + 52, 0x0b0d10, 0.94).setStrokeStyle(2, 0xc9a24b));
+    const mkBtn = (x: number, y: number, label: string, subtitle: string, onSelect: () => void) => {
+      const c = this.add.container(x, y);
+      const bg = this.add.rectangle(0, 0, btnW, btnH, 0x21252a).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0.5);
+      const t = this.add.text(0, -9, label, { fontFamily: FONT_SERIF, fontSize: '14px', color: '#ffffff' }).setOrigin(0.5);
+      const sub = this.add.text(0, 10, subtitle, { fontFamily: FONT_BODY, fontSize: '9px', color: PALETTE_HEX.boneMuted, wordWrap: { width: btnW - 16 } }).setOrigin(0.5);
+      c.add([bg, t, sub]);
+      bg.setInteractive({ useHandCursor: true });
+      const entry = { bg, t, sub, onSelect };
+      this.momentumButtons.push(entry);
+      bg.on('pointerover', () => this.applyMomentumFocus(this.momentumButtons.indexOf(entry)));
+      bg.on('pointerout', () => this.applyMomentumFocus(-1));
+      bg.on('pointerdown', () => { audio.click(); onSelect(); });
+      menu.add(c);
+    };
+    choices.forEach((c, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const lastRowAlone = row === rows - 1 && choices.length % cols === 1;
+      const bx = -gridW / 2 + btnW / 2 + col * (btnW + gapX) + (lastRowAlone ? (btnW + gapX) / 2 : 0);
+      const by = -gridH / 2 + btnH / 2 + row * (btnH + gapY);
+      mkBtn(bx, by, MOMENTUM_LABELS[c].label, MOMENTUM_LABELS[c].subtitle, () => {
+        this.closeOverlay();
+        const prevHP = this.lastPlayerHP;
+        const snap = this.engine.resolveMomentum(c);
+        this.refresh(snap);
+        const healed = snap.playerHP - prevHP;
+        if (healed > 0) {
+          if (this.statPanel) this.flashTarget(this.statPanel.container, 0x27ae60);
+          this.floatingText(this.fxAnchor.x, this.fxAnchor.y, '+' + healed + ' HP', PALETTE_HEX.ok);
+        }
+        this.lastPlayerHP = snap.playerHP;
+        this.maybeBeginRound();
+      });
+    });
+    this.momentumMenu = menu;
   }
 
   private showCrisisModal(crisis: { id: string; title: string; flavor: string; options: { id: string; label: string; subtitle: string }[] }) {
@@ -1680,20 +2116,25 @@ export class CombatScene extends Phaser.Scene {
     const modal = showLevelUpModal(this, newLevel,
       () => {
         modal.destroy();
-        showStatChoiceModal(this,
+        this.kbdModal = undefined;
+        const statModal = showStatChoiceModal(this,
           (stat) => {
+            statModal.destroy();
             useGameStore.getState().awardStatPoint(stat);
             onDone();
           },
-          () => { modal.destroy(); onDone(); },
+          () => { statModal.destroy(); onDone(); },
         );
+        this.kbdModal = statModal;
       },
       () => {
         modal.destroy();
+        this.kbdModal = undefined;
         onDone();
       },
-      () => { modal.destroy(); onDone(); },
+      () => { modal.destroy(); this.kbdModal = undefined; onDone(); },
     );
+    this.kbdModal = modal;
   }
 
   shutdown() {
@@ -1722,18 +2163,10 @@ export class CombatScene extends Phaser.Scene {
     const rowY = this.enemyRowY();
     this.enemyDisplays.forEach((d, i) => {
       d.container.setPosition(startX + i * spacing, rowY);
-      this.placeEnemyName(d);
     });
     this.updateEnemyMarkers();
   }
 
-  private placeEnemyName(d: EnemyDisplay) {
-    d.nameGroup.setPosition(
-      d.container.x + ENEMY_NAME_X + layoutAdj('enemyName').dx,
-      d.container.y + ENEMY_NAME_Y + layoutAdj('enemyName').dy,
-    );
-    d.namePill.setPosition(layoutAdj('enemyNamePill').dx, layoutAdj('enemyNamePill').dy);
-  }
 
   private updateEnemyMarkers() {
     if (!this.enemyRowMarker || !this.enemySpreadMarker) return;
@@ -1812,21 +2245,6 @@ export class CombatScene extends Phaser.Scene {
         (obj as Phaser.GameObjects.Image).setPosition(dragX, dragY);
         return;
       }
-      if (key === 'enemyName') {
-        const p = _p as Phaser.Input.Pointer;
-        const pillW = this.enemyDisplays[0]?.namePill.width ?? 40;
-        const gx = p.x - (obj as Phaser.GameObjects.Container).x;
-        const gy = p.y - (obj as Phaser.GameObjects.Container).y;
-        if (Math.abs(gx) <= pillW / 2 + 6 && Math.abs(gy) <= 14) {
-          const base = obj.getData('pillBase') as { x: number; y: number };
-          COMBAT_ADJUSTMENTS.set('enemyNamePill', { dx: p.x - base.x, dy: p.y - base.y });
-        } else {
-          const base = obj.getData('layoutBase') as { x: number; y: number };
-          COMBAT_ADJUSTMENTS.set(key, { dx: p.x - base.x, dy: p.y - base.y });
-        }
-        this.enemyDisplays.forEach((d) => this.placeEnemyName(d));
-        return;
-      }
       const base = obj.getData('layoutBase') as { x: number; y: number };
       COMBAT_ADJUSTMENTS.set(key, { dx: dragX - base.x, dy: dragY - base.y });
       (obj as Phaser.GameObjects.Image).setPosition(dragX, dragY);
@@ -1894,5 +2312,7 @@ export class CombatScene extends Phaser.Scene {
       })
       .setOrigin(0.5, 0);
     createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140, 'Continue', () => fadeToScene(this, 'Board'), { width: 220, depth: 37 });
+    // Enter/Space continues from the victory screen.
+    this.kbdSingle = () => fadeToScene(this, 'Board');
   }
 }

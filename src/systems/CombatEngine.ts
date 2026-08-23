@@ -138,6 +138,8 @@ export interface CombatSnapshot {
   playerStatuses: StatusInstance[];
   momentum: number;
   momentumReady: boolean;
+  /** Situational momentum offers (only meaningful while phase === 'momentum_choice'). */
+  momentumChoices: MomentumChoice[];
   guarding: boolean;
   /** @deprecated fatigue system removed. */
   fatigue: number;
@@ -225,6 +227,8 @@ function bossToEnemyDef(boss: BossDef): EnemyDef {
 
 export class CombatEngine {
   private rng: () => number;
+  /** Cached situational momentum offers (stable across refreshes within one momentum phase). */
+  private cachedOffers?: MomentumChoice[];
   private diffId: DifficultyId;
   private diff: DifficultyMods;
 
@@ -686,6 +690,7 @@ export class CombatEngine {
   }
 
   resolveMomentum(choice: MomentumChoice): CombatSnapshot {
+    this.cachedOffers = undefined;
     if (choice === 'flow') {
       if (this.momentum < MOMENTUM_CAP) return this.snapshot();
       this.momentum = 0;
@@ -884,7 +889,6 @@ export class CombatEngine {
       const kind = target.affinities[type] ?? '-';
       if (!this.discoveryGains[target.defId]) this.discoveryGains[target.defId] = {};
       this.discoveryGains[target.defId][type] = kind;
-      this.bannersQueue.push(`SCAN: ${DAMAGE_TYPE_ABBREV[type].toUpperCase()} → ${kind.toUpperCase()}`);
     }
     return target.affinities[type] ?? '-';
   }
@@ -1335,6 +1339,7 @@ export class CombatEngine {
       playerStatuses: this.player.statuses.map((s) => ({ ...s })),
       momentum: this.momentum,
       momentumReady: this.momentum >= MOMENTUM_CAP,
+      momentumChoices: this.exposedPhase() === 'momentum_choice' ? this.momentumOffers() : [],
       guarding: this.player.guarding,
       fatigue: 0,
       insight: 0,
@@ -1389,6 +1394,41 @@ export class CombatEngine {
           }
         : null,
     };
+  }
+
+  /** Situational momentum offers: 3 picks from the full pool, weighted by the
+   *  current fight context (boss present, HP pressure, etc.). Stable for the
+   *  duration of one momentum phase so the modal doesn't reshuffle on refresh. */
+  momentumOffers(): MomentumChoice[] {
+    if (!this.cachedOffers) {
+      const weights: Record<MomentumChoice, number> = {
+        flow: 3,
+        harmony: this.player.hp < this.player.maxHp * 0.5 ? 4 : 1,
+        archive: this.enemies.some((e) => e.isBoss && e.hp > 0) ? 4 : 0.5,
+        forgotten_technique: 2,
+        unravel: this.enemies.some((e) => e.hp > 0 && !e.isBoss) ? 2.5 : 1.5,
+        echo_surge: 2,
+        phase_shift: 1.5,
+        desperate_strike: this.player.hp < this.player.maxHp * 0.35 ? 3 : 1,
+        overclock: 1,
+      };
+      const pool = [...MOMENTUM_CHOICES];
+      const picks: MomentumChoice[] = [];
+      while (picks.length < 3 && pool.length > 0) {
+        const total = pool.reduce((s, c) => s + weights[c], 0);
+        let roll = this.rng() * total;
+        let idx = 0;
+        for (; idx < pool.length; idx++) {
+          roll -= weights[pool[idx]];
+          if (roll <= 0) break;
+        }
+        const chosen = pool[Math.min(idx, pool.length - 1)];
+        picks.push(chosen);
+        pool.splice(pool.indexOf(chosen), 1);
+      }
+      this.cachedOffers = picks;
+    }
+    return [...this.cachedOffers];
   }
 
   getXpEarned(): number {

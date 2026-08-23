@@ -16,6 +16,8 @@ export interface ButtonOptions {
 export interface Button {
   container: Phaser.GameObjects.Container;
   setEnabled: (enabled: boolean) => void;
+  /** Keyboard focus highlight (mirrors the hover texture). */
+  setFocused: (focused: boolean) => void;
   destroy: () => void;
 }
 
@@ -89,6 +91,10 @@ export function createButton(
       bg.setTexture(texKey);
       if (v) bg.setInteractive({ useHandCursor: true });
       else bg.disableInteractive();
+    },
+    setFocused: (focused) => {
+      if (!enabled) return;
+      bg.setTexture(focused ? texHoverKey : texKey);
     },
     destroy: () => container.destroy(),
   };

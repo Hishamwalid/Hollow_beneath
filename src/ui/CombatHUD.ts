@@ -5,11 +5,9 @@ import { spawnHitParticles } from '@/systems/particles';
 
 export interface EnemyDisplay {
   container: Phaser.GameObjects.Container;
-  /** Pill + name text (draggable via ?editlayout=1, key 'enemyName'). */
-  nameGroup: Phaser.GameObjects.Container;
-  /** Dark pill behind the name (draggable via ?editlayout=1, key 'enemyNamePill'). */
-  namePill: Phaser.GameObjects.Rectangle;
   update: (view: EnemyView) => void;
+  /** Show/hide the small overhead HP bar (bosses use the big top bar instead). */
+  setHpBarVisible: (v: boolean) => void;
   setSelected: (v: boolean) => void;
   setState: (state: 'idle' | 'attack' | 'hit' | 'guard') => void;
   /** The enemy definition id (e.g. 'sentinel'), stable across the fight. */
@@ -39,9 +37,6 @@ const SPRITE_SIZE_NORMAL = 170;
 const BAR_W = 137.4;
 const BAR_H = 9.7;
 const BAR_Y = -95.3;
-export const ENEMY_NAME_Y = -124;
-const DIAMOND_Y = -136;
-export const ENEMY_NAME_X = 0;
 
 export function createEnemyDisplay(
   scene: Phaser.Scene,
@@ -56,20 +51,6 @@ export function createEnemyDisplay(
   const spriteSize = isBoss ? SPRITE_SIZE : SPRITE_SIZE_NORMAL;
   let baseScaleX = 1;
   let baseScaleY = 1;
-  const nameGroup = scene.add.container(0, 0).setDepth(5);
-  const namePill = scene.add.rectangle(0, 0, 40, 20, 0x0b0d10, 0.5);
-  const nameText = scene.add
-    .text(0, 0, '', {
-      fontFamily: FONT_SERIF,
-      fontSize: '14px',
-      color: '#e0b34f',
-      align: 'center',
-      stroke: '#0b0d10',
-      strokeThickness: 4,
-      wordWrap: { width: 124 },
-    })
-    .setOrigin(0.5, 0.5);
-  nameGroup.add([namePill, nameText]);
   const downedPill = scene.add.container(0, 102).setVisible(false);
   const downedBg = scene.add.rectangle(0, 0, 76, 18, 0x0b0d10, 0.85).setStrokeStyle(1, 0xc9a24b).setOrigin(0.5);
   const downedText = scene.add
@@ -78,16 +59,20 @@ export function createEnemyDisplay(
   downedPill.add([downedBg, downedText]);
   const hpBg = scene.add.rectangle(-BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0x0b0d10, 0.45).setOrigin(0, 0.5);
   const hpFg = scene.add.rectangle(-BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0xb10000).setOrigin(0, 0.5).setStrokeStyle(1, 0x0b0d10);
-  const diamond = scene.add.graphics({ x: 0, y: DIAMOND_Y });
-  diamond.fillStyle(0xffd700, 1);
-  diamond.fillPoints([
-    { x: 0, y: -12 },
-    { x: 12, y: 0 },
-    { x: 0, y: 12 },
-    { x: -12, y: 0 },
-  ], true);
-  diamond.setVisible(false);
-  container.add([shadow, token, hpBg, hpFg, downedPill, diamond]);
+  // Persona-style target reticle: a gold ring centered on the enemy's body.
+  const reticle = scene.add.container(0, -4).setVisible(false).setDepth(7);
+  const ringOuter = scene.add.circle(0, 0, 62).setFillStyle(0xffd700, 0.06).setStrokeStyle(2.5, 0xffd700, 0.9);
+  const ringInner = scene.add.circle(0, 0, 50).setStrokeStyle(1.2, 0xffd700, 0.45);
+  const ticks = scene.add.graphics();
+  ticks.lineStyle(3.5, 0xffd700, 1);
+  for (let a = 0; a < 4; a++) {
+    const start = (a * Math.PI) / 2 + 0.28;
+    ticks.beginPath();
+    ticks.arc(0, 0, 62, start, start + 0.55);
+    ticks.strokePath();
+  }
+  reticle.add([ringOuter, ringInner, ticks]);
+  container.add([shadow, token, hpBg, hpFg, downedPill, reticle]);
   token.on('pointerdown', onClick);
   token.on('pointerover', () => { if (!selected) token.setScale(baseScaleX * 1.06, baseScaleY * 1.06); });
   token.on('pointerout', () => { if (!selected) token.setScale(baseScaleX, baseScaleY); });
@@ -162,31 +147,26 @@ export function createEnemyDisplay(
 
   let selected = false;
   let wasWindowOpen = false;
-  let diamondTween: Phaser.Tweens.Tween | undefined;
+  let reticleTween: Phaser.Tweens.Tween | undefined;
   const setSelected = (v: boolean) => {
     if (selected === v) return;
     selected = v;
     if (v) {
-      diamond.setVisible(true);
-      diamondTween = scene.tweens.add({
-        targets: diamond,
-        y: { from: DIAMOND_Y, to: DIAMOND_Y - 8 },
-        duration: 700,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
+      reticle.setVisible(true);
+      reticleTween = scene.tweens.add({ targets: reticle, angle: 360, duration: 4000, repeat: -1 });
     } else {
-      diamond.setVisible(false);
-      if (diamondTween) { diamondTween.stop(); diamondTween = undefined; }
-      diamond.y = DIAMOND_Y;
+      reticle.setVisible(false);
+      if (reticleTween) { reticleTween.stop(); reticleTween = undefined; }
+      reticle.angle = 0;
     }
   };
 
   const handle: EnemyDisplay = {
     container,
-    nameGroup,
-    namePill,
+    setHpBarVisible: (v: boolean) => {
+      hpBg.setVisible(v);
+      hpFg.setVisible(v);
+    },
     update: (view: EnemyView) => {
       if (defId !== view.defId) {
         defId = view.defId;
@@ -205,10 +185,7 @@ export function createEnemyDisplay(
         applyTexture('idle');
       }
       container.setVisible(view.alive);
-      nameGroup.setVisible(view.alive);
       downedPill.setVisible(view.alive && view.statuses.some((s) => s.id === 'downed'));
-      nameText.setText((view as unknown as Record<string, unknown>).tendency ? `${(view as unknown as Record<string, unknown>).tendency} ${view.name}` : view.name);
-      fitNamePill(namePill, nameText);
       const pct = Math.max(0, view.hp / view.maxHp);
       hpFg.width = BAR_W * pct;
       if ((view.weakWindowTurns ?? 0) > 0) {
@@ -238,7 +215,7 @@ export function createEnemyDisplay(
       if (!sequencing) applyTexture(currentState);
     },
     playSequence,
-    destroy: () => { if (diamondTween) diamondTween.stop(); stopSequence(); nameGroup.destroy(); container.destroy(); },
+    destroy: () => { if (reticleTween) reticleTween.stop(); stopSequence(); container.destroy(); },
   };
   return handle;
 }
@@ -401,13 +378,23 @@ function addPanelBackdrop(scene: Phaser.Scene, container: Phaser.GameObjects.Con
   container.addAt([back, gold, black], 0);
 }
 
+export interface ActionGridHandle {
+  container: Phaser.GameObjects.Container;
+  /** Keyboard focus: highlights a cell like hover (null clears). */
+  setFocus: (index: number | null) => void;
+  /** Activates a focused cell's action (no-op while disabled). */
+  activate: (index: number) => void;
+  /** Whether a cell is currently usable (keyboard nav skips unusable cells). */
+  isEnabled: (index: number) => boolean;
+}
+
 export function createActionGrid(
   scene: Phaser.Scene,
   x: number,
   y: number,
   items: ActionGridItem[],
   tooltip: TooltipPanelHandle,
-): { container: Phaser.GameObjects.Container } {
+): ActionGridHandle {
   const container = scene.add.container(x, y).setDepth(10);
   addPanelBackdrop(scene, container, PANEL_BACK_W, PANEL_BACK_H, PANEL_BACK_X, PANEL_BACK_Y);
 
@@ -417,6 +404,25 @@ export function createActionGrid(
       cells.push({ cx, cy });
     }
   }
+
+  const entries: {
+    bg: Phaser.GameObjects.Rectangle;
+    inner: Phaser.GameObjects.Rectangle;
+    label: Phaser.GameObjects.Text;
+    item: ActionGridItem;
+    enabled: boolean;
+  }[] = [];
+  let focused = -1;
+
+  const applyVisual = (i: number, hovered: boolean) => {
+    const e = entries[i];
+    if (!e || !e.enabled) return;
+    e.bg.setFillStyle(hovered ? 0x0b0d10 : 0xc9a24b);
+    e.bg.setStrokeStyle(2, hovered ? 0xc9a24b : 0x0b0d10);
+    e.inner.setFillStyle(hovered ? 0xc9a24b : 0x21252a);
+    e.inner.setStrokeStyle(1.5, hovered ? 0x0b0d10 : 0xc9a24b);
+    e.label.setColor(hovered ? '#0b0d10' : '#ffffff');
+  };
 
   cells.forEach((cell, i) => {
     const item = items[i];
@@ -430,33 +436,48 @@ export function createActionGrid(
         color: '#ffffff',
       })
       .setOrigin(0.5);
-    if (item.disabled) {
+    const enabled = !item.disabled;
+    if (!enabled) {
       [bg, inner, label].forEach((o) => o.setAlpha(0.45));
     } else {
-      const setHover = (hovered: boolean) => {
-        bg.setFillStyle(hovered ? 0x0b0d10 : 0xc9a24b);
-        bg.setStrokeStyle(2, hovered ? 0xc9a24b : 0x0b0d10);
-        inner.setFillStyle(hovered ? 0xc9a24b : 0x21252a);
-        inner.setStrokeStyle(1.5, hovered ? 0x0b0d10 : 0xc9a24b);
-        label.setColor(hovered ? '#0b0d10' : '#ffffff');
-      };
       bg.setInteractive({ useHandCursor: true });
       bg.on('pointerover', () => {
-        setHover(true);
+        applyVisual(i, true);
         if (item.description) tooltip.show(item.description);
         item.onHover?.();
       });
       bg.on('pointerout', () => {
-        setHover(false);
+        applyVisual(i, false);
         tooltip.hide();
         item.onUnhover?.();
       });
       bg.on('pointerdown', item.onClick);
     }
+    entries.push({ bg, inner, label, item, enabled });
     container.add([bg, inner, label]);
   });
 
-  return { container };
+  return {
+    container,
+    setFocus: (index) => {
+      if (index === focused) return;
+      if (focused >= 0) {
+        applyVisual(focused, false);
+        tooltip.hide();
+        entries[focused].item.onUnhover?.();
+      }
+      focused = index ?? -1;
+      if (index === null || !entries[index] || !entries[index].enabled) return;
+      applyVisual(index, true);
+      if (entries[index].item.description) tooltip.show(entries[index].item.description);
+      entries[index].item.onHover?.();
+    },
+    activate: (index) => {
+      const e = entries[index];
+      if (e && e.enabled) e.item.onClick();
+    },
+    isEnabled: (index) => !!entries[index]?.enabled,
+  };
 }
 
 export interface CombatAlly {
@@ -478,8 +499,8 @@ export interface TurnOrderPanelHandle {
   destroy: () => void;
 }
 
-const PANEL_W = 135.3;
-const ROW_W = 116.7;
+const PANEL_W = 162;
+const ROW_W = 142;
 const ROW_MAX_H = 33.3;
 const ROW_SPACING = 39.3;
 const PORTRAIT_SIZE = 33;
@@ -541,8 +562,10 @@ export function createTurnOrderPanel(scene: Phaser.Scene, x: number, y: number):
       const text = scene.add
         .text(TEXT_X, ry, names.get(key) ?? key, {
           fontFamily: FONT_MONO,
-          fontSize: n > 3 ? '10px' : '11px',
+          fontSize: n > 3 ? '12px' : '13px',
           color: isCurrent ? PALETTE_HEX.gold : PALETTE_HEX.bone,
+          wordWrap: { width: 132, useAdvancedWrap: true },
+          lineSpacing: 1,
         })
         .setOrigin(0, 0.5);
       rows.push({ box, portraitBox, icon, label: text });
@@ -613,6 +636,36 @@ export function createAllyDisplay(scene: Phaser.Scene, x: number, y: number, nam
   return {
     container,
     setState,
+    destroy: () => container.destroy(),
+  };
+}
+export interface BossBarHandle {
+  container: Phaser.GameObjects.Container;
+  update: (name: string, hp: number, maxHp: number) => void;
+  destroy: () => void;
+}
+
+const BOSS_BAR_W = 560;
+const BOSS_BAR_H = 14;
+
+/** Big boss HP bar with a name plate, shown at the top of the battle frame. */
+export function createBossBar(scene: Phaser.Scene, x: number, y: number): BossBarHandle {
+  const container = scene.add.container(x, y).setDepth(11);
+  const plate = scene.add.rectangle(0, -20, 320, 26, 0x0b0d10, 0.85).setStrokeStyle(2, 0xc9a24b).setOrigin(0.5);
+  const nameText = scene.add
+    .text(0, -20, '', { fontFamily: FONT_SERIF, fontSize: '15px', color: '#e0b34f', align: 'center' })
+    .setOrigin(0.5);
+  const bg = scene.add.rectangle(-BOSS_BAR_W / 2, 4, BOSS_BAR_W, BOSS_BAR_H, 0x0b0d10, 0.7).setOrigin(0, 0.5).setStrokeStyle(2, 0xc9a24b);
+  const fg = scene.add.rectangle(-BOSS_BAR_W / 2 + 2, 4, BOSS_BAR_W - 4, BOSS_BAR_H - 4, 0xb10000).setOrigin(0, 0.5);
+  container.add([plate, nameText, bg, fg]);
+  return {
+    container,
+    update: (name, hp, maxHp) => {
+      nameText.setText(name.toUpperCase());
+      plate.setSize(Math.max(140, nameText.width + 28), 26);
+      const pct = Math.max(0, Math.min(1, hp / Math.max(1, maxHp)));
+      scene.tweens.add({ targets: fg, width: (BOSS_BAR_W - 4) * pct, duration: 350, ease: 'Sine.easeOut' });
+    },
     destroy: () => container.destroy(),
   };
 }
