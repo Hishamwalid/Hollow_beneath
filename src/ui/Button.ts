@@ -51,7 +51,6 @@ export function createButton(
     bg = img;
     // Hidden hover veil for a soft gold wash on top of the texture.
     hoverBg = scene.add.rectangle(0, 0, width - 6, height - 6, 0xe9c876, 0);
-    scene.add.container(0, 0, [hoverBg]);
   }
 
   const items: Phaser.GameObjects.GameObject[] = [];

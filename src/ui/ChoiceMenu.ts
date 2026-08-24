@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_HEIGHT } from '@/config';
@@ -6,8 +6,12 @@ import { GAME_HEIGHT } from '@/config';
 export interface ChoiceMenuItem {
   label: string;
   subtitle?: string;
-  /** Optional right-aligned secondary text (e.g. element abbrev + MP cost). */
+  /** Optional right-aligned secondary text (e.g. element abbrev + MP cost). */  /** Optional right-aligned secondary text (e.g. element abbrev + MP cost). */
   rightLabel?: string;
+  /** Optional element icon texture shown in a chip left of the rightLabel. */
+  elementIcon?: string;
+  /** Tint applied to the element icon (usually the damage-type color). */
+  elementTint?: number;
   /** Requirement chip rendered under the label (e.g. "WILL DC 12", "-30 gold"). */
   chip?: string;
   disabled?: boolean;
@@ -86,7 +90,7 @@ export function createChoiceMenu(
     const shadow = scene.add.rectangle(4, cy + 5, width, ROW_HEIGHT, 0x000000, 0.35);
     const card = scene.add.nineslice(0, cy, 'paper_panel', undefined, width, ROW_HEIGHT, 24, 24, 24, 24);
 
-    const badgeText = item.disabled || item.locked ? '✖' : String(i + 1);
+    const badgeText = item.disabled || item.locked ? 'âœ–' : String(i + 1);
     const badge = scene.add.text(-width / 2 + 26, cy - 1, badgeText, {
       fontFamily: FONT_SERIF,
       fontSize: '20px',

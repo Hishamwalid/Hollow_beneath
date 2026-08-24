@@ -38,3 +38,17 @@ Implement `H:\Study mat\3.1\lab\sw\ULTIMATE BATTLE SYSTEM.md` phase-by-phase per
 - `src/scenes/CombatScene.ts`, `src/ui/CombatHUD.ts`, `src/ui/StatPanel.ts`, `src/ui/theme.ts`.
 - `src/store/gameStore.ts`, `src/systems/SaveManager.ts`, `smoketest.ts`.
 - `public/reset-save.html` — wipe save.
+
+## Session — Board & Combat UI Polish (2026-08-25)
+- `src/ui/Button.ts` — removed stray `scene.add.container(0,0,[hoverBg])` that pinned the hover veil at scene origin (dark overlay bug).
+- `src/ui/DialogBox.ts` — rewritten: dynamic height (min 128, cap 190 ≈5 lines), `getHeight()` + `onResize` callback, `setResolution(2)` sharp text.
+- `src/scenes/EventScene.ts` — rewritten: Continue button & choice cards positioned via `underDialog(gap)`; `pickChoice` re-types resolution into the same dialog; long flavor paginates into beats.
+- `src/ui/CombatHUD.ts` — turn-order panel 180→224 (rows 204), row plate fits full name (2-line wrap), rows stacked via `cursorY`, panel grows to fit.
+- `src/placeholder/PlaceholderTextures.ts` — 8 procedural element icons `el_slash/pierce/blunt/flame/frost/shock/sacred/shadow`.
+- `src/ui/ChoiceMenu.ts` + `src/scenes/CombatScene.ts` — skill rows: tinted element icon chip left of MP-cost chip; icon replaces the abbrev text when available; chip gaps widened (chip→chip 16, icon gap 14); label 15px `#f0ead9`; hover polish in `applyInlineFocus` (gold stroke, slide tween); Scan modal dynamic height (`max(430, 174 + skillsBoxH + 64)`, no truncation), "MOVE POOL"→"SKILLS"; modal footers 12px gold.
+- `src/ui/NodePreview.ts` — vertical stack recentered to fit panel: badge −48, index −14, title +4, sub +26, explain +48, tip +72 (resolved nudges 22/42).
+- `src/scenes/BoardScene.ts` — `TILE_PANEL_H` 180→200, preview origin `TILE_PANEL_Y + 104` (badge clears title); journal prefix `C{ch}·N{n}` → `N{n} · …` (flavor line already carries chapter).
+- `src/ui/FactionPanel.ts` — name column reserved: seal 18px@x16, names 11px@x38 capped at 11 chars + ellipsis; bar moved right (`barCx = width-96`, `barW` 46), value right-aligned left of bar, fill `frac*21`.
+- `src/ui/PlayerPanel.ts` — compacted to fit 390px: portrait `width-48`, info gap +12, `barsY = infoY+56` (Resonance bar bottom ≈382, no more spill under panel).
+- Verified: `npm run typecheck` ✅, smoke 213/213 ✅. `npm run build` still fails on **pre-existing** top-level `await` at `src/main.ts:115` vs esbuild es2020 target (main.ts untouched) — fix by bumping target to es2022 or refactoring the await.
+

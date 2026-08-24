@@ -41,19 +41,19 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
   }).setOrigin(0.5, 0);
   container.add(nameText);
 
-  const portraitSize = width - 32;
-  const portraitY = 42;
+  const portraitSize = width - 48;
+  const portraitY = 40;
   container.add(scene.add.rectangle(width / 2, portraitY + portraitSize / 2, portraitSize, portraitSize, 0x22262c).setStrokeStyle(1, 0x3a3f46));
   container.add(scene.add.image(width / 2, portraitY + portraitSize / 2, 'icon_character').setDisplaySize(portraitSize * 0.55, portraitSize * 0.55).setTint(0x7fb0c9));
 
-  const infoY = portraitY + portraitSize + 14;
+  const infoY = portraitY + portraitSize + 12;
   const levelText = scene.add.text(16, infoY, 'Level 1', { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold });
   const skillsText = scene.add.text(width - 16, infoY, '', { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted }).setOrigin(1, 0);
   const shardsText = scene.add.text(16, infoY + 20, 'Echo Shards: 0', { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold });
   container.add([levelText, skillsText, shardsText]);
 
-  const barsY = infoY + 64;
-  const barW = width - 92;
+  const barsY = infoY + 56;
+  const barW = width - 116;
   const labelX = 42;
   const valueX = width - 16;
 

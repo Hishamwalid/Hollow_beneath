@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { BOSSES } from '@data/bosses';
 import { ITEMS } from '@data/items';
@@ -171,6 +171,7 @@ export class CombatScene extends Phaser.Scene {
   private gridHandle?: ActionGridHandle;
   private gridFocus = -1;
   private inlineRows: {
+    row: Phaser.GameObjects.Container;
     bg: Phaser.GameObjects.Rectangle;
     t: Phaser.GameObjects.Text;
     right?: Phaser.GameObjects.Text;
@@ -814,7 +815,7 @@ export class CombatScene extends Phaser.Scene {
         wordWrap: { width: 700 },
       })
       .setOrigin(0, 0));
-    panel.add(this.add.text(0, 238, 'Click anywhere to close', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5));
+    panel.add(this.add.text(0, 238, 'Click anywhere to close', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold }).setOrigin(0.5));
     this.scanPanel = panel; // reuse the modal-panel cleanup path in closeOverlay
   }
 
@@ -888,7 +889,12 @@ export class CombatScene extends Phaser.Scene {
       return {
         label: sk.name,
         subtitle: `${sk.description}${sk.damageType ? ` (${sk.damageType})` : ''}${costs.length ? ` · ${costs.join(' ')}` : ''}`,
-        rightLabel: [sk.damageType ? DAMAGE_TYPE_ABBREV[sk.damageType] : '', costs.join(' ')].filter(Boolean).join(' · '),
+        // The element icon chip already communicates the damage type, so the
+        // abbrev text is omitted when an icon is shown — icon chip + cost chip
+        // stay clearly separated instead of reading as one blob.
+        rightLabel: [!sk.damageType ? '' : (this.textures.exists(`el_${sk.damageType}`) ? '' : DAMAGE_TYPE_ABBREV[sk.damageType]), costs.join(' ')].filter(Boolean).join(' · '),
+        elementIcon: sk.damageType ? `el_${sk.damageType}` : undefined,
+        elementTint: sk.damageType ? Phaser.Display.Color.HexStringToColor(DAMAGE_TYPE_HEX[sk.damageType] ?? '#ffffff').color : undefined,
         disabled: !canAct || !mpOk || !hpOk,
         onSelect: () => { this.closeOverlay(); this.doAction('skill', () => this.engine.useSkill(id, this.selectedTarget ?? undefined), hpCost); },
       };
@@ -1132,14 +1138,18 @@ export class CombatScene extends Phaser.Scene {
     const prev = this.inlineRows[this.inlineFocus];
     if (prev && !prev.disabled) {
       prev.bg.setFillStyle(0x21252a);
-      prev.t.setColor('#ffffff');
+      prev.bg.setStrokeStyle(1.5, 0xc9a24b);
+      prev.t.setColor('#f0ead9');
+      this.tweens.add({ targets: prev.row, x: 0, duration: 90, ease: 'Sine.easeOut' });
       // Chip text stays bright gold in every state — dark-on-dark is unreadable.
     }
     this.inlineFocus = index;
     const cur = this.inlineRows[index];
     if (cur && !cur.disabled) {
-      cur.bg.setFillStyle(0xc9a24b);
-      cur.t.setColor('#0b0d10');
+      cur.bg.setFillStyle(0x2a2f36);
+      cur.bg.setStrokeStyle(2, 0xe9c876);
+      cur.t.setColor('#ffffff');
+      this.tweens.add({ targets: cur.row, x: 6, duration: 90, ease: 'Sine.easeOut' });
     }
   }
 
@@ -1211,29 +1221,41 @@ export class CombatScene extends Phaser.Scene {
     const mkRow = (y: number, item: ChoiceMenuItem) => {
       const c = this.add.container(0, y);
       const bg = this.add.rectangle(0, 0, btnW, btnH, 0x21252a).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0.5);
-      const t = this.add.text(-btnW / 2 + 12, 0, item.label, { fontFamily: FONT_SERIF, fontSize: '13px', color: '#ffffff', wordWrap: { width: btnW - 150 } }).setOrigin(0, 0.5);
+      const t = this.add.text(-btnW / 2 + 12, 0, item.label, { fontFamily: FONT_SERIF, fontSize: '15px', color: '#f0ead9', wordWrap: { width: btnW - 170 } }).setOrigin(0, 0.5);
       c.add(bg);
       c.add(t);
       let right: Phaser.GameObjects.Text | undefined;
       const rightChips: Phaser.GameObjects.Rectangle[] = [];
       if (item.rightLabel) {
-        // One chip per part (element / MP cost), laid out from the right edge.
+        // Cost chip(s) laid out from the right edge; the element icon chip sits
+        // further left with a clear gap so type and cost never crowd each other.
         const parts = item.rightLabel.split(' · ').filter(Boolean);
         let cursor = btnW / 2 - 14;
         for (let p = parts.length - 1; p >= 0; p--) {
-          const txt = this.add.text(0, 0, parts[p], { fontFamily: FONT_MONO, fontSize: '12px', fontStyle: 'bold', color: PALETTE_HEX.goldBright });
+          const txt = this.add.text(0, 0, parts[p], { fontFamily: FONT_MONO, fontSize: '13px', fontStyle: 'bold', color: PALETTE_HEX.goldBright });
           const chipW = txt.width + 14;
           const chipX = cursor - chipW / 2;
-          const chip = this.add.rectangle(chipX, 0, chipW, 20, 0x0b0d10, 0.9).setStrokeStyle(1, 0xc9a24b, 0.8);
+          const chip = this.add.rectangle(chipX, 0, chipW, 22, 0x0b0d10, 0.9).setStrokeStyle(1, 0xc9a24b, 0.8);
           txt.setPosition(chipX, 0).setOrigin(0.5, 0.5);
           rightChips.push(chip);
           c.add(chip);
           c.add(txt);
           if (!right) right = txt;
-          cursor = chipX - 12; // clear gap between the element and cost chips
+          cursor = chipX - 16;
+        }
+        if (item.elementIcon && this.textures.exists(item.elementIcon)) {
+          const iconW = 26;
+          const iconX = cursor - iconW / 2 - 14; // extra gap before the type icon
+          const chip = this.add.rectangle(iconX, 0, iconW, 22, 0x0b0d10, 0.9).setStrokeStyle(1, 0xc9a24b, 0.8);
+          const icon = this.add.image(iconX, 0, item.elementIcon).setDisplaySize(16, 16);
+          if (item.elementTint !== undefined) icon.setTint(item.elementTint);
+          rightChips.push(chip);
+          c.add(chip);
+          c.add(icon);
         }
       }
       const entry = {
+        row: c,
         bg,
         t,
         right,
@@ -1729,7 +1751,14 @@ export class CombatScene extends Phaser.Scene {
     this.scanCycle = { keys: aliveKeys, index: aliveKeys.indexOf(key) };
 
     const PANEL_W = 700;
-    const PANEL_H = 430;
+    const movesList = info.moves;
+    const moveRowH = 36;      // one skill row (handles a 2-line description)
+    const skillsHeader = 34;  // "SKILLS" title band
+    // Grow the panel to fit every skill, never truncating the list.
+    const skillsBoxH = Math.max(120, movesList.length * moveRowH + skillsHeader);
+    const TOP_OFFSET = 174;   // skills-box top, measured from the panel's top edge
+    const BOTTOM_PAD = 64;    // room below the box for the footer + border
+    const PANEL_H = Math.max(430, TOP_OFFSET + skillsBoxH + BOTTOM_PAD);
     const panel = this.add.container(SCAN_BASE.x, SCAN_BASE.y).setDepth(36);
     panel.add(this.add.rectangle(0, 0, PANEL_W, PANEL_H, 0x14171b, 0.96).setStrokeStyle(2, 0xc9a24b).setOrigin(0.5));
     const LX = -PANEL_W / 2 + 16; // left column x
@@ -1764,20 +1793,16 @@ export class CombatScene extends Phaser.Scene {
       panel.add(this.add.text(cx, cyChip + 7, resultText, { fontFamily: FONT_MONO, fontSize: '11px', fontStyle: 'bold', color: resultColor }).setOrigin(0.5));
     }
 
-    // Move pool box.
-    const movesY = -PANEL_H / 2 + 174;
-    const movesH = PANEL_H / 2 - 16 - movesY;
+    // Skills box — grows to fit every move (no truncation).
+    const movesY = -PANEL_H / 2 + TOP_OFFSET;
+    const movesH = skillsBoxH;
     panel.add(this.add.rectangle(LX, movesY, 380, movesH, 0x101317).setStrokeStyle(1, 0x3a3f46).setOrigin(0, 0));
-    panel.add(this.add.text(LX + 10, movesY + 12, 'MOVE POOL', { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.gold }).setOrigin(0, 0.5));
-    const maxMoves = Math.floor((movesH - 34) / 32);
-    info.moves.slice(0, maxMoves).forEach((m, i) => {
-      const y = movesY + 36 + i * 32;
+    panel.add(this.add.text(LX + 10, movesY + 12, 'SKILLS', { fontFamily: FONT_SERIF, fontSize: '11px', color: PALETTE_HEX.gold }).setOrigin(0, 0.5));
+    movesList.forEach((m, i) => {
+      const y = movesY + skillsHeader + 4 + i * moveRowH + moveRowH / 2;
       panel.add(this.add.text(LX + 10, y, m.label, { fontFamily: FONT_SERIF, fontSize: '13px', color: '#e0b34f', wordWrap: { width: 130 } }).setOrigin(0, 0.5));
       panel.add(this.add.text(LX + 145, y, m.description || '', { fontFamily: FONT_BODY, fontSize: '11px', color: PALETTE_HEX.boneMuted, wordWrap: { width: 225 } }).setOrigin(0, 0.5));
     });
-    if (info.moves.length > maxMoves) {
-      panel.add(this.add.text(LX + 10, movesY + movesH - 12, `+${info.moves.length - maxMoves} more…`, { fontFamily: FONT_MONO, fontSize: '10px', color: PALETTE_HEX.boneMuted }).setOrigin(0, 0.5));
-    }
 
     // Full-body enemy art (right column), aspect-fit in a framed box.
     const idleTex = view.defId === 'sentinel'
@@ -1824,7 +1849,7 @@ export class CombatScene extends Phaser.Scene {
     panel.add(closeIcon);
 
     panel.add(this.add
-      .text(0, PANEL_H / 2 - 14, 'Click anywhere to close — Scan costs nothing.', { fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted })
+      .text(0, PANEL_H / 2 - 24, 'Click anywhere to close  —  Scan costs nothing.', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold })
       .setOrigin(0.5));
     panel.setSize(PANEL_W, PANEL_H);
     this.scanPanel = panel;

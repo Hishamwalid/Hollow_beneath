@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { HOSTILE_FLAVOR } from '@data/events';
 import type { EventChoice, EventDef, FactionState } from '@data/types';
 import { STORY_EVENTS } from '@data/storyEvents';
@@ -30,11 +30,14 @@ const EVE_BEAT_IDS = new Set([
 
 /**
  * Story presentation. Two modes:
- *  • journal   — parchment entry: chapter header, narration, choice cards
- *  • cinematic — letterboxed pinned beats; EVE speaks in oxide italics
+ *  - journal   — parchment entry: chapter header, narration, choice cards
+ *  - cinematic — letterboxed pinned beats; EVE speaks in oxide italics
+ * The narration sheet dynamically sizes to its text; choices and the
+ * Continue button always tuck a few px under it.
  */
 export class EventScene extends Phaser.Scene {
   private dialog?: DialogBox;
+  private dialogCenterY = 300;
   private choiceMenu?: ChoiceMenu;
   private continueBtn?: ReturnType<typeof createButton>;
 
@@ -80,22 +83,14 @@ export class EventScene extends Phaser.Scene {
 
     addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT, { nodePulse: false, shake: false, shimmer: false });
 
-    // ---- Narration panel ----------------------------------------------------------
-    let dialogX = GAME_WIDTH / 2;
-    let dialogY = 300;
-    let dialogW = 940;
-    let dialogH = 300;
+    // ---- Narration panel (dynamic height) ---------------------------------------
+    this.dialogCenterY = cinematic ? GAME_HEIGHT / 2 - 20 : 300;
+    const dialogW = cinematic ? 1000 : 940;
+    const dialogH = cinematic ? 340 : 200;
 
     if (cinematic) {
-      dialogX = GAME_WIDTH / 2;
-      dialogY = GAME_HEIGHT / 2 - 20;
-      dialogW = 1000;
-      dialogH = 340;
       const veil = createPanel(this, { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: GAME_WIDTH - 160, height: dialogH + 60, variant: 'ghost', depth: 5 });
       void veil;
-    } else {
-      const panel = createPanel(this, { x: GAME_WIDTH / 2, y: dialogY, width: dialogW + 40, height: dialogH + 30, variant: 'parchment', title: 'Journal', depth: 20 });
-      void panel;
     }
 
     this.dialog?.destroy();
@@ -103,13 +98,8 @@ export class EventScene extends Phaser.Scene {
     const flavor = hostileSuffix ? `${event.flavorText}\n\n${hostileSuffix}` : event.flavorText;
 
     const speaker = EVE_BEAT_IDS.has(event.id) ? 'EVE (V.O.)' : null;
-    if (cinematic && speaker) {
-      // Split narration vs spoken lines so the nameplate lands on her voice.
-      const spokenBeat = flavor.split('\n').findIndex((l) => l.includes('EVE ('));
-      void spokenBeat;
-    }
 
-    this.dialog = createDialogBox(this, dialogX, dialogY, dialogW, dialogH, { variant: 'parchment' });
+    this.dialog = createDialogBox(this, GAME_WIDTH / 2, this.dialogCenterY, dialogW, dialogH, { variant: 'parchment' });
     this.dialog.container.setDepth(25);
     if (cinematic && speaker) this.dialog.setSpeaker(speaker);
 
@@ -125,6 +115,10 @@ export class EventScene extends Phaser.Scene {
     this.input.on('pointerdown', () => this.dialog?.skip());
   }
 
+  /** Y of a control sitting a few px under the (dynamic) narration sheet. */
+  private underDialog(gap: number): number {
+    return this.dialogCenterY + (this.dialog?.getHeight() ?? 200) / 2 + gap;
+  }
   private buildLetterbox() {
     this.add.rectangle(GAME_WIDTH / 2, 26, GAME_WIDTH, 52, 0x000000, 0.92).setDepth(4);
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 26, GAME_WIDTH, 52, 0x000000, 0.92).setDepth(4);
@@ -137,10 +131,7 @@ export class EventScene extends Phaser.Scene {
 
     // Cutscene story beats have no choices — a single Continue resolves them.
     if (choices.length === 0) {
-      this.continueBtn?.destroy();
-      this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 64, 'Continue', () => fadeToScene(this, 'Board'), {
-        width: 240, variant: 'primary',
-      });
+      this.showContinue();
       void player;
       return;
     }
@@ -151,7 +142,7 @@ export class EventScene extends Phaser.Scene {
     if (!player.flags.hint_event && visible.length > 0) {
       player.flags.hint_event = true;
       useGameStore.getState().persist();
-      createCoachTip(this, GAME_WIDTH / 2, 470, 'Your choices shift factions and Resonance.', {
+      createCoachTip(this, GAME_WIDTH / 2, this.underDialog(150), 'Your choices shift factions and Resonance.', {
         width: 400, durationMs: 4200, depth: 60,
       });
     }
@@ -174,9 +165,9 @@ export class EventScene extends Phaser.Scene {
     this.choiceMenu = createChoiceMenu(
       this,
       GAME_WIDTH / 2,
-      520,
+      this.underDialog(64),
       menuItems,
-      { width: 760, spacing: 66, maxShift: 44 },
+      { width: 760, spacing: 66, maxShift: 44, bottomBound: GAME_HEIGHT - 40 },
     );
   }
 
@@ -197,9 +188,9 @@ export class EventScene extends Phaser.Scene {
     const resolution = resolveEventChoice(player, choice, () => Math.random());
     useGameStore.getState().persist();
 
-    this.dialog?.destroy();
-    const dialog = createDialogBox(this, GAME_WIDTH / 2, 620, 860, 150, { variant: 'parchment' });
-    this.dialog = dialog;
+    // The outcome continues in the SAME narration sheet — no second box.
+    const dialog = this.dialog;
+    if (!dialog) return;
     dialog.setText(resolution.text || '...', () => {
       const { player: currentPlayer, game: currentGame } = useGameStore.getState();
       if (!currentPlayer) return;
@@ -227,8 +218,8 @@ export class EventScene extends Phaser.Scene {
 
   private showContinue() {
     this.continueBtn?.destroy();
-    this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 56, 'Continue', () => fadeToScene(this, 'Board'), {
-      width: 220, variant: 'primary',
+    this.continueBtn = createButton(this, GAME_WIDTH / 2, this.underDialog(48), 'Continue', () => fadeToScene(this, 'Board'), {
+      width: 220, variant: 'primary', depth: 40,
     });
   }
 

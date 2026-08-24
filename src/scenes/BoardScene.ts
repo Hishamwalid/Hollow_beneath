@@ -90,7 +90,7 @@ const COL3_X = COL2_X + COL_W + COL_GAP;
 const DICE_PANEL_Y = 24;
 const DICE_PANEL_H = 196;
 const TILE_PANEL_Y = DICE_PANEL_Y + DICE_PANEL_H + COL_GAP;
-const TILE_PANEL_H = 180;
+const TILE_PANEL_H = 200;
 const FACTION_PANEL_Y = TILE_PANEL_Y + TILE_PANEL_H + COL_GAP;
 const FACTION_PANEL_H = 44 + 4 * 30;
 const LOG_PANEL_Y = FACTION_PANEL_Y + FACTION_PANEL_H + COL_GAP;
@@ -368,7 +368,7 @@ export class BoardScene extends Phaser.Scene {
 
     const aheadPanel = createPanel(this, { x: COL2_X + COL_W / 2, y: TILE_PANEL_Y + TILE_PANEL_H / 2, width: COL_W, height: TILE_PANEL_H, variant: 'stone', title: 'Ahead', depth: 1 });
     void aheadPanel;
-    this.preview = createNodePreview(this, COL2_X + COL_W / 2, TILE_PANEL_Y + 84, COL_W);
+    this.preview = createNodePreview(this, COL2_X + COL_W / 2, TILE_PANEL_Y + 104, COL_W);
     this.preview.container.setDepth(6);
     this.preview.show(game.nodes[Math.max(0, game.currentNodeIndex - 1)]);
 
@@ -669,8 +669,8 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /** Journal feed — newest entry on top with a node marker; older lines fade below. */
-  private pushLog(chapter: number, nodeIndex: number, msg: string) {
-    const entry = `C${chapter}·N${nodeIndex}  ${msg}`;
+  private pushLog(_chapter: number, nodeIndex: number, msg: string) {
+    const entry = `N${nodeIndex} · ${msg}`;
     // Move existing lines down.
     for (let i = this.logLines.length - 1; i >= 0; i--) {
       const line = this.logLines[i];

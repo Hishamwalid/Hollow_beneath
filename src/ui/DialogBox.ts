@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { settingsManager } from '@systems/SettingsManager';
 
@@ -13,6 +13,8 @@ export interface DialogBox {
   setBeats: (beats: string[], onDone?: () => void) => void;
   /** Optional speaker nameplate (e.g. "EVE (V.O.)"). */
   setSpeaker: (name: string | null) => void;
+  /** Current sheet height (dynamic — sized to fit the text, capped at ~5 lines). */
+  getHeight: () => number;
   skip: () => void;
   destroy: () => void;
 }
@@ -20,11 +22,18 @@ export interface DialogBox {
 export interface DialogOptions {
   /** Parchment journal sheet (default) or dark stone plate. */
   variant?: 'parchment' | 'dark';
+  /** Called whenever the sheet re-sizes (dynamic height). */
+  onResize?: (height: number) => void;
 }
+
+const MIN_H = 128;
+const MAX_H = 190; // ~5 body lines at 19px + line spacing
 
 /**
  * Narration panel. Default look is an aged parchment sheet with ink text —
- * the page the player is writing as they descend.
+ * the page the player is writing as they descend. The sheet dynamically
+ * shrinks/grows to fit its text (max ~5 lines) so buttons and choices can
+ * tuck right under it.
  */
 export function createDialogBox(
   scene: Phaser.Scene,
@@ -35,9 +44,14 @@ export function createDialogBox(
   opts: DialogOptions = {},
 ): DialogBox {
   const parchment = (opts.variant ?? 'parchment') === 'parchment';
+  let curH = height;
+
+  function makeBg(h: number): Phaser.GameObjects.NineSlice {
+    return scene.add.nineslice(0, 0, parchment ? 'paper_panel' : 'panel_dialog', undefined, width, h, parchment ? 24 : 12, parchment ? 24 : 12, parchment ? 24 : 12, parchment ? 24 : 12);
+  }
 
   const shadow = scene.add.rectangle(5, 7, width, height, 0x000000, parchment ? 0.45 : 0.3);
-  const bg = scene.add.nineslice(0, 0, parchment ? 'paper_panel' : 'panel_dialog', undefined, width, height, parchment ? 24 : 12, parchment ? 24 : 12, parchment ? 24 : 12, parchment ? 24 : 12);
+  let bg = makeBg(height);
   const inkColor = parchment ? PALETTE_HEX.ink : PALETTE_HEX.bone;
   const promptColor = parchment ? PALETTE_HEX.oxide : PALETTE_HEX.gold;
 
@@ -48,6 +62,7 @@ export function createDialogBox(
     wordWrap: { width: width - 60 },
     lineSpacing: 8,
   });
+  text.setResolution(2);
 
   const prompt = scene.add
     .text(width / 2 - 22, height / 2 - 18, '▾', { fontFamily: FONT_BODY, fontSize: '18px', color: promptColor })
@@ -65,6 +80,30 @@ export function createDialogBox(
   container.setAlpha(0);
   scene.tweens.add({ targets: container, alpha: 1, duration: 240, ease: 'Sine.easeOut' });
 
+  /** Re-fit the sheet to a new height (clamped), repositioning everything. */
+  function layout(h: number): void {
+    const nh = Math.round(Math.max(MIN_H, Math.min(MAX_H, h)));
+    if (nh === curH) return;
+    curH = nh;
+    shadow.setSize(width, curH);
+    const oldBg = bg;
+    bg = makeBg(curH);
+    container.addAt(bg, 1);
+    container.remove(oldBg);
+    oldBg.destroy();
+    text.setY(-curH / 2 + 22);
+    prompt.setPosition(width / 2 - 22, curH / 2 - 18);
+    if (nameplateBg) nameplateBg.setY(-curH / 2 + 4);
+    if (nameplate) nameplate.setY(-curH / 2 + 3);
+    opts.onResize?.(curH);
+  }
+
+  /** Size the sheet to fit the full passage (capped at ~5 lines). */
+  function fit(t: string): void {
+    text.setText(t);
+    layout(text.height + 48);
+    text.setText('');
+  }
   let fullText = '';
   let charIndex = 0;
   let timer: Phaser.Time.TimerEvent | null = null;
@@ -92,7 +131,7 @@ export function createDialogBox(
     charIndex = 0;
     doneCallback = onDone;
     prompt.setVisible(false);
-    text.setText('');
+    fit(t);
     timer?.remove();
     // Guard against corrupted settings (null/string) producing NaN delays that
     // silently kill the typewriter — the known cause of empty dialog boxes.
@@ -112,6 +151,7 @@ export function createDialogBox(
 
   return {
     container,
+    getHeight: () => curH,
     setText: (t, onDone) => {
       inBeats = false;
       beats = [];
@@ -143,9 +183,9 @@ export function createDialogBox(
       if (nameplate) { nameplate.destroy(); nameplate = null; }
       if (nameplateBg) { nameplateBg.destroy(); nameplateBg = null; }
       if (!name) return;
-      nameplateBg = scene.add.rectangle(-width / 2 + 96, -height / 2 + 4, 170, 26, parchment ? 0xd9cdb0 : 0x22262c)
+      nameplateBg = scene.add.rectangle(-width / 2 + 96, -curH / 2 + 4, 170, 26, parchment ? 0xd9cdb0 : 0x22262c)
         .setStrokeStyle(1, parchment ? 0xb9ab88 : 0xc9a24b, 0.9);
-      nameplate = scene.add.text(-width / 2 + 96, -height / 2 + 3, name.toUpperCase(), {
+      nameplate = scene.add.text(-width / 2 + 96, -curH / 2 + 3, name.toUpperCase(), {
         fontFamily: FONT_SERIF,
         fontSize: '13px',
         color: parchment ? PALETTE_HEX.oxide : PALETTE_HEX.gold,

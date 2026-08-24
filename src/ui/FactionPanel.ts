@@ -51,34 +51,33 @@ export function createFactionPanel(scene: Phaser.Scene, x: number, y: number, wi
   }
   const rows: Record<string, RowRefs> = {};
 
-  const rowW = width - 32;
-  const halfW = (rowW - 96) / 2; // bar area after seal+name and value columns
-  const barCx = 16 + 24 + 8 + halfW / 2 + 20;
-
   entries.forEach((f, i) => {
     const ry = headerH + 8 + i * ROW_H;
+    const barY = ry + ROW_H / 2 - 2;
 
-    const seal = scene.add.image(26, ry + ROW_H / 2 - 4, `seal_${f.id}`).setDisplaySize(22, 22);
-    const name = scene.add.text(42, ry + ROW_H / 2 - 4, f.name.replace(/^The /, ''), {
+    const seal = scene.add.image(16, barY, `seal_${f.id}`).setDisplaySize(18, 18);
+    // Names sit in a fixed-width left zone so they never run under the bar.
+    const displayName = f.name.replace(/^The /, '');
+    const name = scene.add.text(38, barY, displayName.length > 11 ? `${displayName.slice(0, 10)}…` : displayName, {
       fontFamily: FONT_SERIF,
-      fontSize: '13px',
+      fontSize: '11px',
       color: f.colorCss,
     }).setOrigin(0, 0.5);
 
-    // Centered zero bar
-    const barY = ry + ROW_H / 2 - 4;
-    const barW = halfW;
-    const track = scene.add.rectangle(barCx - 2, barY, barW, 8, 0x22262c).setOrigin(0.5).setStrokeStyle(1, 0x3a3f46);
-    const mid = scene.add.rectangle(barCx - 2 + barW / 2, barY - 6, 1, 14, 0x9a9488, 0.55).setOrigin(0.5);
-    const fill = scene.add.rectangle(barCx - 2 + barW / 2, barY, 0, 8, 0x5c8a5c).setOrigin(0.5);
+    // Zero-centered bar in a reserved middle column, clear of the name zone.
+    const barCx = width - 96;
+    const barW = 46;
+    const track = scene.add.rectangle(barCx, barY, barW, 7, 0x22262c).setOrigin(0.5).setStrokeStyle(1, 0x3a3f46);
+    const mid = scene.add.rectangle(barCx, barY - 5, 1, 12, 0x9a9488, 0.55).setOrigin(0.5);
+    const fill = scene.add.rectangle(barCx, barY, 0, 8, 0x5c8a5c).setOrigin(0.5);
 
-    const valueText = scene.add.text(barCx - 2 + barW / 2 + 8, barY, '0', {
+    const valueText = scene.add.text(barCx - barW / 2 - 8, barY, '0', {
       fontFamily: FONT_MONO,
-      fontSize: '13px',
+      fontSize: '12px',
       color: PALETTE_HEX.bone,
-    }).setOrigin(0, 0.5);
+    }).setOrigin(1, 0.5);
 
-    const statusText = scene.add.text(width - 16, barY, 'Neutral', {
+    const statusText = scene.add.text(width - 14, barY, 'Neutral', {
       fontFamily: FONT_MONO,
       fontSize: '11px',
       color: STATUS_HEX.Neutral,
@@ -110,7 +109,7 @@ export function createFactionPanel(scene: Phaser.Scene, x: number, y: number, wi
         refs.statusText.setColor(statusCss(status));
 
         const frac = Math.min(1, Math.abs(v) / 100);
-        const w = Math.max(2, frac * (halfW / 2));
+        const w = Math.max(2, frac * 21); // half the drawn bar (46px)
         const cx0 = refs.barMask.x; // centered zero point
         refs.barMask.setSize(w, 8);
         refs.barMask.setX(v >= 0 ? cx0 + w / 2 : cx0 - w / 2);

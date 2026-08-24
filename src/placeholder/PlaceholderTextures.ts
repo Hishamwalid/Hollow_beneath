@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { ENEMIES, SUMMON_ENEMIES } from '@data/enemies';
 import { BOSSES } from '@data/bosses';
 import { FACTIONS } from '@data/factions';
@@ -29,7 +29,7 @@ function shapeTexture(
   g.destroy();
 }
 
-/** Circle token — used for regular enemies and the player. */
+/** Circle token â€” used for regular enemies and the player. */
 function circleToken(scene: Phaser.Scene, key: string, color: number, ringColor: number, size = 64): void {
   shapeTexture(scene, key, size, (g) => {
     const r = size / 2;
@@ -40,7 +40,7 @@ function circleToken(scene: Phaser.Scene, key: string, color: number, ringColor:
   });
 }
 
-/** Hex token — used for bosses (larger, more imposing silhouette). */
+/** Hex token â€” used for bosses (larger, more imposing silhouette). */
 function hexToken(scene: Phaser.Scene, key: string, color: number, ringColor: number, size = 96): void {
   shapeTexture(scene, key, size, (g) => {
     const r = size / 2 - 4;
@@ -148,7 +148,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   // Player token
   circleToken(scene, 'tok_player', PALETTE.player, PALETTE.bone, 56);
 
-  // Enemy tokens — one per bestiary entry, colored by rough archetype
+  // Enemy tokens â€” one per bestiary entry, colored by rough archetype
   const enemyColors: Record<string, number> = {
     echo_skeleton: 0x8a8a82,
     venn_custodian: 0x6f7f8f,
@@ -167,7 +167,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     circleToken(scene, `tok_${id}`, enemyColors[id] ?? 0x77777f, PALETTE.bone, 52);
   }
 
-  // Boss tokens — larger hex silhouettes
+  // Boss tokens â€” larger hex silhouettes
   const bossColors: Record<string, number> = {
     sentinel: 0xb9c4cc,
     patriarch: 0x8c2f2f,
@@ -197,7 +197,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
 
   // ---- Expedition-journal kit -------------------------------------------------
 
-  // Aged parchment sheet — 9-slice friendly (deckled edges stay in the border).
+  // Aged parchment sheet â€” 9-slice friendly (deckled edges stay in the border).
   if (!scene.textures.exists('paper_panel')) {
     const W = 128;
     const g = scene.add.graphics();
@@ -248,7 +248,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     g.destroy();
   }
 
-  // Wax faction seals — round stamp with embossed sigil line.
+  // Wax faction seals â€” round stamp with embossed sigil line.
   for (const f of Object.values(FACTIONS)) {
     shapeTexture(scene, `seal_${f.id}`, 40, (g) => {
       g.fillStyle(f.color, 1);
@@ -267,7 +267,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     });
   }
 
-  // Echo Shard icon — faceted gold shard for rites/buttons.
+  // Echo Shard icon â€” faceted gold shard for rites/buttons.
   shapeTexture(scene, 'icon_shard', 40, (g) => {
     g.fillStyle(PALETTE.goldBright, 1);
     g.fillPoints(
@@ -366,6 +366,66 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     g.fillCircle(cx, cy, 12);
     g.fillStyle(PALETTE.stone, 1);
     g.fillCircle(cx, cy, 6);
+  });
+
+  // Damage-type icons for skill rows (tinted per element at usage sites).
+  const EL = 32;
+  const elIcon = (key: string, draw: (g: Phaser.GameObjects.Graphics) => void): void => shapeTexture(scene, key, EL, draw);
+  elIcon('el_slash', (g) => {
+    g.lineStyle(4, 0xffffff, 1);
+    g.lineBetween(7, 25, 25, 7);
+    g.lineBetween(18, 7, 25, 7);
+    g.lineBetween(25, 14, 25, 7);
+  });
+  elIcon('el_pierce', (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(6, 26, 16, 6, 26, 26);
+    g.fillStyle(0x000000, 0);
+  });
+  elIcon('el_blunt', (g) => {
+    g.lineStyle(4, 0xffffff, 1);
+    g.lineBetween(10, 26, 18, 16);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(21, 11, 7);
+  });
+  elIcon('el_flame', (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillTriangle(16, 3, 7, 20, 25, 20);
+    g.fillCircle(16, 22, 8);
+  });
+  elIcon('el_frost', (g) => {
+    g.lineStyle(3, 0xffffff, 1);
+    for (let i = 0; i < 3; i++) {
+      const a = (Math.PI / 3) * i;
+      g.lineBetween(16 - Math.cos(a) * 11, 16 - Math.sin(a) * 11, 16 + Math.cos(a) * 11, 16 + Math.sin(a) * 11);
+    }
+  });
+  elIcon('el_shock', (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillPoints([
+      new Phaser.Math.Vector2(18, 3),
+      new Phaser.Math.Vector2(8, 18),
+      new Phaser.Math.Vector2(15, 18),
+      new Phaser.Math.Vector2(12, 29),
+      new Phaser.Math.Vector2(24, 13),
+      new Phaser.Math.Vector2(17, 13),
+    ], true);
+  });
+  elIcon('el_sacred', (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(16, 16, 6);
+    g.lineStyle(3, 0xffffff, 1);
+    for (let i = 0; i < 8; i++) {
+      const a = (Math.PI / 4) * i;
+      g.lineBetween(16 + Math.cos(a) * 9, 16 + Math.sin(a) * 9, 16 + Math.cos(a) * 13, 16 + Math.sin(a) * 13);
+    }
+  });
+  elIcon('el_shadow', (g) => {
+    g.fillStyle(0xffffff, 1);
+    g.beginPath();
+    g.arc(16, 16, 11, Math.PI * 0.35, Math.PI * 1.65, false);
+    g.closePath();
+    g.fillPath();
   });
 
   // UI chrome

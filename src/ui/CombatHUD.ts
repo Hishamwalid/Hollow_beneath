@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import type { EnemyView } from '@systems/CombatEngine';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { spawnHitParticles } from '@/systems/particles';
@@ -12,7 +12,7 @@ export interface EnemyDisplay {
   setState: (state: 'idle' | 'attack' | 'hit' | 'guard') => void;
   /** The enemy definition id (e.g. 'sentinel'), stable across the fight. */
   defId: string;
-  /** Switches the phase-suffixed sprite set (1 → `<state>1` frames, 2 → `<state>2`). */
+  /** Switches the phase-suffixed sprite set (1 â†’ `<state>1` frames, 2 â†’ `<state>2`). */
   setPhase: (phase: 1 | 2) => void;
   /** Plays a multi-frame sequence of textures (transform / defeat / victory), cancelling any prior sequence. */
   playSequence: (frames: string[], intervalMs: number, onDone?: () => void) => void;
@@ -20,7 +20,7 @@ export interface EnemyDisplay {
 }
 
 /** Resizes a centered (origin 0.5,0.5) pill to snugly cover `text`, including its stroke.
- *  Assumes pill and text share the same local position (e.g. both children of nameGroup at 0,0) —
+ *  Assumes pill and text share the same local position (e.g. both children of nameGroup at 0,0) â€”
  *  only the size changes, so it never touches position and can't produce NaN geometry from an
  *  unset/mid-update text position. */
 function fitNamePill(pill: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text, paddingX = 14, paddingY = 6): void {
@@ -253,7 +253,7 @@ export function createApPips(scene: Phaser.Scene, x: number, y: number, labelTex
 
 export interface TooltipPanelHandle {
   container: Phaser.GameObjects.Container;
-  /** Shows a transient message (hover descriptions, errors) — `hide` restores the default text. */
+  /** Shows a transient message (hover descriptions, errors) â€” `hide` restores the default text. */
   show: (text: string) => void;
   /** Restores the default tooltip text. */
   hide: () => void;
@@ -324,7 +324,7 @@ export function createCombatLogPanel(scene: Phaser.Scene, x: number, y: number):
       entries.length = 0;
       let y = -(COMBAT_LOG_H / 2) + 26;
       for (const line of lines.slice(-COMBAT_LOG_TAIL)) {
-        const isRound = /^— Round \d+ —$/.test(line);
+        const isRound = /^â€” Round \d+ â€”$/.test(line);
         const t = scene.add
           .text(0, y, line, {
             fontFamily: FONT_MONO,
@@ -363,7 +363,7 @@ const COL_XS = [-181.6, 8.4];
 const ROW_YS = [-67.9, -19.3, 29.3];
 const BTN_W = 177.3;
 const BTN_H = 41.3;
-/** Book-page container behind the action buttons (design-proportioned 614×274 → canvas).
+/** Book-page container behind the action buttons (design-proportioned 614Ã—274 â†’ canvas).
  *  Offset to the buttons' visual center (grid cells are not symmetric around the container origin). */
 const PANEL_BACK_W = 409.3;
 const PANEL_BACK_H = 182.7;
@@ -499,14 +499,14 @@ export interface TurnOrderPanelHandle {
   destroy: () => void;
 }
 
-const PANEL_W = 180;
-const ROW_W = 160;
+const PANEL_W = 224;
+const ROW_W = 204;
 const ROW_MAX_H = 33.3;
 const ROW_SPACING = 39.3;
 const PORTRAIT_SIZE = 33;
 const PORTRAIT_BOX = 38;
 const PORTRAIT_X = -38.3;
-const TEXT_X = -12;
+const TEXT_X = -6;
 
 export function createTurnOrderPanel(scene: Phaser.Scene, x: number, y: number): TurnOrderPanelHandle {
   const container = scene.add.container(x, y).setDepth(10);
@@ -546,15 +546,27 @@ export function createTurnOrderPanel(scene: Phaser.Scene, x: number, y: number):
     bg.setPosition(0, TOP_EDGE + panelH / 2);
     title.setPosition(0, TOP_EDGE + 14);
     const startY = TOP_EDGE + 42;
+    let cursorY = startY;
     order.forEach((key, i) => {
       const isCurrent = key === actor;
-      const ry = startY + i * spacing;
+      const ry = cursorY;
+      const text = scene.add
+        .text(TEXT_X, ry, names.get(key) ?? key, {
+          fontFamily: FONT_MONO,
+          fontSize: n > 3 ? '11px' : '12px',
+          color: isCurrent ? PALETTE_HEX.gold : PALETTE_HEX.bone,
+          wordWrap: { width: ROW_W / 2 - 22, useAdvancedWrap: true },
+          lineSpacing: 1,
+        })
+        .setOrigin(0, 0.5);
+      // Row plate sized to cover the whole name (even two-line wraps).
+      const rowH = Math.max(ROW_MAX_H, text.height + 14);
       const box = scene.add
         .rectangle(0, ry, ROW_W, rowH, 0x000000)
         .setOrigin(0.5)
         .setStrokeStyle(isCurrent ? 2 : 0, isCurrent ? 0xc9a24b : 0x000000);
       const portraitBox = scene.add
-        .rectangle(PORTRAIT_X, ry, PORTRAIT_BOX, PORTRAIT_BOX, 0x0b0d10)
+        .rectangle(PORTRAIT_X, ry, PORTRAIT_BOX, Math.min(rowH, PORTRAIT_BOX + 8), 0x0b0d10)
         .setOrigin(0.5)
         .setStrokeStyle(isCurrent ? 2 : 0, isCurrent ? 0xc9a24b : 0x000000);
       const texKey = portraits.get(key) ?? '';
@@ -563,18 +575,15 @@ export function createTurnOrderPanel(scene: Phaser.Scene, x: number, y: number):
         ? scene.add.image(PORTRAIT_X, ry, texKey)
         : scene.add.circle(PORTRAIT_X, ry, 11, 0xb0453f).setOrigin(0.5);
       if (hasPortrait) setPortrait(icon as Phaser.GameObjects.Image, texKey);
-      const text = scene.add
-        .text(TEXT_X, ry, names.get(key) ?? key, {
-          fontFamily: FONT_MONO,
-          fontSize: n > 3 ? '12px' : '13px',
-          color: isCurrent ? PALETTE_HEX.gold : PALETTE_HEX.bone,
-          wordWrap: { width: 132, useAdvancedWrap: true },
-          lineSpacing: 1,
-        })
-        .setOrigin(0, 0.5);
       rows.push({ box, portraitBox, icon, label: text });
       container.add([box, portraitBox, icon, text]);
+      cursorY += Math.max(ROW_SPACING, rowH + 6);
     });
+    // Grow the panel to the rows actually laid out (extra rows extend downward).
+    const usedH = 42 + (cursorY - startY);
+    const finalH = Math.max(panelH, usedH + 4);
+    bg.setSize(PANEL_W, finalH);
+    bg.setPosition(0, TOP_EDGE + finalH / 2);
   }
 
   return {
