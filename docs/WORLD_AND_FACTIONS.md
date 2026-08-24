@@ -99,7 +99,117 @@ The descent is **200 nodes divided into five chapters of 40 nodes each**. Every 
 
 ---
 
-## 4. The Four Factions
+## 4. The Five Landmark Bosses
+
+One Landmark blocks the final node of each chapter (nodes 40, 80, 120, 160, 200). Every boss has multiple phases keyed to HP thresholds, telegraphed charged ultimates announced a full round in advance ("⚡ charging…"), an AI that profiles how you fight and adapts every third turn, and pre-combat approach choices that can change the fight — or skip it.
+
+| # | Boss | Venn name | Chapter · Node | Lv | Theme |
+|---|------|-----------|----------------|----|-------|
+| 1 | **The Argent Sentinel** | Keth-Vor, the First Door | 1 · 40 | 3 | The danger of curiosity. |
+| 2 | **Patriarch Oren Cass** | The Ash Covenant, Ascendant | 2 · 80 | 6 | Faith as anesthetic. |
+| 3 | **The Merged Chorus** | The Loom, Speaking With Borrowed Mouths | 3 · 120 | 9 | The self as a chosen fiction. |
+| 4 | **The Fossil King** | Dominion, Last of Its Court | 4 · 160 | 13 | Power that outlived its purpose. |
+| 5 | **The Final Reflection** | The Loom, Wearing You | 5 · 200 | 15 | You were the mystery all along. |
+
+### 4.1 The Argent Sentinel — *Keth-Vor, the First Door*
+
+A silver guardian engraved edge-to-edge with a language that almost resolves into words you know. It does not raise a weapon; it waits the way a locked door waits, to see what you'll try.
+
+- **Stats:** 150 HP · ATK 15 · MATK 12 · DEF 12 · SPD 14
+- **Phases:** **The Curator** (>66% — resists Shock) → **The Erudite** (>33%) → **The Desperate Guardian** (≤33% — weak to Slash)
+- **Signature moves:** Aegis Slam (heavy), Glint Ray, ⚡ Charge Protocol → Unstoppable Strike
+- **Pre-combat:** read its intent (WILL DC 10 — starts you with +1 Momentum on success) or strike before it finishes turning.
+- **Aftermath lore:** it was built to guard a question, not treasure — *"I have been so very tired, and so very good at my work."*
+
+### 4.2 Patriarch Oren Cass — *The Ash Covenant, Ascendant*
+
+A Sable inquisitor who has been down here far too long, worshipping the ascension he renamed himself after. Belief as anesthesia: he has numbed himself into something he hopes the Loom might accept.
+
+- **Stats:** 210 HP · MATK 20 · DEF 16 · MDEF 18 · SPD 12
+- **Phases:** base → **The Devout** (>30%) → **The Martyr** (≤30%)
+- **Signature moves:** Shadow Bolt (heavy), Miasma, Summon Zealots, Whisper Healing Prayer, Dispel Holy, Punishing Strike; opens by casting a Barrier and recasts it when it falls
+- **Pre-combat:** accept his purification (**skips the fight entirely**), refuse him, ask what he burned (INT ≥7), or tell him *"I know what you burned."*
+
+### 4.3 The Merged Chorus — *The Loom, Speaking With Borrowed Mouths*
+
+Forty Archive scholars who entered together to study the Loom — and became one voice wearing forty mouths. Not hostile; merely certain that joining was an upgrade.
+
+- **Stats:** 260 HP · MATK 21 · DEF 12 · SPD 15
+- **Phases:** single phase, **Many Voices**, but weaknesses are re-randomized every round — hit everything, scan often
+- **Signature moves:** Internal Argument (it hesitates), Unison Shift, Discordant Howl (heavy), borrowed Flame Pulse, Many-Voiced Strike
+- **Pre-combat:** sense whether attrition can win (WILL DC 12), challenge their sacrifice, appeal to scholarly pride, offer yourself instead (Resonance ≥30), or attack without words.
+
+### 4.4 The Fossil King — *Dominion, Last of Its Court*
+
+A Venn-era ruler preserved mid-decree in stone, still issuing edicts to a kingdom of dust. An empire collapsing in slow motion across four phases.
+
+- **Stats:** 320 HP · ATK 22 · MATK 20 · DEF 18 · MDEF 18 · SPD 11
+- **Phases:** **Regal Decree** (>76%) → **The Rebellion** (>52%) → **The Silence** (>28%) → **The Fossil** (final — weak to Shadow)
+- **Signature moves:** Imperial Edict, Summon the Court, Primeval Crush (heavy), Petrifying Gaze (Slows your QTE), Tax of Flesh, the Last Law, ⚡ Cataclysm
+- **Pre-combat:** four questions — *What did the Venn become? Why did you stay? Will you stop me?* — or declare *"I have no question"* (WILL ≥8). Provoking him makes him easier to hurt but harder to kill.
+
+### 4.5 The Final Reflection — *The Loom, Wearing You*
+
+The chamber at the bottom does not contain a monster. It contains an argument wearing your face. It reads your build, your equipped skills, your faction allegiance, and your history — then fights like a version of you that finished the thought first.
+
+- **Stats:** 360 HP · ATK 22 · MATK 22 · DEF 15 · MDEF 15 · SPD 18
+- **Phases:** **The Argument** (>72%) → **The Evidence** (>44%) → **The Question** (>16%) → **The Answer**
+- **Signature moves:** Mirror Cast (casts *your own equipped techniques* back at you), Quoted Choice (repeats your past event choices as attacks), Call Echoes (summons Echo of Hunger/Emptiness/Harmony/Cleanliness), Weight of Evidence, The Question / Repeated Question, Identity Erasure (seals one of your six slots), ⚡ Hollow Surge, Final Honest Blow
+
+---
+
+## 5. Bestiary — Every Enemy
+
+Twelve standard enemies across five chapter rosters, plus Resonance-gated horrors and the Reflection's echoes. Affinities below are the truth of each creature — in-game they start unknown (`?`) and must be discovered by hitting or Scanning them. `wk` = weakness ×1.5 (+Down & 1-More) · `str` = resist ×0.5 · `null` = immune · `rep` = reflects · `drn` = drains.
+
+### Chapter 1 roster *(nodes 1–40)*
+
+| Enemy | Lv | Attacks with | Known affinities | Signature moves |
+|-------|----|--------------|------------------|-----------------|
+| **Dust Wight** — *a desert-dusted remnant wrapped in funerary linen* | 2 | Slash | wk slash · str pierce · null blunt · rep flame | Dust Slab; Sand Armor (+20% DEF) |
+| **Echo-bleached Skeleton** — *bones that remember standing, if nothing else* | 2 | Slash | wk blunt · wk flame · str pierce | Bone Cleave (high crit); Rattle (Fear chance) |
+
+### Chapter 2 roster *(nodes 41–80)*
+
+| Enemy | Lv | Attacks with | Known affinities | Signature moves |
+|-------|----|--------------|------------------|-----------------|
+| **Venn Custodian** — *an Archive golem, still shelving books no one wrote* | 5 | Blunt | wk frost · str slash/pierce/blunt · drn shock | Archive Bludgeon; Chilling Touch (Chilled); Barrier |
+| **Sable Zealot** — *ash-marked, certain, and not entirely wrong* | 5 | Slash | wk flame · wk blunt · rep sacred | Frenzied Slash (costs own HP); Reckless Flail |
+| **Ash Covenant Seer** — *crystalline growths refract your face wrong* | 6 | Shock | wk shock · wk pierce · null flame | Spark Arc (Superconducts Chilled); Siphon (steals MP) |
+
+### Chapter 3 roster *(nodes 81–120)*
+
+| Enemy | Lv | Attacks with | Known affinities | Signature moves |
+|-------|----|--------------|------------------|-----------------|
+| **Dust-Road Raider** — *answers to no faction* | 8 | Pierce | wk pierce · wk flame · str blunt | Quick Stride; Pocket Sand (−Accuracy) |
+| **Archive Cipher-Wraith** — *reads you while you fail to read it* | 8 | Shadow | wk sacred · null slash · drn shadow | Erase Memory (MP drain); Cipher Barrier (nullifies next skill) |
+
+### Chapter 4 roster *(nodes 121–160)*
+
+| Enemy | Lv | Attacks with | Known affinities | Signature moves |
+|-------|----|--------------|------------------|-----------------|
+| **Sable Inquisitor** — *masked elite, flame motifs in heavier armor* | 12 | Pierce | wk shadow · wk slash · null sacred · str frost | Judgment Pierce (ignores 30% DEF); Interdict (heal block) |
+| **Ash Covenant Mutant** — *further along the translation than anyone should be* | 12 | Blunt | wk frost · wk pierce · drn flame · null shock | Mutated Slam (25% crit); Acid Spit (−40% DEF) |
+| **Dominion Echo-Soldier** — *spear and shield for a king made of stone* | 12 | Slash | wk sacred · wk blunt · rep slash · str pierce | Spear Thrust; Shield Wall (group DEF up); Counter Stance (reflects attacks) |
+
+### Chapter 5 roster *(nodes 161–200)*
+
+Reuses the Chapter 3–4 elites — Raiders, Cipher-Wraiths, Inquisitors, Mutants, Echo-Soldiers — at full depth scaling. And, if your Resonance is high enough:
+
+### Resonance-gated horrors
+
+| Enemy | Where | Gate | Profile |
+|-------|-------|------|---------|
+| **Memory Wraith** — *someone else's best day, still hungry* | Chapters 3+ | Resonance ≥25 | Lv 8, Shadow. wk shadow/flame · rep sacred · drn shock. Void Drain (−10% Max MP), Mind Shatter (Confusion) |
+| **The Unread** — *apex predator of the deep stacks. Loom-touched. Wrong silhouette.* | Chapter 5 | Resonance ≥50 | Lv 14, Shadow. wk sacred · null slash/pierce/blunt · drn shadow · rep flame. Page Tear (true damage, bypasses shields), Blank Slate (strips buffs + drains Momentum) |
+
+### The Reflection's echoes *(Chapter 5 boss summons)*
+
+Fragments of the self, cast by The Final Reflection: **Echo of Hunger** (*appetite wearing your posture*), **Echo of Emptiness** (*a person-shaped hole*), **Echo of Harmony** (*the chord that agreed too easily*), **Echo of Cleanliness** (*cannot abide being touched*) — all Lv 10, all weak to Sacred. Also met in scripted encounters: **Sera Voss**, expedition fighter — camp-trained, road-hardened, and still carrying what Keth-7 left of her.
+
+---
+
+## 6. The Four Factions
 
 You do not descend alone. Four surface factions have been waiting for someone to come back with answers — or to confirm their answer was right all along. Each tracks a separate **influence axis from −100 to +100**, shifted by event choices, faction-gated decisions, gear, and ambushes.
 
