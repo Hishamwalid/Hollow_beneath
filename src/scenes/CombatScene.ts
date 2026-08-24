@@ -23,7 +23,7 @@ import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { settingsManager } from '@systems/SettingsManager';
 import { spawnHitParticles, spawnHealParticles, spawnMomentumParticles } from '@systems/particles';
 import { audio } from '@placeholder/PlaceholderAudio';
-import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
+import { GAME_WIDTH, GAME_HEIGHT, NODES_PER_CHAPTER } from '@/config';
 import { computeLevelUp } from '@systems/LevelSystem';
 import { showLevelUpModal, showStatChoiceModal } from '@ui/LevelUpModal';
 import combatLayoutJson from '@data/combatLayout.json';
@@ -32,7 +32,8 @@ interface CombatSceneData {
   mode: 'wild' | 'event' | 'boss';
   enemyIds?: string[];
   bossId?: string;
-  page: number;
+  /** Node the fight takes place on — drives position-based difficulty scaling. */
+  nodeIndex: number;
   precombatFlags?: Record<string, number>;
   onVictory?: (player: PlayerState, ctx: EventApplyCtx) => string;
 }
@@ -116,12 +117,12 @@ const AFFINITY_HEX: Record<AffinityKind, number> = {
   '-': 0x9a9488,
 };
 
-/** Which combat background to show: stage-1 sandy areas (pages 1–3), stone areas
- *  (page 4), or the Sentinel boss arena. Stages 2–5 keep the default dark frame. */
+/** Which combat background to show: chapter-1 sandy areas, stone areas near the
+ *  Sentinel's door, or the Sentinel boss arena. Later chapters keep the default dark frame. */
 function combatBgKeyFor(data: CombatSceneData): string | null {
   if (data.mode === 'boss') return data.bossId === 'sentinel' ? 'bg_combat_stage1_boss' : null;
-  if (data.page <= 3) return 'bg_combat_stage1_sand';
-  if (data.page === 4) return 'bg_combat_stage1_stone';
+  if (data.nodeIndex <= 30) return 'bg_combat_stage1_sand';
+  if (data.nodeIndex <= NODES_PER_CHAPTER) return 'bg_combat_stage1_stone';
   return null;
 }
 
@@ -286,7 +287,7 @@ export class CombatScene extends Phaser.Scene {
     this.engine = new CombatEngine({
       player,
       enemyIds: safeEnemyIds,
-      page: data.page,
+      nodeIndex: data.nodeIndex ?? 1,
       rng: Math.random,
       bossDef,
       precombatFlags: data.precombatFlags,
@@ -2044,7 +2045,7 @@ export class CombatScene extends Phaser.Scene {
       audio.defeat();
       this.setPlayerPose('defeat');
       this.playSentinelVictory();
-      const hadCheckpoint = !!store.game?.checkpointSnapshot && (store.game?.checkpointPage ?? 0) > 0;
+      const hadCheckpoint = !!store.game?.checkpointSnapshot && (store.game?.checkpointNodeIndex ?? 0) > 0;
       this.time.delayedCall(800, () => {
         store.handleDeath();
         fadeToScene(this, hadCheckpoint ? 'Board' : 'GameOver');

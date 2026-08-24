@@ -276,7 +276,7 @@ export interface BossDef {
   id: string;
   name: string;
   vennName: string;
-  page: number;
+  chapter: number;
   level: number;
   theme: string;
   baseStats: { hp: number; mp?: number; atk: number; matk: number; def: number; mdef: number; spd: number };
@@ -331,7 +331,7 @@ export type NodeType = 'event' | 'combat' | 'rest' | 'discovery' | 'trap' | 'lan
 
 export interface BoardNode {
   index: number; // 1-200
-  page: number; // 1-20
+  chapter: number; // 1-5
   type: NodeType;
   subtype: string;
   resolved: boolean;
@@ -362,7 +362,7 @@ export interface EventApplyCtx {
 export interface EventDef {
   id: string;
   title: string;
-  pageRange: [number, number];
+  chapterRange: [number, number]; // 1-5
   minResonance?: number;
   maxResonance?: number;
   repeatable?: boolean;
@@ -495,14 +495,12 @@ export const MAX_EQUIPPED_SKILLS = 6;
 
 export interface GameState {
   currentNodeIndex: number;
-  currentPage: number;
   path: number[];
   rngSeed: number;
   runStartedAt: number;
   landings: number;
   combatRounds: number;
   choicesMade: number;
-  checkpointPage: number;
   checkpointNodeIndex: number;
   checkpointSnapshot: PlayerState | null;
   deathNodeIndex: number | null;
@@ -514,7 +512,7 @@ export interface GameState {
 }
 
 export interface BestRunStats {
-  page: number;
+  chapter: number;
   time: number;
   nodesVisited: number;
   enemiesKilled: number;
@@ -542,7 +540,7 @@ export interface RunStats {
   echoShardsEarned: number;
   totalEchoShards: number;
   bestRun: BestRunStats;
-  pageReached: number;
+  chapterReached: number;
   endingUnlocked: string | null;
   isNewBest: boolean;
 }

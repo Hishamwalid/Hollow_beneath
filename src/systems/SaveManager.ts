@@ -1,8 +1,8 @@
-import type { GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
+import type { BestRunStats, GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
 import { MAX_EQUIPPED_SKILLS } from '@data/types';
 
 const STORAGE_KEY = 'hollow_beneath_save_v1';
-const VERSION = 6;
+const VERSION = 7;
 
 function simpleChecksum(payload: string): string {
   let hash = 0;
@@ -16,7 +16,7 @@ export function defaultMeta(): MetaState {
   return {
     echoShards: 0,
     purchasedUnlocks: [],
-    bestRun: { page: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
+    bestRun: { chapter: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
     totalRuns: 0,
     endingsAchieved: [],
     loreFragmentsSeen: [],
@@ -44,6 +44,8 @@ export function saveGame(meta: MetaState, activeRun: SaveBlob['activeRun']): voi
 
 /**
  * Upgrades older save blobs to the current VERSION.
+ * v7 = page system removed: GameState.currentPage/checkpointPage and BestRunStats.page
+ * are gone (chapter derives from the node index); meta.bestRun.page → chapter.
  * v6 = combat revamp: classes/AP/fatigue/insight/fear/position/skill points are gone;
  * skills use a 6-slot equipped loadout; meta gains Bestiary discovery records.
  */
@@ -65,10 +67,20 @@ function migrateBlob(blob: SaveBlob): SaveBlob {
     }
     if (!Array.isArray(player.companions)) player.companions = [];
   }
+  if (blob.activeRun?.game) {
+    const g = blob.activeRun.game as GameState & Record<string, unknown>;
+    delete g.currentPage;
+    delete g.checkpointPage;
+  }
   if (blob.meta) {
     const m = blob.meta as MetaState & Record<string, unknown>;
     if (!m.discoveredAffinities || typeof m.discoveredAffinities !== 'object') m.discoveredAffinities = {};
     if (!m.bestiaryKills || typeof m.bestiaryKills !== 'object') m.bestiaryKills = {};
+    if (m.bestRun && typeof m.bestRun === 'object') {
+      const br = m.bestRun as BestRunStats & Record<string, unknown>;
+      br.chapter = typeof br.chapter === 'number' ? br.chapter : Math.min(5, Math.ceil(((br.page as number) ?? 0) / 4));
+      delete br.page;
+    }
     delete m.enemyArchive;
   }
   blob.version = VERSION;
@@ -107,7 +119,6 @@ export function hasSave(): boolean {
 export function takeCheckpoint(game: GameState, player: PlayerState): GameState {
   return {
     ...game,
-    checkpointPage: game.currentPage,
     checkpointNodeIndex: game.currentNodeIndex,
     checkpointSnapshot: JSON.parse(JSON.stringify(player)) as PlayerState,
   };
@@ -117,11 +128,10 @@ export function takeCheckpoint(game: GameState, player: PlayerState): GameState 
 export function restoreCheckpoint(game: GameState): { game: GameState; player: PlayerState | null } {
   if (!game.checkpointSnapshot) return { game: { ...game, isDead: false }, player: null };
   const restoredPlayer = JSON.parse(JSON.stringify(game.checkpointSnapshot)) as PlayerState;
-  const restoredNode = game.checkpointNodeIndex ?? (game.checkpointPage - 1) * 10 + 1;
+  const restoredNode = game.checkpointNodeIndex ?? 1;
   const restoredGame: GameState = {
     ...game,
     currentNodeIndex: restoredNode,
-    currentPage: game.checkpointPage,
     isDead: false,
   };
   return { game: restoredGame, player: restoredPlayer };

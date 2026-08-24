@@ -26,7 +26,7 @@ export const SENTINEL: BossDef = {
   id: 'sentinel',
   name: 'The Argent Sentinel',
   vennName: 'Keth-Vor, the First Door',
-  page: 4,
+  chapter: 1,
   level: 3,
   theme: 'The danger of curiosity.',
   baseStats: { hp: 150, mp: 50, atk: 15, matk: 12, def: 12, mdef: 11, spd: 14 },
@@ -131,7 +131,7 @@ export const PATRIARCH: BossDef = {
   id: 'patriarch',
   name: 'Patriarch Oren Cass',
   vennName: 'The Ash Covenant, Ascendant',
-  page: 8,
+  chapter: 2,
   level: 6,
   theme: 'Faith as anesthetic.',
   baseStats: { hp: 210, mp: 70, atk: 16, matk: 20, def: 16, mdef: 18, spd: 12 },
@@ -355,7 +355,7 @@ export const CHORUS: BossDef = {
   id: 'chorus',
   name: 'The Merged Chorus',
   vennName: 'The Loom, Speaking With Borrowed Mouths',
-  page: 12,
+  chapter: 3,
   level: 9,
   theme: 'The self as a chosen fiction.',
   baseStats: { hp: 260, mp: 80, atk: 17, matk: 21, def: 12, mdef: 16, spd: 15 },
@@ -528,7 +528,7 @@ export const FOSSIL_KING: BossDef = {
   id: 'fossil_king',
   name: 'The Fossil King',
   vennName: 'Dominion, Last of Its Court',
-  page: 16,
+  chapter: 4,
   level: 13,
   theme: 'Power that outlived its purpose.',
   baseStats: { hp: 320, mp: 60, atk: 22, matk: 20, def: 18, mdef: 18, spd: 11 },
@@ -721,7 +721,7 @@ export const REFLECTION: BossDef = {
   id: 'reflection',
   name: 'The Final Reflection',
   vennName: 'The Loom, Wearing You',
-  page: 20,
+  chapter: 5,
   level: 15,
   theme: 'You were the mystery all along.',
   baseStats: { hp: 360, mp: 90, atk: 22, matk: 22, def: 15, mdef: 15, spd: 18 },
@@ -884,7 +884,7 @@ export const BOSSES: Record<string, BossDef> = {
 
 export const BOSS_ORDER = ['sentinel', 'patriarch', 'chorus', 'fossil_king', 'reflection'];
 
-export function bossesForPage(page: number): string | null {
-  const match = Object.values(BOSSES).find((b) => b.page === page);
+export function bossForChapter(chapter: number): string | null {
+  const match = Object.values(BOSSES).find((b) => b.chapter === chapter);
   return match ? match.id : null;
 }

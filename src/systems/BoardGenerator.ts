@@ -1,7 +1,7 @@
 import type { BoardNode, NodeType } from '@data/types';
-import { enemiesForPage } from '@data/enemies';
+import { enemiesForChapter } from '@data/enemies';
 import { pick } from './rng';
-import { TOTAL_NODES, NODES_PER_PAGE, PAGES } from '@/config';
+import { TOTAL_NODES, NODES_PER_CHAPTER, CHAPTERS } from '@/config';
 
 export const CHECKPOINTS = [40, 80, 120, 160];
 export const LANDMARK_INDICES = [40, 80, 120, 160, 200];
@@ -32,8 +32,27 @@ function weightedNodeType(rng: () => number): NodeType {
   return 'event';
 }
 
-export function pageForIndex(index: number): number {
-  return Math.min(PAGES, Math.ceil(index / NODES_PER_PAGE));
+export function chapterForIndex(index: number): number {
+  return Math.min(CHAPTERS, Math.max(1, Math.ceil(index / NODES_PER_CHAPTER)));
+}
+
+/**
+ * Continuous descent-depth scalar for a node (0 at node 1 → 19.9 at node 200).
+ * Replaces the old per-page scaling so difficulty still grows smoothly with
+ * position even though the board is now organised purely into chapters.
+ */
+export function depthForIndex(index: number): number {
+  return Math.max(0, index - 1) / 10;
+}
+
+/** Enemy stat scaling by node position — GDD balance curve (hp .1/step, atk .075/step, def .05/step). */
+export function scalingForIndex(index: number) {
+  const d = depthForIndex(index);
+  return {
+    hp: 1 + 0.1 * d,
+    atk: 1 + 0.075 * d,
+    def: 1 + 0.05 * d,
+  };
 }
 
 /** Builds the full 200-node board. Deterministic given the same seeded rng. */
@@ -42,26 +61,26 @@ export function generateBoard(rng: () => number): BoardNode[] {
   const trapPool = ['memory_trap', 'collapsing_floor', 'identity_trap', 'collapsing_ceiling'];
 
   for (let i = 1; i <= TOTAL_NODES; i++) {
-    const page = pageForIndex(i);
+    const chapter = chapterForIndex(i);
 
     if (LANDMARK_INDICES.includes(i)) {
       const bossId = { 40: 'sentinel', 80: 'patriarch', 120: 'chorus', 160: 'fossil_king', 200: 'reflection' }[i]!;
-      nodes.push({ index: i, page, type: 'landmark', subtype: bossId, resolved: false });
+      nodes.push({ index: i, chapter, type: 'landmark', subtype: bossId, resolved: false });
       continue;
     }
     if (CAPTURE_INDICES.includes(i)) {
-      nodes.push({ index: i, page, type: 'discovery', subtype: 'capture_point', resolved: false });
+      nodes.push({ index: i, chapter, type: 'discovery', subtype: 'capture_point', resolved: false });
       continue;
     }
     if (ALLY_INDICES[i]) {
-      nodes.push({ index: i, page, type: 'discovery', subtype: `ally:${ALLY_INDICES[i]}`, resolved: false });
+      nodes.push({ index: i, chapter, type: 'discovery', subtype: `ally:${ALLY_INDICES[i]}`, resolved: false });
       continue;
     }
 
     const type = weightedNodeType(rng);
     let subtype = '';
     if (type === 'combat') {
-      const pool = enemiesForPage(page, 0);
+      const pool = enemiesForChapter(chapter, 0);
       subtype = pick(pool, rng) ?? 'dust_road_raider';
     } else if (type === 'trap') {
       subtype = pick(trapPool, rng) ?? 'memory_trap';
@@ -72,17 +91,7 @@ export function generateBoard(rng: () => number): BoardNode[] {
     } else {
       subtype = 'rest';
     }
-    nodes.push({ index: i, page, type, subtype, resolved: false });
+    nodes.push({ index: i, chapter, type, subtype, resolved: false });
   }
   return nodes;
-}
-
-/** Enemy stat scaling per page — GDD balance config (hpPerPage 0.1, atkPerPage 0.075, defPerPage 0.05). */
-export function pageScaling(page: number) {
-  const p = page - 1;
-  return {
-    hp: 1 + 0.1 * p,
-    atk: 1 + 0.075 * p,
-    def: 1 + 0.05 * p,
-  };
 }

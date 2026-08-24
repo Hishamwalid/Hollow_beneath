@@ -18,7 +18,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   10: {
     id: 'landmark_first_marker',
     title: 'The First Marker',
-    pageRange: [1, 1],
+    chapterRange: [1, 1],
     flavorText:
       'A waystone, waist-high, worn smooth by hands that stopped coming here a long time ago. Someone carved a tally into its base — not of days, it looks like, but of something else entirely. It stops well short of where the stone ends.',
     choices: [
@@ -49,7 +49,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   30: {
     id: 'landmark_third_marker',
     title: 'The Third Marker',
-    pageRange: [3, 3],
+    chapterRange: [1, 1],
     flavorText:
       'This waystone carries more than one hand\'s work — Sable ash, Archive chalk, a Caravan trail-glyph, all layered on the same stone, none of them addressed to each other. Whoever passes here, they at least agree the road exists.',
     choices: [
@@ -84,7 +84,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   50: {
     id: 'landmark_fifth_marker',
     title: 'The Fifth Marker',
-    pageRange: [5, 5],
+    chapterRange: [2, 2],
     flavorText:
       'Halfway, by any honest count. The air here holds a low, constant hum, too even to be wind — the sound, maybe, of something very large and very far below that has not yet decided whether it has noticed you.',
     choices: [
@@ -116,7 +116,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   70: {
     id: 'landmark_seventh_marker',
     title: 'The Seventh Marker',
-    pageRange: [7, 7],
+    chapterRange: [2, 2],
     flavorText:
       'A Dominion boundary post, still upright, marking a border for an empire with no remaining side to defend it. Something recent has been left propped against its base — food, long gone to dust, left there anyway.',
     choices: [
@@ -148,7 +148,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   90: {
     id: 'landmark_ninth_marker',
     title: 'The Ninth Marker',
-    pageRange: [9, 9],
+    chapterRange: [3, 3],
     flavorText:
       'This close to the end, the waystone carvings stop describing the road and start describing the traveler. Yours is not carved yet. There is, unmistakably, room.',
     choices: [
@@ -181,7 +181,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   110: {
     id: 'landmark_eleventh_marker',
     title: 'The Eleventh Marker',
-    pageRange: [11, 11],
+    chapterRange: [3, 3],
     flavorText:
       'The stone here is cracked clean through, split by a root that should not grow this deep. The fracture is deliberate — this marker was placed on a fault, as if the Venn wanted it to break.',
     choices: [
@@ -213,7 +213,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   130: {
     id: 'landmark_thirteenth_marker',
     title: 'The Thirteenth Marker',
-    pageRange: [13, 13],
+    chapterRange: [4, 4],
     flavorText:
       'A circle of standing stones, each carved with a face. Thirteen faces, each expressing a different emotion, arranged in sequence. The thirteenth face is blank.',
     choices: [
@@ -245,7 +245,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   150: {
     id: 'landmark_fifteenth_marker',
     title: 'The Fifteenth Marker',
-    pageRange: [15, 15],
+    chapterRange: [4, 4],
     flavorText:
       'Three paths converge on this marker, each from a different direction, each worn to a different depth. The marker itself bears only one word, carved in Venn: "Choose."',
     choices: [
@@ -280,7 +280,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   170: {
     id: 'landmark_seventeenth_marker',
     title: 'The Seventeenth Marker',
-    pageRange: [17, 17],
+    chapterRange: [5, 5],
     flavorText:
       'A bridge crosses a chasm so deep that light does not reach its bottom. The marker is set into the bridge\'s railing, half-gripped by rust. On the far side: darkness that moves.',
     choices: [
@@ -312,7 +312,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
   190: {
     id: 'landmark_nineteenth_marker',
     title: 'The Nineteenth Marker',
-    pageRange: [19, 19],
+    chapterRange: [5, 5],
     flavorText:
       'The penultimate marker. It is smaller than the others — almost an afterthought. The carving is hurried, as if whoever placed it was running out of time. "Almost," it says. "Almost."',
     choices: [

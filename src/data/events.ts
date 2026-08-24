@@ -5,7 +5,7 @@ export const EVENTS: Record<string, EventDef> = {
   half_eaten_meal: {
     id: 'half_eaten_meal',
     title: 'The Half-Eaten Meal',
-    pageRange: [1, 2],
+    chapterRange: [1, 1],
     flavorText:
       'A Venn common-house. Five thousand years old. The bread on the table still looks fresh. A cup sits beside it, untouched. The chair is pulled back, as if someone stood up mid-bite and simply... never sat down again.\n\nOn the wall: "The meal is finished when the guest departs." But no one departed.',
     choices: [
@@ -54,7 +54,7 @@ export const EVENTS: Record<string, EventDef> = {
   ghosts_question: {
     id: 'ghosts_question',
     title: "The Ghost's Question",
-    pageRange: [5, 8],
+    chapterRange: [2, 2],
     requiresAnyFlag: ['ate_venn_bread'],
     flavorText:
       'A Venn ghost stands before you — a woman in the formal dress of a Venn departure ceremony. She looks at you with ancient, patient sorrow.\n"That bread you ate," she says. "That was my farewell."',
@@ -91,7 +91,7 @@ export const EVENTS: Record<string, EventDef> = {
   sable_patrol: {
     id: 'sable_patrol',
     title: 'The Sable Patrol',
-    pageRange: [1, 3],
+    chapterRange: [1, 1],
     flavorText:
       'Three figures in crimson robes block the path.\n"Traveler. You carry a Venn tablet. That tablet is a door. We are the locksmiths."',
     choices: [
@@ -145,7 +145,7 @@ export const EVENTS: Record<string, EventDef> = {
   whispering_wall: {
     id: 'whispering_wall',
     title: 'The Whispering Wall',
-    pageRange: [2, 4],
+    chapterRange: [1, 1],
     maxResonance: 24,
     flavorText:
       'A section of Venn wall hums at a frequency you feel in your sternum. You hear your own voice — speaking words you haven\'t said yet.',
@@ -195,7 +195,7 @@ export const EVENTS: Record<string, EventDef> = {
   caravan_merchant: {
     id: 'caravan_merchant',
     title: 'The Caravan Merchant',
-    pageRange: [4, 7],
+    chapterRange: [1, 2],
     flavorText:
       'A woman with maps tattooed on her forearms tends a fire. "Sera Voss. I left the Archive ten years ago. I sleep through the night now."',
     choices: [
@@ -265,7 +265,7 @@ export const EVENTS: Record<string, EventDef> = {
   choirs_hymn: {
     id: 'choirs_hymn',
     title: "The Choir's Hymn",
-    pageRange: [5, 7],
+    chapterRange: [2, 2],
     minResonance: 25,
     flavorText:
       'Hundreds of voices sing in perfect unison. Ash Covenant members stand in a circle, crystals growing from their foreheads. They are smiling.',
@@ -322,7 +322,7 @@ export const EVENTS: Record<string, EventDef> = {
   loom_speaks_directly: {
     id: 'loom_speaks_directly',
     title: 'The Loom Speaks Directly',
-    pageRange: [8, 9],
+    chapterRange: [2, 3],
     minResonance: 50,
     flavorText:
       'The world stops. A drop of water hangs motionless. And you can move.\nA voice comes from everywhere. It does not use words. It uses recognition.\nYOU ARE THE ONE I CANNOT FINISH. WHY?',
@@ -391,7 +391,7 @@ export const EVENTS: Record<string, EventDef> = {
   quiet_passage: {
     id: 'quiet_passage',
     title: 'A Quiet Passage',
-    pageRange: [1, 10],
+    chapterRange: [1, 5],
     repeatable: true,
     flavorText: 'A stretch of corridor with nothing obviously wrong with it. You take the moment anyway.',
     choices: [
@@ -409,7 +409,7 @@ export const EVENTS: Record<string, EventDef> = {
   archivists_ledger: {
     id: 'archivists_ledger',
     title: "Mira Tol's Ledger",
-    pageRange: [2, 4],
+    chapterRange: [1, 1],
     flavorText:
       'A woman in a pale blue coat sits cross-legged on a fallen column, ink-stained fingers turning a brass-hinged ledger. "Archivist Mira Tol," she says, without looking up. "You\'re carrying more Resonance than your face admits. Sit. Talk to me. I catalogue everything. Including you, now."',
     choices: [
@@ -459,7 +459,7 @@ export const EVENTS: Record<string, EventDef> = {
   ash_marked_child: {
     id: 'ash_marked_child',
     title: 'The Ash-Marked Child',
-    pageRange: [2, 4],
+    chapterRange: [1, 1],
     flavorText:
       "A child, no older than ten, presses into a crack in the wall, ash-mark still wet on their forehead. Sable voices call out somewhere behind you, close. The child isn't crying. They've clearly done this before.",
     choices: [
@@ -511,7 +511,7 @@ export const EVENTS: Record<string, EventDef> = {
   unfinished_farewell: {
     id: 'unfinished_farewell',
     title: 'The Unfinished Farewell',
-    pageRange: [3, 5],
+    chapterRange: [1, 2],
     flavorText:
       'A figure stands beside a table set for one, translucent at the edges the way a held breath is translucent. It is looking directly at you, and it has clearly been waiting.',
     choices: [
@@ -564,7 +564,7 @@ export const EVENTS: Record<string, EventDef> = {
   tollroad_ambush: {
     id: 'tollroad_ambush',
     title: 'The Toll Road',
-    pageRange: [3, 6],
+    chapterRange: [1, 2],
     flavorText:
       'Three figures block a narrow stretch of the path, layered desert fabric, no fixed symbol. "Not all of us answer to Sera Voss," the lead one says. "Toll\'s toll. Pay it, or we take it a worse way."',
     choices: [
@@ -621,7 +621,7 @@ export const EVENTS: Record<string, EventDef> = {
   page_left_behind: {
     id: 'page_left_behind',
     title: 'The Page Left Behind',
-    pageRange: [3, 3],
+    chapterRange: [1, 1],
     requiresAnyFlag: ['sentinel_defeated'],
     flavorText:
       "A single sheet, pinned to the wall with what looks like one of the Sentinel's own broken components. The handwriting is careful, deliberate — the writing of something that had a great deal of time and finally decided to use some of it.",
@@ -649,7 +649,7 @@ export const EVENTS: Record<string, EventDef> = {
   patriarchs_ash: {
     id: 'patriarchs_ash',
     title: "Patriarch's Ash",
-    pageRange: [5, 5],
+    chapterRange: [2, 2],
     requiresAnyFlag: ['cass_defeated', 'accepted_purification'],
     flavorText:
       'A cold fire pit, long abandoned, still smells faintly of old smoke. Someone has left ash arranged in a careful spiral around the stones — not scattered, placed.',
@@ -692,7 +692,7 @@ export const EVENTS: Record<string, EventDef> = {
   reading_room: {
     id: 'reading_room',
     title: 'The Reading Room',
-    pageRange: [5, 7],
+    chapterRange: [2, 2],
     flavorText:
       'Venn glyphs cover every wall of a small chamber, and they are not staying still — each one shifts meaning slightly depending on where your eyes land last. It is less like reading and more like being read.',
     choices: [
@@ -731,7 +731,7 @@ export const EVENTS: Record<string, EventDef> = {
   choirs_understudy: {
     id: 'choirs_understudy',
     title: "The Choir's Understudy",
-    pageRange: [6, 8],
+    chapterRange: [2, 2],
     flavorText:
       'An Ash Covenant convert kneels alone, one crystal only half-formed at their temple, tears running clear instead of the strange light the fully-changed ones show. "It isn\'t supposed to hurt this long," they say. "Please. Make it stop, or make it finish. I don\'t care which anymore."',
     choices: [
@@ -773,7 +773,7 @@ export const EVENTS: Record<string, EventDef> = {
   silent_auction: {
     id: 'silent_auction',
     title: 'The Silent Auction',
-    pageRange: [6, 8],
+    chapterRange: [2, 2],
     flavorText:
       'A cloth-covered table, three items on it, no auctioneer in sight until you realize they\'ve been standing perfectly still in the corner the whole time. "Bids are silent," they say. "Provenance is not guaranteed. Questions lower your offer."',
     choices: [
@@ -824,7 +824,7 @@ export const EVENTS: Record<string, EventDef> = {
   keth7_revisited: {
     id: 'keth7_revisited',
     title: 'Keth-7, Revisited',
-    pageRange: [7, 9],
+    chapterRange: [2, 3],
     flavorText:
       'The tablet in your pack goes warm, then cold, then shows three lines of text you never typed. You know this feeling. You have felt it exactly once before, in a vault with ten other people who did not walk back out.',
     choices: [
@@ -863,7 +863,7 @@ export const EVENTS: Record<string, EventDef> = {
   kindness_poorly_timed: {
     id: 'kindness_poorly_timed',
     title: 'A Kindness, Poorly Timed',
-    pageRange: [8, 10],
+    chapterRange: [2, 3],
     flavorText:
       'A Dominion soldier, ancient beyond reckoning, sits propped against a wall with one arm no longer attached. It is still, technically, holding its post. It looks up at you with something that might be hope, or might just be a targeting routine finally finding a use.',
     choices: [
@@ -902,7 +902,7 @@ export const EVENTS: Record<string, EventDef> = {
   the_last_page: {
     id: 'the_last_page',
     title: 'The Last Page',
-    pageRange: [9, 10],
+    chapterRange: [4, 5],
     flavorText:
       "The corridor widens into something almost peaceful. No threat here, no puzzle, no wall that hums. Just quiet, and the sense that whatever comes next is close enough now to stop pretending you're not thinking about it.",
     choices: [
@@ -942,7 +942,7 @@ export const EVENTS: Record<string, EventDef> = {
   caravan_campfire: {
     id: 'caravan_campfire',
     title: "The Caravan's Campfire",
-    pageRange: [4, 6],
+    chapterRange: [1, 2],
     flavorText:
       "A ring of Dust-Road travelers share a fire and a story that's clearly been told before, every listener jumping in on the parts they like best. One of them notices you standing at the edge of the light and simply makes room.",
     choices: [
@@ -981,7 +981,7 @@ export const EVENTS: Record<string, EventDef> = {
   second_excavation: {
     id: 'second_excavation',
     title: 'The Second Excavation',
-    pageRange: [6, 8],
+    chapterRange: [2, 2],
     flavorText:
       "A camp, professionally struck, methodically abandoned — not Keth-7, but built by people who clearly knew what Keth-7 was. A field journal sits open on a folding table, mid-sentence, waiting for a hand that isn't coming back to finish it.",
     choices: [
@@ -1023,7 +1023,7 @@ export const EVENTS: Record<string, EventDef> = {
   half_finished_letter: {
     id: 'half_finished_letter',
     title: 'The Half-Finished Letter',
-    pageRange: [5, 7],
+    chapterRange: [2, 2],
     flavorText:
       'A Venn study. A desk. A letter, half-written, the quill still resting across the page. Five thousand years later, the ink has not dried.\n\nThe last sentence: "When this reaches you, we will already be gone. Do not follow. We have found—"',
     choices: [
@@ -1062,7 +1062,7 @@ export const EVENTS: Record<string, EventDef> = {
   half_packed_bag: {
     id: 'half_packed_bag',
     title: 'The Half-Packed Bag',
-    pageRange: [8, 10],
+    chapterRange: [2, 3],
     flavorText:
       'A Venn sleeping quarter. Clothes folded on a cot. A travel bag, half-packed, its owner interrupted mid-decision. The bed is made with military precision — the first fold is the only one that matters, because after that you are committed.',
     choices: [
@@ -1100,7 +1100,7 @@ export const EVENTS: Record<string, EventDef> = {
   sable_hunters: {
     id: 'sable_hunters',
     title: 'Sable Hunters',
-    pageRange: [4, 6],
+    chapterRange: [1, 2],
     flavorText:
       'They have been following you for three nodes. This is where they catch up — four Sable hunters with the patience of people who have done this before. They fan out, blocking both exits, and wait for you to make the first mistake.',
     choices: [
@@ -1152,7 +1152,7 @@ export const EVENTS: Record<string, EventDef> = {
   sable_interrogation: {
     id: 'sable_interrogation',
     title: 'Sable Interrogation',
-    pageRange: [7, 9],
+    chapterRange: [2, 3],
     flavorText:
       'The lead interrogator does not ask. She takes your tablet from your belt before you can react, turns it over slowly, and reads your history off its surface like a courtroom indictment.',
     choices: [
@@ -1202,7 +1202,7 @@ export const EVENTS: Record<string, EventDef> = {
   echoing_hallway: {
     id: 'echoing_hallway',
     title: 'The Echoing Hallway',
-    pageRange: [4, 6],
+    chapterRange: [1, 2],
     flavorText:
       'Every step echoes twice. Once forward, once backward. One of them is not your step — it comes a fraction too late, and from slightly closer than it should.',
     choices: [
@@ -1243,7 +1243,7 @@ export const EVENTS: Record<string, EventDef> = {
   singing_floor: {
     id: 'singing_floor',
     title: 'The Singing Floor',
-    pageRange: [7, 9],
+    chapterRange: [2, 3],
     flavorText:
       'The mosaic underfoot is arranged in a Venn sentence. As you read it, the tiles begin to vibrate — a low, pure note that resonates in your ribs. The floor is singing something. You are standing on the chorus.',
     choices: [
@@ -1285,7 +1285,7 @@ export const EVENTS: Record<string, EventDef> = {
   caravan_courier: {
     id: 'caravan_courier',
     title: 'The Caravan Courier',
-    pageRange: [5, 8],
+    chapterRange: [2, 2],
     flavorText:
       'A Dust-Road runner rests against a fallen pillar, her satchel sealed with Caravan wax. She appraises you with a merchant\'s eye and a wild grin. "You\'re carrying more than you know. Sit. Trade. I don\'t bite — unless you\'re Archive, in which case I bite a little."',
     choices: [
@@ -1352,7 +1352,7 @@ export const EVENTS: Record<string, EventDef> = {
   choirs_lament: {
     id: 'choirs_lament',
     title: "The Choir's Lament",
-    pageRange: [2, 4],
+    chapterRange: [1, 1],
     minResonance: 20,
     flavorText:
       'The song is not celebration. It is grief. A circle of Ash Covenant novices sings a slow, aching hymn, tears cutting tracks through the ash on their cheeks. They are singing for someone they lost into the Loom.',
@@ -1406,7 +1406,7 @@ export const EVENTS: Record<string, EventDef> = {
   choirs_whisper: {
     id: 'choirs_whisper',
     title: "The Choir's Whisper",
-    pageRange: [8, 10],
+    chapterRange: [2, 3],
     minResonance: 30,
     flavorText:
       'Three figures in a circle. No crystals. No songs. Just whispers — a private conversion happening in real-time, their lips moving in perfect sync. One of them opens an eye and looks directly at you. The whisper does not stop.',
@@ -1461,7 +1461,7 @@ export const EVENTS: Record<string, EventDef> = {
   loom_whispers: {
     id: 'loom_whispers',
     title: 'Loom Whispers',
-    pageRange: [5, 7],
+    chapterRange: [2, 2],
     minResonance: 40,
     flavorText:
       'You are asleep. You know you are asleep. But the voice is clearer than any waking sound — a low hum that vibrates through the dream-stone beneath you, forming words in a language your bones understand before your mind catches up.\n\nYOU ARE THE QUESTION I KEEP ASKING. WHY DO YOU NOT HAVE AN ANSWER?',
@@ -1574,10 +1574,10 @@ export const TRAPS: Record<string, TrapDef> = {
   },
 };
 
-export function eligibleEvents(page: number, resonance: number, seen: Set<string>, flags: Record<string, boolean> = {}): EventDef[] {
+export function eligibleEvents(chapter: number, resonance: number, seen: Set<string>, flags: Record<string, boolean> = {}): EventDef[] {
   return Object.values(EVENTS).filter((e) => {
     if (!e.repeatable && seen.has(e.id)) return false;
-    if (page < e.pageRange[0] || page > e.pageRange[1]) return false;
+    if (chapter < e.chapterRange[0] || chapter > e.chapterRange[1]) return false;
     if (e.minResonance !== undefined && resonance < e.minResonance) return false;
     if (e.maxResonance !== undefined && resonance > e.maxResonance) return false;
     if (e.requiresAnyFlag && !e.requiresAnyFlag.some((f) => flags[f])) return false;

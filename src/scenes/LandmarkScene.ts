@@ -13,7 +13,7 @@ import { spawnCelebrationParticles } from '@systems/particles';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
-import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
+import { GAME_WIDTH, GAME_HEIGHT, NODES_PER_CHAPTER } from '@/config';
 
 interface LandmarkSceneData {
   bossId: string;
@@ -163,7 +163,7 @@ export class LandmarkScene extends Phaser.Scene {
         this.continueBtn?.destroy();
         this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'Continue', () => fadeToScene(this, 'Board'), { width: 220 });
       } else {
-        fadeToScene(this, 'Combat', { mode: 'boss', bossId, page: BOSSES[bossId].page, precombatFlags: combatFlags });
+        fadeToScene(this, 'Combat', { mode: 'boss', bossId, nodeIndex: BOSSES[bossId].chapter * NODES_PER_CHAPTER, precombatFlags: combatFlags });
       }
     });
     this.input.removeAllListeners('pointerdown');

@@ -30,7 +30,7 @@ export function showRunStatsScreen(
   const bg = scene.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(depth);
   container.add(bg);
 
-  const titleText = isDeath ? 'THE HOLLOW KEEPS YOU' : 'PAGE 100';
+  const titleText = isDeath ? 'THE HOLLOW KEEPS YOU' : 'THE FINAL CHAMBER';
   const title = scene.add.text(cx, 48, titleText, {
     fontFamily: FONT_SERIF, fontSize: '30px', color: isDeath ? PALETTE_HEX.danger : PALETTE_HEX.gold,
   }).setOrigin(0.5).setDepth(depth + 1);

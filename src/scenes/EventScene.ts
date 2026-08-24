@@ -4,6 +4,7 @@ import type { EventChoice, EventDef, FactionState } from '@data/types';
 import { useGameStore } from '@store/gameStore';
 import { resolveEventChoice } from '@systems/EventEngine';
 import { sanitizeFightEnemies } from '@data/enemies';
+import { chapterForIndex } from '@systems/BoardGenerator';
 import { createDialogBox, type DialogBox } from '@ui/DialogBox';
 import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
@@ -102,12 +103,13 @@ export class EventScene extends Phaser.Scene {
         return;
       }
       if (resolution.combat) {
-        const page = Math.max(1, Math.ceil((currentGame?.currentNodeIndex ?? 1) / 10));
-        const enemyIds = sanitizeFightEnemies(resolution.combat.enemyIds, page, currentPlayer.resonance);
+        const nodeIndex = Math.max(1, currentGame?.currentNodeIndex ?? 1);
+        const chapter = chapterForIndex(nodeIndex);
+        const enemyIds = sanitizeFightEnemies(resolution.combat.enemyIds, chapter, currentPlayer.resonance);
         fadeToScene(this, 'Combat', {
           mode: 'event',
           enemyIds,
-          page,
+          nodeIndex,
           onVictory: resolution.combat.onVictory,
         });
         return;
@@ -125,7 +127,7 @@ export class EventScene extends Phaser.Scene {
 
   private handleDeath() {
     const store = useGameStore.getState();
-    const hadCheckpoint = !!store.game?.checkpointSnapshot && (store.game?.checkpointPage ?? 0) > 0;
+    const hadCheckpoint = !!store.game?.checkpointSnapshot && (store.game?.checkpointNodeIndex ?? 0) > 0;
     store.handleDeath();
     fadeToScene(this, hadCheckpoint ? 'Board' : 'GameOver');
   }

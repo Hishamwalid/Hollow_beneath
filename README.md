@@ -1,4 +1,4 @@
-# THE HOLLOW BENEATH
+﻿# THE HOLLOW BENEATH
 
 *Five thousand years ago, the Venn walked into the dark and did not return. You are about to find out why.*
 
@@ -10,7 +10,7 @@ Lyra Vane is a linguist and expedition guide, three days into the Keth-7 survey 
 
 The Venn did not die. They did not flee, or fall, or fade. They *left* — deliberately, systematically, through doors that should not exist — into something they called the Loom. The expedition's job is to figure out where they went, and whether whatever they found is still waiting there.
 
-Events are stacked against you from the start: a cave-in at the Chalk Doorway costs you half your supplies and your best geologist. The expedition leader, Anya Korr, radios up that she is extending the timeline by a week. Then she goes silent. The surface loses contact entirely somewhere around Page 3. By Page 10, you stop expecting them to find you.
+Events are stacked against you from the start: a cave-in at the Chalk Doorway costs you half your supplies and your best geologist. The expedition leader, Anya Korr, radios up that she is extending the timeline by a week. Then she goes silent. The surface loses contact entirely before the second chapter ends. By the fourth, you stop expecting them to find you.
 
 You are alone in the dark with a half-translated tablet, a map that rearranges itself when you aren't looking, and a growing certainty that the Venn's question — the one that made them walk away from everything — has started asking *you*.
 
@@ -45,7 +45,7 @@ Faction influence ranges from -50 (Hostile) to +50 (Devoted). It affects shop pr
 
 ## The Five Bosses
 
-The board is 200 nodes long. At nodes 40, 80, 120, 160, and 200 (the end of pages 4, 8, 12, 16, and 20), a Landmark blocks your path — each one a major boss with unique mechanics, phase transitions, and lore.
+The board is 200 nodes long. At nodes 40, 80, 120, 160, and 200 (the final node of chapters 1 through 5), a Landmark blocks your path — each one a major boss with unique mechanics, phase transitions, and lore.
 
 | Boss | Node | Theme |
 |------|------|-------|
@@ -94,12 +94,12 @@ Six preset builds available: **Balanced** (6/6/6/6/6), **Warrior** (9/5/8/2/6), 
 There are no classes. Every player is a lone protagonist with the same potential; what defines you is what you choose to carry.
 
 - At descent you know the **Chapter 1 loadout** (`Cleaving Swing`, `Pinpoint Strike`, `Flame Pulse`, `Heavy Guard`, `Mend`, `Ignite`).
-- Crossing into a new chapter **grants its techniques** outright — arriving on page 4 unlocks `Frost Touch`/`Shock Arc`/`Cleanse & Surge`, page 8 brings `Chain Plasma`/`Inferno Wave`/`Sacred Ray`/`Barrier Protocol`, and so on through `Absolute Zero`/`Aegis Covenant` in the deep. (See `docs/COMBAT_SYSTEM_REVAMP.md` §3.)
+- Crossing into a new chapter **grants its techniques** outright — arriving in chapter 2 unlocks `Frost Touch`/`Shock Arc`/`Cleanse & Surge`, chapter 3 brings `Chain Plasma`/`Inferno Wave`/`Sacred Ray`/`Barrier Protocol`, and so on through `Absolute Zero`/`Aegis Covenant` in the deep. (See `docs/COMBAT_SYSTEM_REVAMP.md` §3.)
 - Six slots are **active in combat**; everything else waits in your **Archive** and can be swapped freely between fights. No skill points, no trees — new chapters and discoveries feed the pool directly.
 
 ### Board Movement
 
-200 nodes arranged in a winding path across 20 pages (10 nodes per page). Each turn:
+200 nodes arranged across **5 chapters** of 40 nodes each. Every chapter is its own full-screen map; finishing one turns away like a page to reveal the next. Each turn:
 - **Roll 1d6** — advance that many nodes forward (cannot skip unresolved Landmark nodes).
 - Each node type triggers different content:
 
@@ -112,9 +112,9 @@ There are no classes. Every player is a lone protagonist with the same potential
 | **Trap** | 8% | Triggers a hazard (collapsing floor, memory trap, etc.) — roll to avoid or take damage |
 | **Landmark** | 5 fixed | Major boss encounter at nodes 40/80/120/160/200 |
 
-Enemies are drawn from **5 stage pools** (stage 1 = pages 1–3, stage 5 = pages 16–20), each stage with an exclusive roster; scripted fights are scrubbed to the current stage's roster. Memory Wraith joins stage ≥3 at Resonance ≥25, The Unread haunts stage 5 at Resonance ≥50.
+Enemies are drawn from **5 stage pools** (one stage per chapter), each stage with an exclusive roster; scripted fights are scrubbed to the current stage's roster. Memory Wraith joins stage ≥3 at Resonance ≥25, The Unread haunts stage 5 at Resonance ≥50.
 
-Enemies scale per page: +10% HP, +7.5% ATK, +5% DEF per page (multiplicative from base).
+Enemies scale with depth: +10% HP, +7.5% ATK, +5% DEF for every 10 nodes descended (continuous, multiplicative from base).
 
 ### Combat System ("Echo" Revamp — see `docs/COMBAT_SYSTEM_REVAMP.md`)
 
@@ -252,7 +252,7 @@ At the reference stat value of 6, this passes DC 10 checks ~65% of the time and 
 1. **Main Menu** — Click "New Descent" (or "Continue" if you have an active save).
 2. **Character Creation** — Choose a preset build (Balanced, Warrior, Scholar, Ranger, Guardian, Shadow) or allocate 30 points manually across the 5 stats.
 3. **Tutorial** — First-time players see 5 tutorial screens covering board movement, combat, events, Resonance, and factions. Can be skipped.
-4. **The Descent** — Click "Descend" to begin. Your position resets to Page 0.
+4. **The Descent** — Click "Descend" to begin. Your position resets to the top of Chapter 1.
 
 ### Each Turn
 
@@ -295,7 +295,7 @@ At the reference stat value of 6, this passes DC 10 checks ~65% of the time and 
 - **Manage the QTE.** Practice perfect timing; when `Slowed`, consider Guarding through the fast needle instead.
 - **Six slots is a puzzle.** Your Archive holds everything; re-slot from the Loadout screen between fights for the next stage's weaknesses.
 - **Difficulty is in Settings.** Easy through Ironman change enemy stats and incoming damage plus permadeath.
-- **Don't neglect CON.** HP scales linearly with CON; low-CON feels fragile by page 10.
+- **Don't neglect CON.** HP scales linearly with CON; low-CON feels fragile past the first chapter or two.
 - **Checkpoints are your safety net.** Nodes 40/80/120/160 save your progress. Outside Ironman, death returns you there at 50% HP/MP.
 
 ---
@@ -305,7 +305,7 @@ At the reference stat value of 6, this passes DC 10 checks ~65% of the time and 
 ```
 src/
   main.ts              Phaser.Game bootstrap, scene registration (18 scenes)
-  config.ts            Constants: 1280×800, 200 nodes, 20 pages
+  config.ts            Constants: 1280×800, 200 nodes, 5 chapters
 
   data/                Pure content — no Phaser, testable in Node
     types.ts           All TypeScript interfaces (source of truth)
@@ -371,7 +371,7 @@ npm run test         # Headless smoke test (exercises all systems)
 ## Current State
 
 **Implemented:**
-- Full 200-node board (20 pages), hand-authored Stage 1 map, 10 minor landmarks, 5 major bosses (movepools & telegraphed charges per `docs/COMBAT_SYSTEM_REVAMP.md` §4)
+- Full 200-node board (5 chapter maps), hand-authored Stage 1 map, 10 minor landmarks, 5 major bosses (movepools & telegraphed charges per `docs/COMBAT_SYSTEM_REVAMP.md` §4)
 - **Revamped "Echo" combat** (`docs/COMBAT_SYSTEM_REVAMP.md`): one action/turn, QTE-timed offense, Scan & discrete affinity discovery (`wk`/`str`/`null`/`rep`/`drn`/`-` → Bestiary), Guard +6 MP economy, Down/Stagger on weakness & crits with 1-More, elemental reactions (Superconduct/Overcharge/Eclipse), momentum payoffs (minus Flow), movepool AI w/ heavy-cap & charge telegraphs. Battle UI layout/positions & action images are unchanged.
 - **Chapter loadouts:** six active slots; new chapters grant techniques tuned to what lurks there — swap freely from the **Loadout** screen (no classes, no skill points; ~40 named techniques)
 - **4 difficulty modes** (Easy → Ironman with permadeath)

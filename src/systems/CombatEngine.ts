@@ -17,7 +17,8 @@ import { ENEMIES, SUMMON_ENEMIES } from '@data/enemies';
 import { BOSSES } from '@data/bosses';
 import { ITEMS } from '@data/items';
 import { NAMED_SKILLS } from '@data/skills';
-import { pageScaling } from './BoardGenerator';
+import { scalingForIndex } from './BoardGenerator';
+import { NODES_PER_CHAPTER } from '@/config';
 import { resonanceEnemyHpMultiplier, resonanceEnemyAtkMultiplier, resonancePlayerDamageBonus } from './ResonanceSystem';
 import {
   applyStatus,
@@ -69,7 +70,8 @@ const AFFINITY_MULT: Record<AffinityKind, number> = {
 export interface CombatSetup {
   player: PlayerState;
   enemyIds: string[];
-  page: number;
+  /** Node the fight takes place on — drives position-based difficulty scaling. */
+  nodeIndex: number;
   rng: () => number;
   bossId?: string;
   /** @deprecated legacy callers pass the boss definition object directly. */
@@ -305,7 +307,7 @@ export class CombatEngine {
     this.momentum = Math.min(MOMENTUM_CAP, setup.player.momentum);
     if (this.hasPassive('chorus_echo')) this.momentum = Math.min(MOMENTUM_CAP, this.momentum + 1);
 
-    const scale = pageScaling(Math.max(1, setup.page));
+    const scale = scalingForIndex(Math.max(1, setup.nodeIndex));
     const resHp = resonanceEnemyHpMultiplier(setup.player.resonance);
     const resAtk = resonanceEnemyAtkMultiplier(setup.player.resonance);
 
@@ -313,7 +315,7 @@ export class CombatEngine {
       const boss = setup.bossDef ?? BOSSES[setup.bossId!];
       if (!boss) throw new Error(`Unknown boss id: ${setup.bossId}`);
       this.bossDef = boss;
-      const e = this.buildEnemy(bossToEnemyDef(boss), setup.precombatFlags, true, scale, resHp, resAtk, setup.page);
+      const e = this.buildEnemy(bossToEnemyDef(boss), setup.precombatFlags, true, scale, resHp, resAtk);
       this.enemies.push(e);
       this.bossKey = e.key;
       this.updateBossPhase(e);
@@ -321,7 +323,7 @@ export class CombatEngine {
     for (const id of setup.enemyIds) {
       const def = ENEMIES[id] ?? SUMMON_ENEMIES[id];
       if (!def) continue;
-      this.enemies.push(this.buildEnemy(def, setup.precombatFlags, false, scale, resHp, resAtk, setup.page));
+      this.enemies.push(this.buildEnemy(def, setup.precombatFlags, false, scale, resHp, resAtk));
     }
 
     // Merge persisted discoveries into working copies.
@@ -350,7 +352,6 @@ export class CombatEngine {
     scale: { hp: number; atk: number; def: number },
     resHp: number,
     resAtk: number,
-    _page: number,
   ): InternalEnemy {
     let hpMult = scale.hp * resHp * this.diff.enemyHpMult;
     if (isBoss && (preflags?.fossilProvoked ?? 0) === 1) hpMult *= 0.9;
@@ -1096,9 +1097,8 @@ export class CombatEngine {
   private spawnSummon(enemyId: string, hpOverride?: number): void {
     const def = ENEMIES[enemyId] ?? SUMMON_ENEMIES[enemyId];
     if (!def) return;
-    const page = this.bossDef?.page ?? 4;
-    const scale = pageScaling(page);
-    const e = this.buildEnemy(def, this.precombatFlags, false, scale, 1, 1, page);
+    const scale = scalingForIndex((this.bossDef?.chapter ?? 1) * NODES_PER_CHAPTER);
+    const e = this.buildEnemy(def, this.precombatFlags, false, scale, 1, 1);
     if (hpOverride != null) { e.hp = hpOverride; e.maxHp = Math.max(e.maxHp, hpOverride); }
     this.enemies.push(e);
     this.buildTurnOrder();

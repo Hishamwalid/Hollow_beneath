@@ -8,8 +8,9 @@
  * endings, and the 0-HP defeat path. No Phaser, no DOM.
  */
 import type { EnemyAffinities, PlayerState, StatBlock } from '@data/types';
-import { generateBoard, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
-import { ENEMIES, SUMMON_ENEMIES, enemiesForPage, stageForPage } from '@data/enemies';
+import { generateBoard, chapterForIndex, scalingForIndex, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
+import { NODES_PER_CHAPTER } from './src/config';
+import { ENEMIES, SUMMON_ENEMIES, enemiesForChapter, stageForChapter } from '@data/enemies';
 import { BOSSES, TOTAL_MAJOR_BOSSES } from '@data/bosses';
 import { NAMED_SKILLS, CHAPTER_LOADOUTS, chapterGrantSkills, DISCOVERABLE_SKILLS } from '@data/skills';
 import { EVENTS, eligibleEvents } from '@data/events';
@@ -84,7 +85,7 @@ function makePlayer(overrides?: Partial<PlayerState>): PlayerState {
     unlocks: [],
     gold: 0,
     totalRuns: 1,
-    bestRun: { page: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
+    bestRun: { chapter: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
     ...overrides,
   };
 }
@@ -177,6 +178,8 @@ section('1. Board generation');
     'capture indices resolve to nodes',
     CAPTURE_INDICES.every((i) => board[i - 1] != null),
   );
+  check('chapters cover 1..5', board.every((n) => n.chapter === chapterForIndex(n.index)));
+  check('scaling grows with depth', scalingForIndex(1).hp < scalingForIndex(200).hp);
 }
 
 // ============================================================================
@@ -212,10 +215,10 @@ section('2. Content rosters');
   check('endings present', ENDINGS.length >= 6, `got ${ENDINGS.length}`);
 
   // Stage pools sanity
-  check('stage 1 pool correct', JSON.stringify(enemiesForPage(1, 0).sort()) === JSON.stringify(['dust_wight', 'echo_skeleton']));
-  check('memory_wraith gated at res 25', enemiesForPage(8, 30).includes('memory_wraith'));
-  check('the_unread gated at res 50', enemiesForPage(18, 60).includes('the_unread'));
-  check('stageForPage boundaries', stageForPage(3) === 1 && stageForPage(4) === 2 && stageForPage(20) === 5);
+  check('stage 1 pool correct', JSON.stringify(enemiesForChapter(1, 0).sort()) === JSON.stringify(['dust_wight', 'echo_skeleton']));
+  check('memory_wraith gated at res 25', enemiesForChapter(3, 30).includes('memory_wraith'));
+  check('the_unread gated at res 50', enemiesForChapter(5, 60).includes('the_unread'));
+  check('stageForChapter boundaries', stageForChapter(1) === 1 && stageForChapter(3) === 3 && stageForChapter(5) === 5);
 }
 
 // ============================================================================
@@ -228,7 +231,7 @@ section('3. Regular fight vs echo_skeleton (weak flame)');
   const engine = new CombatEngine({
     player,
     enemyIds: ['echo_skeleton'],
-    page: 1,
+    nodeIndex: 1,
     rng: makeRng(1000),
   });
 
@@ -268,7 +271,7 @@ section('3b. Downed & 1-More');
   const engine = new CombatEngine({
     player,
     enemyIds: ['venn_custodian'],
-    page: 4,
+    nodeIndex: NODES_PER_CHAPTER,
     rng: makeRng(1500),
   });
   let snap = engine.beginRound();
@@ -301,7 +304,7 @@ section('3c. QTE surface: skills park timing · basic attacks resolve instantly'
   // Offensive skills park a pending QTE until resolved. Frost vs echo_skeleton is
   // a NEUTRAL matchup, so this isolates the timing flow from the 1-More path.
   const p1 = makeWeakPlayer({ equippedSkills: ['frost_touch'], skillsKnown: [...chapterGrantSkills(1), 'frost_touch'] });
-  const skillEngine = new CombatEngine({ player: p1, enemyIds: ['echo_skeleton'], page: 1, rng: makeRng(1800) });
+  const skillEngine = new CombatEngine({ player: p1, enemyIds: ['echo_skeleton'], nodeIndex: 1, rng: makeRng(1800) });
   let snap = skillEngine.beginRound();
   const key = snap.enemies[0].key;
 
@@ -316,7 +319,7 @@ section('3c. QTE surface: skills park timing · basic attacks resolve instantly'
   check('timed strike dealt damage', !after || after.hp < hpBefore, `hp ${hpBefore}→${after?.hp ?? 'dead'}`);
 
   // Basic attacks have no timing bar — they resolve immediately.
-  const atkEngine = new CombatEngine({ player: makeWeakPlayer(), enemyIds: ['echo_skeleton'], page: 1, rng: makeRng(1801) });
+  const atkEngine = new CombatEngine({ player: makeWeakPlayer(), enemyIds: ['echo_skeleton'], nodeIndex: 1, rng: makeRng(1801) });
   let asnap = atkEngine.beginRound();
   asnap = atkEngine.attack(asnap.enemies[0].key);
   check('basic attack resolves immediately (no QTE)', asnap.qte === null);
@@ -325,7 +328,7 @@ section('3c. QTE surface: skills park timing · basic attacks resolve instantly'
   // A missed timing window never whiffs — it connects at reduced power (×0.8).
   const missEngine = new CombatEngine({
     player: makeWeakPlayer({ equippedSkills: ['frost_touch'], skillsKnown: [...chapterGrantSkills(1), 'frost_touch'] }),
-    enemyIds: ['echo_skeleton'], page: 1, rng: makeRng(1802),
+    enemyIds: ['echo_skeleton'], nodeIndex: 1, rng: makeRng(1802),
   });
   let msnap = missEngine.beginRound();
   const mkey = msnap.enemies[0].key;
@@ -346,7 +349,7 @@ section('3c. QTE surface: skills park timing · basic attacks resolve instantly'
 section('3d. Downed re-hit grants nothing');
 {
   const p = makeWeakPlayer({ equippedSkills: ['frost_touch'], skillsKnown: [...chapterGrantSkills(1), 'frost_touch'] });
-  const engine = new CombatEngine({ player: p, enemyIds: ['venn_custodian'], page: 4, rng: makeRng(1900) });
+  const engine = new CombatEngine({ player: p, enemyIds: ['venn_custodian'], nodeIndex: NODES_PER_CHAPTER, rng: makeRng(1900) });
   let snap = engine.beginRound();
   const key = snap.enemies[0].key;
 
@@ -371,7 +374,7 @@ section('4. Dust Wight affinities (null blunt · rep flame · drn frost)');
   const wightEngine = new CombatEngine({
     player: { ...player, equippedSkills: ['heavy_guard', 'flame_pulse'] },
     enemyIds: ['dust_wight'],
-    page: 1,
+    nodeIndex: 1,
     rng: makeRng(2000),
   });
   let snap = wightEngine.beginRound();
@@ -400,7 +403,7 @@ section('4. Dust Wight affinities (null blunt · rep flame · drn frost)');
   const drainEngine = new CombatEngine({
     player: { ...player, equippedSkills: ['shadow_veil'] },
     enemyIds: ['archive_cipher_wraith'],
-    page: 8,
+    nodeIndex: NODES_PER_CHAPTER * 2,
     rng: makeRng(3000),
   });
   let dsnap = drainEngine.beginRound();
@@ -423,7 +426,7 @@ section('5. Guard economy & momentum');
   const engine = new CombatEngine({
     player,
     enemyIds: ['venn_custodian'],
-    page: 4,
+    nodeIndex: NODES_PER_CHAPTER,
     rng: makeRng(4000),
   });
   let snap = engine.beginRound();
@@ -447,12 +450,12 @@ for (const [bossId, boss] of Object.entries(BOSSES)) {
   const engine = new CombatEngine({
     player,
     enemyIds: [],
-    page: boss.page,
+    nodeIndex: boss.chapter * NODES_PER_CHAPTER,
     rng: makeRng(5000 + bossId.length * 31),
     bossId,
     difficulty: 'normal',
   });
-  const result = drive(engine, { qte: 'good', maxRounds: 90, seed: 6000 + boss.page * 10 });
+  const result = drive(engine, { qte: 'good', maxRounds: 90, seed: 6000 + boss.chapter * 10 });
   check(
     `boss '${bossId}' → victory`,
     result.snap.phase === 'victory',
@@ -474,7 +477,7 @@ section('7. Superconduct reaction');
   const engine = new CombatEngine({
     player,
     enemyIds: ['venn_custodian'],
-    page: 4,
+    nodeIndex: NODES_PER_CHAPTER,
     rng: makeRng(7000),
   });
   let snap = engine.beginRound();
@@ -541,7 +544,7 @@ section('9. Event sweep');
   }
   check('all event choices execute cleanly', threw === 0, `${threw} threw`);
   check('event choices resolved', resolved > 100, `resolved ${resolved}`);
-  check('page-1 has eligible events at low resonance', eligibleEvents(1, 0, new Set(), {}).length > 0);
+  check('chapter 1 has eligible events at low resonance', eligibleEvents(1, 0, new Set(), {}).length > 0);
 }
 
 function structuredCloneish(p: PlayerState): PlayerState {
@@ -565,7 +568,7 @@ section('10. Defeat path');
   const engine = new CombatEngine({
     player,
     enemyIds: ['ash_mutant'],
-    page: 12,
+    nodeIndex: NODES_PER_CHAPTER * 3,
     rng: makeRng(8000),
   });
   let snap = engine.beginRound();
@@ -586,7 +589,7 @@ section('11. Scan data');
   const engine = new CombatEngine({
     player: makePlayer(),
     enemyIds: ['dust_road_raider'],
-    page: 8,
+    nodeIndex: NODES_PER_CHAPTER * 2,
     rng: makeRng(9000),
   });
   engine.beginRound();

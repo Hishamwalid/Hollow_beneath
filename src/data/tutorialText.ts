@@ -16,7 +16,7 @@ export const TUTORIAL_SCREENS: TutorialScreen[] = [
     id: 'what_youre_doing',
     title: 'What You\'re Doing',
     icons: ['node_landmark'],
-    body: 'Beneath the world, something ancient reads minds. It has consumed entire civilizations looking for one it cannot finish.\n\nThat mind is yours.\n\nDescend 200 nodes across 20 pages. Reach the chamber at the bottom. Find out why you are the one who cannot be read.',
+    body: 'Beneath the world, something ancient reads minds. It has consumed entire civilizations looking for one it cannot finish.\n\nThat mind is yours.\n\nDescend 200 nodes across 5 chapters. Reach the chamber at the bottom. Find out why you are the one who cannot be read.',
   },
   {
     id: 'how_to_move',

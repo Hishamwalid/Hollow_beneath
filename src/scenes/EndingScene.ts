@@ -33,7 +33,7 @@ export class EndingScene extends Phaser.Scene {
       },
     });
 
-    this.add.text(GAME_WIDTH / 2, 70, 'PAGE 100', { fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5);
+    this.add.text(GAME_WIDTH / 2, 70, 'THE FINAL CHAMBER', { fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.boneMuted }).setOrigin(0.5);
     this.add.text(GAME_WIDTH / 2, 110, ending.name, { fontFamily: FONT_SERIF, fontSize: '40px', color: PALETTE_HEX.gold }).setOrigin(0.5);
     this.add
       .text(GAME_WIDTH / 2, 160, ending.tone, {

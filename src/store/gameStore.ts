@@ -15,7 +15,7 @@ import type {
   StatBlock,
 } from '@data/types';
 import { MAX_EQUIPPED_SKILLS } from '@data/types';
-import { generateBoard } from '@systems/BoardGenerator';
+import { generateBoard, chapterForIndex } from '@systems/BoardGenerator';
 import { mulberry32, randomSeed } from '@systems/rng';
 import { defaultMeta, loadGame, saveGame, takeCheckpoint, restoreCheckpoint } from '@systems/SaveManager';
 import { applyUnlocksToNewRun, deathRefund, shardsForEnding } from '@systems/EchoShardSystem';
@@ -54,7 +54,7 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     unlocks: [...purchasedUnlocks],
     gold: 50,
     totalRuns,
-    bestRun: { page: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
+    bestRun: { chapter: 0, time: 0, nodesVisited: 0, enemiesKilled: 0, bossesDefeated: 0, levelReached: 1, resonancePeak: 0, choicesMade: 0, loreFound: 0 },
   };
   applyUnlocksToNewRun(player, purchasedUnlocks);
   return player;
@@ -68,8 +68,9 @@ function computeRunStatsImpl(
   endingId: string | null,
 ): RunStats {
   const peak = player.resonance > player.resonancePeak ? player.resonance : player.resonancePeak;
-  const isBetter = game.currentPage > meta.bestRun.page ||
-    (game.currentPage === meta.bestRun.page && (Date.now() - game.runStartedAt) < meta.bestRun.time);
+  const chapter = chapterForIndex(Math.max(1, game.currentNodeIndex));
+  const isBetter = chapter > meta.bestRun.chapter ||
+    (chapter === meta.bestRun.chapter && (Date.now() - game.runStartedAt) < meta.bestRun.time);
   const newLoreIds = player.loreFragments.filter(id => !meta.loreFragmentsSeen.includes(id));
   const newLoreTitles = newLoreIds.map(id => getLoreFragment(id)?.title ?? id);
   return {
@@ -89,9 +90,9 @@ function computeRunStatsImpl(
     echoShardsEarned: earnedShards,
     totalEchoShards: meta.echoShards + earnedShards,
     bestRun: meta.bestRun,
-    pageReached: game.currentPage,
+    chapterReached: chapter,
     endingUnlocked: endingId,
-    isNewBest: isBetter && meta.bestRun.page > 0,
+    isNewBest: isBetter && meta.bestRun.chapter > 0,
   };
 }
 
@@ -139,14 +140,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // A fresh descent forgets the Bestiary: all affinity slots start unknown again.
     const game: GameState = {
       currentNodeIndex: 0,
-      currentPage: 0,
       path: [],
       rngSeed: seed,
       runStartedAt: Date.now(),
       landings: 0,
       combatRounds: 0,
       choicesMade: 0,
-      checkpointPage: 0,
       checkpointNodeIndex: 0,
       checkpointSnapshot: JSON.parse(JSON.stringify(player)),
       deathNodeIndex: null,
@@ -206,7 +205,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastRunStats: runStats,
     };
     const ironman = settingsManager.get().difficulty === 'ironman';
-    if (ironman || game.checkpointPage === 0) {
+    if (ironman || game.checkpointNodeIndex === 0) {
       set({ meta: newMeta, player: null, game: null });
       get().persist();
       return;
@@ -228,7 +227,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const peak = player.resonance > player.resonancePeak ? player.resonance : player.resonancePeak;
     const runTime = Date.now() - game.runStartedAt;
     const currentRunStats: BestRunStats = {
-      page: game.currentPage,
+      chapter: chapterForIndex(Math.max(1, game.currentNodeIndex)),
       time: runTime,
       nodesVisited: game.path.length,
       enemiesKilled: player.enemiesKilled,
@@ -238,10 +237,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       choicesMade: game.choicesMade,
       loreFound: player.loreFragments.length,
     };
-    const isBetter = game.currentPage > meta.bestRun.page ||
-      (game.currentPage === meta.bestRun.page && runTime < meta.bestRun.time);
+    const isBetter = currentRunStats.chapter > meta.bestRun.chapter ||
+      (currentRunStats.chapter === meta.bestRun.chapter && runTime < meta.bestRun.time);
     const runStats = computeRunStatsImpl(player, game, meta, earned, endingId);
-    runStats.isNewBest = isBetter && meta.bestRun.page > 0;
+    runStats.isNewBest = isBetter && meta.bestRun.chapter > 0;
     const newMeta: MetaState = {
       ...meta,
       echoShards: meta.echoShards + earned,

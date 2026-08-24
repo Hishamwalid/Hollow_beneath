@@ -498,12 +498,8 @@ export const SUMMON_ENEMIES: Record<string, EnemyDef> = {
 // Stage pools — which enemies can appear where (see docs/ENEMY_ROSTER_BY_STAGE.md)
 // ============================================================================
 
-export function stageForPage(page: number): number {
-  if (page <= 3) return 1;
-  if (page <= 7) return 2;
-  if (page <= 11) return 3;
-  if (page <= 15) return 4;
-  return 5;
+export function stageForChapter(chapter: number): number {
+  return Math.min(5, Math.max(1, chapter));
 }
 
 const STAGE_ENEMY_POOLS: string[][] = [
@@ -521,9 +517,9 @@ export function stageForEnemy(id: string): number {
   return 1;
 }
 
-/** Combat pool for a page + Resonance level. */
-export function enemiesForPage(page: number, resonance: number): string[] {
-  const stage = stageForPage(page);
+/** Combat pool for a chapter + Resonance level. */
+export function enemiesForChapter(chapter: number, resonance: number): string[] {
+  const stage = stageForChapter(chapter);
   const pool = [...STAGE_ENEMY_POOLS[stage - 1]];
   if (stage >= 3 && resonance >= 25) pool.push('memory_wraith');
   if (stage >= 5 && resonance >= 50) pool.push('the_unread');
@@ -531,7 +527,7 @@ export function enemiesForPage(page: number, resonance: number): string[] {
 }
 
 /** Scrubs scripted fights so later-stage enemies never appear early. */
-export function sanitizeFightEnemies(enemyIds: string[], page: number, resonance: number): string[] {
-  const pool = enemiesForPage(page, resonance);
+export function sanitizeFightEnemies(enemyIds: string[], chapter: number, resonance: number): string[] {
+  const pool = enemiesForChapter(chapter, resonance);
   return enemyIds.map((id) => (pool.includes(id) || SUMMON_ENEMIES[id] || !ENEMIES[id] ? id : pool[Math.floor(Math.random() * pool.length)]));
 }

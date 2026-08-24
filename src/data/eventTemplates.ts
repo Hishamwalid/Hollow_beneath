@@ -244,7 +244,7 @@ export function generateFallbackEvent(player: PlayerState, rng: () => number): E
   return {
     id: baseId,
     title: template.title,
-    pageRange: [1, 10],
+    chapterRange: [1, 5],
     repeatable: true,
     flavorText,
     choices,

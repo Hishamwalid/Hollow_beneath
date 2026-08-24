@@ -7,7 +7,7 @@ import { freshAllyState, bindRegion } from '@systems/ally/AllyTracking';
 import { shardsForAllyVictory } from '@systems/ally/AllyRewards';
 import { FIRST_NODE_TOOLTIPS } from '@data/tutorialText';
 import { rollDie, rollMovement } from '@systems/checks';
-import { TOTAL_NODES, PAGES, NODES_PER_PAGE, GAME_WIDTH, GAME_HEIGHT } from '@/config';
+import { TOTAL_NODES, CHAPTERS, NODES_PER_CHAPTER, GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { pickEvent } from '@systems/EventEngine';
 import { resolveTrap } from '@systems/EventEngine';
 import { TRAPS } from '@data/events';
@@ -31,17 +31,18 @@ import { influenceStatus } from '@data/factions';
 import { STAGE1_NODES } from '@data/paths/stage1Nodes';
 import stage1AdjustData from '@data/paths/stage1_adjust.json';
 
-const CHAPTER_PAGES = [1, 5, 9, 13, 17];
+// ---- Chapter structure -----------------------------------------------------------------
+// The descent is 5 chapters of 40 nodes each; every chapter is its own full map screen.
 const CHAPTER_NAMES: Record<number, string> = {
   1: 'The Archive Opens',
-  5: 'The Sable March',
-  9: 'The Singing Deep',
-  13: 'The Reach of Dust',
-  17: 'The Final Descent',
+  2: 'The Sable March',
+  3: 'The Singing Deep',
+  4: 'The Reach of Dust',
+  5: 'The Final Descent',
 };
 
-const NODES_PER_MAP = 40;
-const MAP_COUNT = 5;
+const NODES_PER_MAP = NODES_PER_CHAPTER;
+const MAP_COUNT = CHAPTERS;
 
 function chapterForNode(index: number): number {
   return index <= 0 ? 1 : Math.min(MAP_COUNT, Math.ceil(index / NODES_PER_MAP));
@@ -50,14 +51,6 @@ function chapterForNode(index: number): number {
 function mapKeyForChapter(chapter: number): string {
   return `map_${Math.min(MAP_COUNT, Math.max(1, chapter))}`;
 }
-
-/** Named location for each of the 20 pages — shown in the board's title bar and status log. */
-const PAGE_NAMES = [
-  'The Vestibule', 'Ashfall', 'The Warrens', 'The Archive Threshold', 'The Bone Gallery',
-  'The Resonant Hall', 'Deep Pages', 'The Deep Vault', 'The Court of Dust', 'The Loom Gate',
-  'The Echoing Passages', 'The Still Library', 'The Crystal Veins', 'The Sable Bastion', 'The Whispering Step',
-  'The Archive Depths', 'The Covenant Spire', 'The Ashen Tunnels', 'The Silver Gallery', 'The Final Chamber',
-];
 
 // ---- Board panel frame (left side) ----
 const BOARD_X = 24;
@@ -141,9 +134,9 @@ function entrancePoint(): { x: number; y: number } {
   return { x: RING_CX + RING_RX * 1.12 * Math.cos(angle), y: RING_CY + RING_RY * 1.12 * Math.sin(angle) };
 }
 
-/** The final node of a page is a landmark only on chapter-boss pages (4, 8, 12, 16, 20). */
-function pageLandmarkIndex(page: number): number | null {
-  const idx = page * NODES_PER_PAGE;
+/** The last node of each chapter is its landmark boss. */
+function chapterLandmarkIndex(chapter: number): number | null {
+  const idx = chapter * NODES_PER_CHAPTER;
   return LANDMARK_INDICES.includes(idx) ? idx : null;
 }
 
@@ -224,10 +217,10 @@ function positionForNode(node: BoardNode): { x: number; y: number } {
       return base;
     }
   }
-  const landmarkIdx = pageLandmarkIndex(node.page);
+  const landmarkIdx = chapterLandmarkIndex(chapterForNode(node.index));
   if (node.type === 'landmark' || node.index === landmarkIdx) return caveCenter();
-  const relIndex = (node.index - 1) % NODES_PER_PAGE;
-  const ringCount = landmarkIdx ? NODES_PER_PAGE - 1 : NODES_PER_PAGE;
+  const relIndex = (node.index - 1) % NODES_PER_CHAPTER;
+  const ringCount = landmarkIdx ? NODES_PER_CHAPTER - 1 : NODES_PER_CHAPTER;
   return ringPoint(relIndex, ringCount);
 }
 
@@ -312,7 +305,7 @@ export class BoardScene extends Phaser.Scene {
       .setDepth(0)
       .setMask(this.boardMask);
     this.boardNodeLayer = this.add.container(0, 0).setDepth(1);
-    this.drawBoard(game.nodes, game.currentPage);
+    this.drawBoard(game.nodes);
     this.playerToken = this.add.image(0, 0, 'player_pin').setScale(0.24).setOrigin(0.5, 1).setDepth(20);
     this.placeTokenAt(game.currentNodeIndex);
 
@@ -350,14 +343,15 @@ export class BoardScene extends Phaser.Scene {
 
     this.logBg = this.add.rectangle(COL2_X + COL_W / 2, LOG_PANEL_Y + LOG_PANEL_H / 2, COL_W, LOG_PANEL_H, 0x16191d, 0.9)
       .setStrokeStyle(1, 0xc9a24b, 0.5);
-    this.logText = this.add.text(COL2_X + 14, LOG_PANEL_Y + 14, this.pageFlavor(game.currentPage), {
+    const startChapter = chapterForNode(Math.max(1, game.currentNodeIndex));
+    this.logText = this.add.text(COL2_X + 14, LOG_PANEL_Y + 14, this.chapterFlavor(startChapter), {
       fontFamily: FONT_BODY,
       fontSize: '14px',
       color: PALETTE_HEX.boneMuted,
       wordWrap: { width: COL_W - 28 },
     }).setDepth(6);
 
-    this.updateBoardTitle(game.currentPage);
+    this.updateBoardTitle(startChapter);
 
     if (game.currentNodeIndex >= TOTAL_NODES) {
       this.rollBtn.setEnabled(false);
@@ -384,14 +378,14 @@ export class BoardScene extends Phaser.Scene {
     }).setOrigin(1, 0).setDepth(5);
   }
 
-  private updateBoardTitle(page: number) {
-    this.titleText?.setText(PAGE_NAMES[Math.min(19, Math.max(0, page - 1))] ?? 'The Threshold');
-    this.titleSub?.setText(`Page ${page} / ${PAGES}`);
+  private updateBoardTitle(chapter: number) {
+    this.titleText?.setText(CHAPTER_NAMES[chapter] ?? 'The Threshold');
+    this.titleSub?.setText(`Chapter ${chapter} / ${CHAPTERS}`);
   }
 
-  private pageFlavor(page: number): string {
-    if (page <= 0) return 'The stair down is behind you now. Ahead: two hundred pages of a book that was never meant to be read twice.';
-    return `Page ${page} / 20 — ${PAGE_NAMES[Math.min(19, page - 1)]}`;
+  private chapterFlavor(chapter: number): string {
+    if (chapter <= 0) return 'The stair down is behind you now. Ahead: five chapters of a descent that was never meant to be survived.';
+    return `Chapter ${chapter} / ${CHAPTERS} — ${CHAPTER_NAMES[chapter]}`;
   }
 
   private drawRingPath() {
@@ -401,7 +395,7 @@ export class BoardScene extends Phaser.Scene {
     const chapter = chapterForNode(useGameStore.getState().game?.currentNodeIndex ?? 1);
     if (isStagePathChapter(chapter) && STAGE1_NODES.length > 1) {
       g.lineStyle(5, 0x8f6a27, 0.7);
-      const base = { index: 1, page: 1, type: 'event', subtype: '', resolved: false } as BoardNode;
+      const base = { index: 1, chapter: 1, type: 'event', subtype: '', resolved: false } as BoardNode;
       const p0 = positionForNode({ ...base, index: 1 });
       g.lineBetween(p0.x, p0.y, p0.x, p0.y);
       for (let i = 2; i <= STAGE1_NODES.length; i++) {
@@ -426,7 +420,7 @@ export class BoardScene extends Phaser.Scene {
     this.boardNodeLayer.add(g);
   }
 
-  private drawBoard(nodes: BoardNode[], page: number) {
+  private drawBoard(nodes: BoardNode[]) {
     if (!this.boardNodeLayer) return;
     this.boardNodeLayer.removeAll(true);
 
@@ -434,14 +428,14 @@ export class BoardScene extends Phaser.Scene {
 
     const cave = caveCenter();
     const store = useGameStore.getState();
-    const pageNodes = nodes.filter((n) => n.page === page);
-    const chapter = chapterForNode(Math.max(1, page * NODES_PER_PAGE));
+    const currentIdx = Math.max(1, store.game?.currentNodeIndex ?? 1);
+    const chapter = chapterForNode(currentIdx);
     const isStagePath = isStagePathChapter(chapter);
 
-    // On stage maps show the whole chapter (all 40 nodes); elsewhere only the current page's 10.
+    // Every chapter renders as its own full map — show all 40 of its nodes.
     const renderNodes = isStagePath
       ? nodes.filter((n) => n.index >= 1 && n.index <= STAGE1_NODES.length)
-      : pageNodes;
+      : nodes.filter((n) => n.chapter === chapter);
 
     const hasCaveNode = renderNodes.some((n) => n.type === 'landmark');
     if (!isStagePath) {
@@ -593,12 +587,12 @@ export class BoardScene extends Phaser.Scene {
   private clearPathAdjustments() {
     for (const key of Object.keys(STAGE_ADJUSTMENTS)) delete STAGE_ADJUSTMENTS[Number(key)];
     this.redrawBoard();
-    this.preview?.show(useGameStore.getState().game?.nodes[Math.max(0, (useGameStore.getState().game?.currentNodeIndex ?? 1) - 1)] ?? { index: 1, page: 1, type: 'event', subtype: '', resolved: false });
+    this.preview?.show(useGameStore.getState().game?.nodes[Math.max(0, (useGameStore.getState().game?.currentNodeIndex ?? 1) - 1)] ?? { index: 1, chapter: 1, type: 'event', subtype: '', resolved: false });
   }
 
   private redrawBoard() {
     const { game } = useGameStore.getState();
-    if (game) this.drawBoard(game.nodes, game.currentPage);
+    if (game) this.drawBoard(game.nodes);
   }
 
   private redrawToken(index: number) {
@@ -610,7 +604,7 @@ export class BoardScene extends Phaser.Scene {
     if (!this.playerToken) return;
     if (index <= 0) {
       const pos = isStagePathChapter(chapterForNode(1)) && STAGE1_NODES[0]
-        ? positionForNode({ index: 1, page: 1, type: 'event', subtype: '', resolved: false })
+        ? positionForNode({ index: 1, chapter: 1, type: 'event', subtype: '', resolved: false })
         : entrancePoint();
       this.playerToken.setPosition(pos.x, pos.y);
       return;
@@ -668,10 +662,10 @@ export class BoardScene extends Phaser.Scene {
     const hostileKey = (Object.keys(player.faction) as (keyof FactionState)[]).find(
       (k) => influenceStatus(player.faction[k]) === 'Hostile',
     );
-    const page = Math.max(1, game.currentPage);
+    const chapter = chapterForNode(Math.max(1, game.currentNodeIndex));
     const enemies = sanitizeFightEnemies(
       hostileKey && AMBUSH_TABLE[hostileKey] ? AMBUSH_TABLE[hostileKey] : ['sable_zealot', 'sable_zealot'],
-      page,
+      chapter,
       player.resonance,
     );
     useGameStore.setState({ game: { ...game, pendingNodeIndex: target } });
@@ -680,7 +674,7 @@ export class BoardScene extends Phaser.Scene {
     const factionLabel = hostileKey ? (factionNames[hostileKey] ?? hostileKey) : 'unknown';
     this.log(`The ${factionLabel} ambushes you! +${enemies.length} enemies.`);
     this.time.delayedCall(600, () => {
-      fadeToScene(this, 'Combat', { mode: 'wild', enemyIds: enemies, page });
+      fadeToScene(this, 'Combat', { mode: 'wild', enemyIds: enemies, nodeIndex: target });
     });
     return true;
   }
@@ -702,9 +696,9 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
-  private showChapterCard(page: number, node: BoardNode) {
-    const num = CHAPTER_PAGES.indexOf(page) + 1;
-    const name = CHAPTER_NAMES[page];
+  private showChapterCard(chapter: number, node: BoardNode) {
+    const num = chapter;
+    const name = CHAPTER_NAMES[chapter] ?? 'The Descent Continues';
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
     const depth = 200;
@@ -738,7 +732,7 @@ export class BoardScene extends Phaser.Scene {
             ease: 'Sine.easeIn',
             onComplete: () => {
               container.destroy();
-              this.log(this.pageFlavor(page));
+              this.log(this.chapterFlavor(chapter));
               this.resolveNode(node);
             },
           });
@@ -752,8 +746,6 @@ export class BoardScene extends Phaser.Scene {
     const { player, game } = store;
     if (!player || !game) return;
 
-    const page = Math.min(PAGES, Math.ceil(target / NODES_PER_PAGE));
-    const prevPage = game.currentPage;
     const nextChapter = chapterForNode(target);
     const prevChapter = chapterForNode(game.currentNodeIndex);
     player.echoShards += applyShardBonus(player, shardsForNodeVisit());
@@ -761,7 +753,7 @@ export class BoardScene extends Phaser.Scene {
     const node = updatedNodes[target - 1];
 
     useGameStore.setState({
-      game: { ...game, currentNodeIndex: target, currentPage: page, path: [...game.path, target], landings: game.landings + 1, nodes: updatedNodes, deathNodeIndex: null },
+      game: { ...game, currentNodeIndex: target, path: [...game.path, target], landings: game.landings + 1, nodes: updatedNodes, deathNodeIndex: null },
     });
 
     // Chapter loadout unlocks (revamp): crossing into a new chapter grants its skills.
@@ -774,18 +766,18 @@ export class BoardScene extends Phaser.Scene {
       }
     }
 
-    this.drawBoard(updatedNodes, page);
+    this.drawBoard(updatedNodes);
     this.playerPanel?.update(player);
     this.factionPanel?.update(player.faction);
     this.actionGrid?.refresh();
     this.preview?.show(node);
-    this.updateBoardTitle(page);
+    this.updateBoardTitle(nextChapter);
 
     const showChapterOrResolve = () => {
-      if (page !== prevPage && CHAPTER_PAGES.includes(page)) {
-        this.showChapterCard(page, node);
+      if (nextChapter !== prevChapter) {
+        this.showChapterCard(nextChapter, node);
       } else {
-        this.log(this.pageFlavor(page));
+        this.log(this.chapterFlavor(nextChapter));
         this.resolveNode(node);
       }
     };
@@ -813,7 +805,7 @@ export class BoardScene extends Phaser.Scene {
       .setMask(this.boardMask!);
     this.mapImage = newMap;
 
-    const page = this.add.image(MAP_AREA_X, MAP_AREA_Y + MAP_AREA_H / 2, oldMap.texture.key)
+    const turningMap = this.add.image(MAP_AREA_X, MAP_AREA_Y + MAP_AREA_H / 2, oldMap.texture.key)
       .setOrigin(0, 0.5)
       .setScale(mapCoverScale(this, oldMap.texture.key))
       .setDepth(2)
@@ -821,12 +813,12 @@ export class BoardScene extends Phaser.Scene {
     audio.pageTurn();
 
     this.tweens.add({
-      targets: page,
+      targets: turningMap,
       scaleX: 0,
       ease: 'Sine.easeInOut',
       duration: 700,
       onComplete: () => {
-        page.destroy();
+        turningMap.destroy();
         oldMap.destroy();
         onComplete();
       },
@@ -838,7 +830,7 @@ export class BoardScene extends Phaser.Scene {
     const { player, game } = store;
     if (!player || !game) return;
 
-    if (player.totalRuns === 0 && game.currentPage <= 1 && !this.firstNodeTooltips[node.type]) {
+    if (player.totalRuns === 0 && game.currentNodeIndex <= NODES_PER_CHAPTER && !this.firstNodeTooltips[node.type]) {
       this.firstNodeTooltips[node.type] = true;
       const tip = FIRST_NODE_TOOLTIPS[node.type];
       if (tip) this.preview?.setTip(tip);
@@ -849,12 +841,12 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
     if (node.type === 'combat') {
-      fadeToScene(this, 'Combat', { mode: 'wild', enemyIds: [node.subtype], page: node.page });
+      fadeToScene(this, 'Combat', { mode: 'wild', enemyIds: [node.subtype], nodeIndex: node.index });
       return;
     }
     if (node.type === 'event') {
       const seen = new Set(player.history.filter((h) => h.startsWith('event_seen:')).map((h) => h.slice('event_seen:'.length)));
-      const event = pickEvent(player, node.page, player.resonance, seen, Math.random, player.flags);
+      const event = pickEvent(player, node.chapter, player.resonance, seen, Math.random, player.flags);
       fadeToScene(this, 'Event', { eventDef: event });
       return;
     }
@@ -1141,7 +1133,7 @@ export class BoardScene extends Phaser.Scene {
   private handleDeathFlow() {
     const store = useGameStore.getState();
     const { game } = store;
-    const hadCheckpoint = !!game?.checkpointSnapshot && (game?.checkpointPage ?? 0) > 0;
+    const hadCheckpoint = !!game?.checkpointSnapshot && (game?.checkpointNodeIndex ?? 0) > 0;
     if (!hadCheckpoint) {
       store.handleDeath();
       fadeToScene(this, 'GameOver');
@@ -1157,11 +1149,11 @@ export class BoardScene extends Phaser.Scene {
       fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5).setDepth(d);
 
-    this.add.text(cx, cy - 40, `Fallen at Page ${game.currentPage}.`, {
+    this.add.text(cx, cy - 40, `Fallen in Chapter ${chapterForNode(Math.max(1, game.currentNodeIndex))}.`, {
       fontFamily: FONT_BODY, fontSize: '20px', color: PALETTE_HEX.bone,
     }).setOrigin(0.5).setDepth(d);
 
-    this.add.text(cx, cy - 8, `Return to checkpoint at Page ${game.checkpointPage}.`, {
+    this.add.text(cx, cy - 8, `Return to checkpoint at node ${game.checkpointNodeIndex}.`, {
       fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0.5).setDepth(d);
 
