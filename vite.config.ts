@@ -28,7 +28,6 @@ export default defineConfig({
       '@ui': resolve(__dirname, 'src/ui'),
       '@scenes': resolve(__dirname, 'src/scenes'),
       '@placeholder': resolve(__dirname, 'src/placeholder'),
-      '@utils': resolve(__dirname, 'src/utils'),
     },
   },
   server: {

@@ -1,9 +1,10 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { ITEMS } from '@data/items';
 import type { ItemDef, Equipment } from '@data/types';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
+import { createTitle } from '@ui/headings';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { addResonanceEffects } from '@systems/ResonanceFX';
@@ -62,7 +63,7 @@ export class InventoryScene extends Phaser.Scene {
     if (!player) { fadeToScene(this, 'Menu'); return; }
     addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT, { nodePulse: false, shake: false, shimmer: false, textGlitch: false });
 
-    this.add.text(cx, 50, 'Inventory', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    createTitle(this, cx, 50, 'Inventory');
     this.add.text(cx, 85, `Gold: ${player.gold}`, { fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.goldBright }).setOrigin(0.5);
 
     const panelX = cx - 380;
@@ -111,7 +112,7 @@ export class InventoryScene extends Phaser.Scene {
         }
       } else {
         const emptyText = this.add.text(panelX + 140, y, '— empty —', {
-          fontFamily: FONT_SERIF, fontSize: '15px', color: '#555555', fontStyle: 'italic',
+          fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
         }).setOrigin(0, 0.5);
         container.add([bg, slotLabel, emptyText]);
       }
@@ -123,7 +124,7 @@ export class InventoryScene extends Phaser.Scene {
   private renderInventory(panelX: number, player: ReturnType<typeof useGameStore.getState>['player']) {
     const items = player!.inventory.filter((e) => e.qty > 0);
     if (items.length === 0) {
-      this.add.text(panelX + 20, 440, 'Nothing carried.', { fontFamily: FONT_SERIF, fontSize: '15px', color: '#555555', fontStyle: 'italic' });
+      this.add.text(panelX + 20, 440, 'Nothing carried.', { fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' });
     } else {
       const maxVisible = Math.min(items.length, 8);
       for (let i = 0; i < maxVisible; i++) {
@@ -231,7 +232,7 @@ const nameText = scene.add.text(cx - panelW / 2 + 30, y, label, {
 
       if (isCurrent) {
         const eqLabel = scene.add.text(cx + panelW / 2 - 120, y, 'Equipped', {
-          fontFamily: FONT_MONO, fontSize: '12px', color: '#555555',
+          fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
         }).setOrigin(0, 0.5).setDepth(depth + 3);
         elements.push(eqLabel);
       } else if (!isRemove) {

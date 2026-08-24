@@ -1,9 +1,10 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { useGameStore } from '@store/gameStore';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX, DAMAGE_TYPE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
+import { createTitle } from '@ui/headings';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { ENEMIES } from '@data/enemies';
 import { BOSSES } from '@data/bosses';
@@ -61,7 +62,7 @@ export class LoreCodexScene extends Phaser.Scene {
     this.allIds = Object.keys(LORE_FRAGMENTS).sort();
     this.bestiaryRows = this.buildBestiaryRows();
 
-    this.add.text(cx, 44, 'The Codex', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    createTitle(this, cx, 44, 'Lore Codex');
     this.headerNote = this.add
       .text(cx, 82, this.tabLine(), {
         fontFamily: FONT_MONO,
@@ -183,7 +184,7 @@ export class LoreCodexScene extends Phaser.Scene {
             fontFamily: FONT_BODY,
             fontSize: '14px',
             fontStyle: known ? 'italic' : 'normal',
-            color: known ? PALETTE_HEX.bone : '#555555',
+            color: known ? PALETTE_HEX.bone : PALETTE_HEX.boneMuted,
             wordWrap: { width: 860 },
             lineSpacing: 4,
           }
@@ -227,7 +228,7 @@ export class LoreCodexScene extends Phaser.Scene {
           const botLabel = this.add.text(x + chipW / 2, rowY + 16, known ? kind! : '?', {
             fontFamily: FONT_MONO,
             fontSize: '13px',
-            color: known ? `#${AFFINITY_HEX[kind!].toString(16).padStart(6, '0')}` : '#555555',
+            color: known ? `#${AFFINITY_HEX[kind!].toString(16).padStart(6, '0')}` : PALETTE_HEX.boneMuted,
           }).setOrigin(0.5);
 
           container.add([topBg, topLabel, botBg, botLabel]);

@@ -1,8 +1,9 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { settingsManager, type GameSettings } from '@systems/SettingsManager';
 import { CREDITS } from '@data/credits';
 import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
+import { createTitle } from '@ui/headings';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -67,7 +68,7 @@ export class SettingsScene extends Phaser.Scene {
     const cx = GAME_WIDTH / 2;
     const settings = settingsManager.get();
 
-    this.add.text(cx, 50, 'Settings', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    createTitle(this, cx, 50, 'Settings');
 
     this.buildVolumeSlider(cx, settings);
     this.buildTextSpeedSlider(cx, settings);
@@ -101,10 +102,10 @@ export class SettingsScene extends Phaser.Scene {
     }).setOrigin(0, 0.5);
 
     this.add.text(cx - 100, y + 18, 'Slower', {
-      fontFamily: FONT_MONO, fontSize: '12px', color: '#555555',
+      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5);
     this.add.text(cx + 140, y + 18, 'Faster', {
-      fontFamily: FONT_MONO, fontSize: '12px', color: '#555555',
+      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5);
 
     createSlider(this, cx - 80, y, 240, settings.textSpeed, (v) => {
@@ -221,6 +222,7 @@ export class SettingsScene extends Phaser.Scene {
   }
 
   private addSettingsLabel(x: number, y: number, label: string) {
-    this.add.text(x, y, label, { fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5);
+    const t = this.add.text(x, y, label.toUpperCase(), { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5);
+    if (typeof t.setLetterSpacing === 'function') t.setLetterSpacing(2);
   }
 }

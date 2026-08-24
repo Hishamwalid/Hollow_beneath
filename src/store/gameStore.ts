@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import type { EquipmentBonuses } from '@data/stats';
 import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES, getEquipmentBonuses, STAT_MAX } from '@data/stats';
 import { STARTING_FACTIONS } from '@data/factions';
@@ -26,10 +26,11 @@ import { getLoreFragment, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { resonanceTier, TIER_LABELS } from '@systems/ResonanceSystem';
 import { chapterGrantSkills } from '@data/skills';
 
-export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0): PlayerState {
+export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0, name = "Eve's Child"): PlayerState {
   const derived = computeDerivedStats(stats, STARTING_EQUIPMENT_BONUSES as EquipmentBonuses);
   const granted = chapterGrantSkills(1);
   const player: PlayerState = {
+    name,
     stats,
     derived,
     currentHP: derived.maxHP,
@@ -43,7 +44,7 @@ export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[
     faction: { ...STARTING_FACTIONS },
     equipment: { weapon: 'rusty_dagger', armour: 'leather_vest', accessory: null, focus: 'cracked_lens' },
     inventory: STARTING_INVENTORY.map((i) => ({ ...i })),
-    companions: [],
+    story: { eveVoiceHeard: 0, motherJournalFound: false, shardRites: {} },
     flags: {},
     history: [],
     loreFragments: [],
@@ -102,7 +103,7 @@ interface GameStore {
   game: GameState | null;
 
   initFromDisk: () => void;
-  startNewRun: (stats: StatBlock) => void;
+  startNewRun: (stats: StatBlock, name: string) => void;
   loadActiveRun: () => boolean;
   persist: () => void;
   recordCheckpoint: () => void;
@@ -131,11 +132,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({ meta, player: activeRun?.player ?? null, game: activeRun?.game ?? null });
   },
 
-  startNewRun: (stats: StatBlock) => {
+  startNewRun: (stats: StatBlock, name: string) => {
     const { meta } = get();
     const seed = randomSeed();
     const rng = mulberry32(seed);
-    const player = createStartingPlayer(stats, meta.purchasedUnlocks, meta.totalRuns);
+    const player = createStartingPlayer(stats, meta.purchasedUnlocks, meta.totalRuns, name);
     const nodes = generateBoard(rng);
     // A fresh descent forgets the Bestiary: all affinity slots start unknown again.
     const game: GameState = {

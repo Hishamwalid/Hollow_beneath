@@ -1,10 +1,11 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { NAMED_SKILLS, MAX_EQUIPPED_SKILLS_FALLBACK } from '@data/skills';
 import { MAX_EQUIPPED_SKILLS } from '@data/types';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
+import { createTitle } from '@ui/headings';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 /**
@@ -25,7 +26,7 @@ export class LoadoutScene extends Phaser.Scene {
     fadeIn(this);
     const cx = GAME_WIDTH / 2;
 
-    this.add.text(cx, 44, 'Skill Loadout', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    createTitle(this, cx, 44, 'Skill Loadout');
     this.add.text(cx, 82, 'Six slots active in combat. Everything else waits in the archive — click a skill to move it.', {
       fontFamily: FONT_BODY,
       fontSize: '15px',

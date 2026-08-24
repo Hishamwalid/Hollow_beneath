@@ -18,6 +18,8 @@ import { createEnemyDisplay, createActionGrid, createTurnOrderPanel, createToolt
 import { createQteBar, type QteBarHandle, type QteQuality } from '@ui/QteBar';
 import { createChoiceMenu, type ChoiceMenu, type ChoiceMenuItem } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
+import { createPanel } from '@ui/Panel';
+import { createCoachTip } from '@ui/CoachTip';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX, DAMAGE_TYPE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { settingsManager } from '@systems/SettingsManager';
@@ -312,6 +314,13 @@ export class CombatScene extends Phaser.Scene {
 
     const initialSnap = this.engine.beginRound();
     this.buildEnemyDisplays(initialSnap);
+
+    // First-fight primer: three lines, once per save. Presentation-only.
+    if (!player.flags.hint_combat) {
+      player.flags.hint_combat = true;
+      store.persist();
+      this.showCombatPrimer();
+    }
 
     const spAdj = layoutAdj('statPanel');
     this.statPanel = createStatPanel(this, STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy);
@@ -2033,15 +2042,51 @@ export class CombatScene extends Phaser.Scene {
     });
   }
 
-  private handleCombatEnd(phase: CombatSnapshot['phase']) {
-    const store = useGameStore.getState();
+  /** One-time, three-line primer card. Presentation-only — no mechanics touched. */
+  private showCombatPrimer(): void {
+    const depth = 500;
+    const cx = GAME_WIDTH / 2;
+    const panel = createPanel(this, { x: cx, y: 150, width: 700, height: 210, variant: 'parchment', depth: depth });
+    void panel;
+
+    const lines: Phaser.GameObjects.Text[] = [];
+    ['ONE action per turn — then END TURN.',
+     'ATTACK / SKILL run a timing needle — stop it center for PERFECT (+30% dmg).',
+     'SCAN is free. Hit enemies with damage types to learn weaknesses: wk Downs them and grants 1-More.',
+    ].forEach((line, i) => {
+      lines.push(this.add.text(cx - 310, 96 + i * 34, `•  ${line}`, {
+        fontFamily: FONT_BODY,
+        fontSize: '15px',
+        color: PALETTE_HEX.ink,
+        wordWrap: { width: 620 },
+      }).setDepth(depth + 1));
+    });
+
+    const gotBtn = createButton(this, cx, 236, 'Got it', () => {
+      panel.destroy();
+      lines.forEach((l) => l.destroy());
+      gotBtn.destroy();
+    }, { width: 160, height: 42, fontSize: '15px', variant: 'primary', depth: depth + 2 });
+  }
+
+  private handleCombatEnd(phase: CombatSnapshot['phase']) {    const store = useGameStore.getState();
     const player = store.player;
     if (!player) return;
 
-    // Phase 5: companions carry their loyalty / cooldowns out of the fight.
-    player.companions = this.engine.getAllyStates();
+    const isFinalFight =
+      this.sceneData.mode === 'boss' && this.sceneData.bossId === 'reflection';
 
     if (phase === 'defeat') {
+      // Definitive edition: falling to the Final Reflection is not a Game Over —
+      // the Loom makes an offer instead. No checkpoints, no continues.
+      if (isFinalFight) {
+        player.flags.final_reflection_lost = true;
+        store.persist();
+        audio.defeat();
+        this.setPlayerPose('defeat');
+        this.time.delayedCall(1400, () => fadeToScene(this, 'TheOffer'));
+        return;
+      }
       audio.defeat();
       this.setPlayerPose('defeat');
       this.playSentinelVictory();
@@ -2060,8 +2105,20 @@ export class CombatScene extends Phaser.Scene {
     }
 
     // victory
-    audio.victory();
     this.setPlayerPose('victory');
+
+    // Definitive edition: defeating the Final Reflection has no victory screen
+    // and no rewards. The power floods in — and you become the next Hollow.
+    if (isFinalFight) {
+      player.flags.final_reflection_defeated = true;
+      player.bossesDefeated.push('reflection');
+      store.commitDiscoveries(this.engine.getDiscoveryGains() as Record<string, import('@data/types').EnemyAffinities>);
+      store.persist();
+      this.time.delayedCall(1600, () => fadeToScene(this, 'Ending', { endingId: 'the_hollow' }));
+      return;
+    }
+
+    audio.victory();
     player.enemiesKilled += this.engine.getEnemiesKilled();
     store.commitDiscoveries(this.engine.getDiscoveryGains() as Record<string, import('@data/types').EnemyAffinities>);
     store.commitBestiaryKills(this.engine.getKillsByDef());

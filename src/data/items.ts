@@ -165,14 +165,6 @@ export const ITEMS: Record<string, ItemDef> = {
     effect: { statBonus: { matk: 2, mdef: 1 } },
     sellValue: 35,
   },
-  archivists_stylus: {
-    id: 'archivists_stylus',
-    name: "Archivist's Stylus",
-    description: "Mira Tol's own design. Writes faster than thought. +3 MATK.",
-    kind: 'focus',
-    effect: { statBonus: { matk: 3 } },
-    sellValue: 45,
-  },
 
   // ---- New: accessories -----------------------------------------------------------
   travelers_ledger: {

@@ -470,20 +470,6 @@ export const ENEMIES: Record<string, EnemyDef> = {
       resolve(ctx) { return hitPlayer(ctx, 1.05, 'slash', 'Scrub'); },
     }],
   },
-  sera_voss: {
-    id: 'sera_voss',
-    name: 'Sera Voss',
-    level: 4,
-    hp: 90, mp: 30, atk: 14, matk: 8, def: 10, mdef: 9, spd: 13,
-    attackType: 'slash',
-    affinities: {},
-    xp: 0,
-    description: 'Expedition fighter — camp-trained, road-hardened.',
-    moves: [{
-      id: 'camp_knife', label: 'Camp Knife', weight: 1,
-      resolve(ctx) { return hitPlayer(ctx, 1.0, 'slash', 'Camp Knife'); },
-    }],
-  },
 };
 
 export const SUMMON_ENEMIES: Record<string, EnemyDef> = {
@@ -491,7 +477,6 @@ export const SUMMON_ENEMIES: Record<string, EnemyDef> = {
   echo_of_emptiness: ENEMIES.echo_of_emptiness,
   echo_of_harmony: ENEMIES.echo_of_harmony,
   echo_of_cleanliness: ENEMIES.echo_of_cleanliness,
-  sera_voss: ENEMIES.sera_voss,
 };
 
 // ============================================================================

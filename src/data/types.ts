@@ -433,16 +433,22 @@ export interface InventoryEntry {
   qty: number;
 }
 
-/** Non-combat companion record (board flavor: recruitment, loyalty, shard rewards). */
-export interface CompanionState {
-  id: 'warden_emissary' | 'covenant_courier' | 'sable_zealot' | 'archive_cartographer';
-  loyalty: number;
-  spentHooks: string[];
-  boundRegions: string[];
-  battlesTogether: number;
+/**
+ * Definitive-edition story variables. Persisted with the run and checked at
+ * the Final Reflection.
+ */
+export interface StoryState {
+  /** Times an Eve voice event has been heard (script beats at nodes 8/92/175 + optional). */
+  eveVoiceHeard: number;
+  /** Set when Eve's first journal is found (node 155) — unlocks Reflection phase-4 branch. */
+  motherJournalFound: boolean;
+  /** Shard Rite purchase counters per rite key — drives escalating costs. */
+  shardRites: Record<string, number>;
 }
 
 export interface PlayerState {
+  /** The name the player wrote before the descent. Shown on the HUD and endings. */
+  name: string;
   stats: StatBlock;
   derived: DerivedStats;
 
@@ -463,8 +469,9 @@ export interface PlayerState {
 
   equipment: Equipment;
   inventory: InventoryEntry[];
-  /** Non-combat companions (recruitment flavor + rewards only). */
-  companions: CompanionState[];
+
+  /** Definitive-edition narrative variables. */
+  story: StoryState;
 
   flags: Record<string, boolean>;
   history: string[];
@@ -482,13 +489,9 @@ export interface PlayerState {
   bestRun: BestRunStats;
 
   // ---- Deprecated (revamp compat; old saves/scenes may still read these) ----
+  // fatigue/insight are still referenced by CombatScene's compat shims.
   fatigue?: number;
   insight?: number;
-  fearGauge?: number;
-  position?: string;
-  classId?: string;
-  skillPoints?: number;
-  skillTreePurchases?: Record<string, number>;
 }
 
 export const MAX_EQUIPPED_SKILLS = 6;

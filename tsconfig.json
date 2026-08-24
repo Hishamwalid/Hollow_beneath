@@ -24,8 +24,7 @@
       "@store/*": ["src/store/*"],
       "@ui/*": ["src/ui/*"],
       "@scenes/*": ["src/scenes/*"],
-      "@placeholder/*": ["src/placeholder/*"],
-      "@utils/*": ["src/utils/*"]
+      "@placeholder/*": ["src/placeholder/*"]
     }
   },
   "include": ["src/**/*"],

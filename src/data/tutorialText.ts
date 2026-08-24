@@ -5,62 +5,51 @@ export interface TutorialScreen {
   icons?: string[];
 }
 
+/**
+ * One short screen before the descent begins. Everything else is taught
+ * contextually on the board / in combat — see ui/CoachTip.
+ */
+export const INTRO_SCREEN: TutorialScreen = {
+  id: 'intro',
+  title: 'THE DESCENT',
+  body: "You are Eve's child.\n\nRoll the die. Walk. Choose. Live with it.\n\nEverything else, you'll learn on the way down.",
+  icons: ['tok_player'],
+};
+
+/** Optional reference pages — Menu → "How to Play" (the Field Manual). */
 export const TUTORIAL_SCREENS: TutorialScreen[] = [
   {
-    id: 'who_you_are',
-    title: 'Who You Are',
+    id: 'on_the_road',
+    title: 'On the Road',
+    icons: ['node_event', 'node_combat', 'node_rest', 'node_discovery', 'node_trap'],
+    body: 'Roll a six-sided die and walk that many nodes. The AHEAD panel shows what is coming — plan around it.\n\n◆ Event — a story choice\n▲ Combat — enemies bar the path\n✚ Rest — recover HP & MP\n✦ Discovery — search for loot and lore\n! Trap — dodge or suffer\n★ Landmark — a chapter boss\n\nLandmarks and capture points stop you. History cannot be skipped.',
+  },
+  {
+    id: 'combat_basics',
+    title: 'Combat Basics',
     icons: ['tok_player'],
-    body: 'You are Lyra Vane. A linguist.\n\nYou survived an expedition that drove thirty experts to murder each other.\n\nNow you hear the static between words.',
+    body: 'One action per turn — ATTACK, SKILL, GUARD, ITEM — then END TURN. Enemies answer in speed order.\n\nOffensive moves run a timing needle: stop it in the gold center for PERFECT (+30% damage). GUARD halves incoming damage, prevents Stagger — and banks +6 MP.\n\nBelow 35% HP you may get one desperate gamble. Checkpoints at nodes 40 / 80 / 120 / 160 catch your falls.',
   },
   {
-    id: 'what_youre_doing',
-    title: 'What You\'re Doing',
-    icons: ['node_landmark'],
-    body: 'Beneath the world, something ancient reads minds. It has consumed entire civilizations looking for one it cannot finish.\n\nThat mind is yours.\n\nDescend 200 nodes across 5 chapters. Reach the chamber at the bottom. Find out why you are the one who cannot be read.',
-  },
-  {
-    id: 'how_to_move',
-    title: 'How to Move',
-    icons: ['node_event', 'node_combat', 'node_discovery', 'node_rest', 'node_trap'],
-    body: 'Roll a six-sided die. Move forward that many nodes. You can see the next 4 nodes — plan your path wisely.\n\n  ⚔ Combat     ? Event    ✦ Discovery\n  + Rest       ! Trap     ★ Landmark / Boss\n\nYou must stop at every Landmark and Capture Point. You cannot skip history.',
-  },
-  {
-    id: 'how_to_fight',
-    title: 'How to Fight',
-    icons: ['tok_player'],
-    body: 'One action per turn: ATTACK, SKILL, GUARD, ITEM — then END TURN.\n\nEvery offensive move runs a TIMING BAR. Stop the needle in the gold center for PERFECT (+30% damage, big crit chance). Miss the window and the strike glances for less.\n\nGUARD halves incoming damage, prevents Stagger from enemy crits — and recovers +6 MP.',
-  },
-  {
-    id: 'scan_and_affinities',
-    title: 'Scan & Discover',
+    id: 'scan_and_reactions',
+    title: 'Scan & Reactions',
     icons: ['node_combat', 'node_discovery'],
-    body: 'Every enemy starts with eight UNKNOWN affinity slots (sl pi bl fl fr sh sc sh).\n\nHit a foe with a damage type to test that slot forever: wk = weakness (+50% dmg, Downs them, grants 1-More), str = resist, null = nothing, rep = reflects back at you, drn = heals them.\n\nSCAN is free — open it anytime. Discoveries persist across every run in your Bestiary.',
+    body: 'Every enemy starts with eight UNKNOWN affinity slots. Hit a foe with a damage type to test that slot forever:\n\nwk = weakness (+50% dmg, Downed, grants 1-More) · str = resist\nnull = immune · rep = reflects back at you · drn = heals them\n\nSCAN is free, anytime. Discoveries persist across every run in your Bestiary.\n\nElements interact: Shock a CHILLED target → Superconduct (stun). Burn a Shocked one → Overcharge. Hit a Sacred-marked foe with Shadow → Eclipse (strips buffs, double damage).',
   },
   {
-    id: 'reactions',
-    title: 'Reactions',
-    icons: ['node_combat'],
-    body: 'Elements interact. Shock a CHILLED target → SUPERCONDUCT (stun). Burn a SHOCKED one → OVERCHARGE. Hit a Sacred-marked foe with Shadow → ECLIPSE (strips buffs, double damage).\n\nMark with Frost Touch or Sacred Ray; detonate with what comes next.',
-  },
-  {
-    id: 'loadout',
-    title: 'Your Loadout',
+    id: 'loadout_and_goal',
+    title: 'Loadout & Goal',
     icons: ['node_landmark'],
-    body: 'Six skill slots active in combat — everything else waits in your ARCHIVE.\n\nNew chapters unlock techniques tuned to what lurks there. Swap freely between fights from the Loadout screen. There are no classes down here: only what you carry and what you\'ve learned.',
-  },
-  {
-    id: 'your_goal',
-    title: 'Your Goal',
-    icons: ['node_landmark'],
-    body: 'Five major guardians block the path to the Loom. Each one holds a piece of the Venn\'s story. You will not know their names until you stand before them.\n\nDefeat them all. Reach the chamber at the bottom.\n\nThe Loom will ask you a question. Your entire run has been your answer.',
+    body: 'Six skill slots are active in combat — everything else waits in your ARCHIVE. New chapters unlock techniques tuned to what lurks there; swap freely between fights from the Loadout screen.\n\nFive guardians block the path to the Loom. Each one remembers Eve.\n\nDefeat them all. Reach the chamber at the bottom.\n\nThe thing waiting at the end of the journey is you.',
   },
 ];
 
+/** First-encounter tooltips surfaced by the board's AHEAD panel. */
 export const FIRST_NODE_TOOLTIPS: Record<string, string> = {
-  combat: 'This is a Combat node. Defeat the enemy to proceed.',
-  event: 'This is an Event node. Your choices affect factions and Resonance.',
-  discovery: 'This is a Discovery node. Search for items and lore.',
-  rest: 'Restore HP and MP at Rest nodes.',
-  trap: 'This is a Trap node. Watch your step.',
-  landmark: 'This is a Landmark — a major boss waits here.',
+  combat: 'Combat node — defeat the enemy to proceed. Timing needle: center = PERFECT.',
+  event: 'Event node — choices shift factions & Resonance.',
+  discovery: 'Discovery node — search for items and lore.',
+  rest: 'Rest node — restore HP and MP.',
+  trap: 'Trap node — DEX check to dodge.',
+  landmark: 'Landmark — a major boss waits here.',
 };

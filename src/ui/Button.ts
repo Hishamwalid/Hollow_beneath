@@ -11,12 +11,16 @@ export interface ButtonOptions {
   textureKey?: string;
   textureHoverKey?: string;
   depth?: number;
+  /** Visual weight: primary (default) = stone+gold, secondary = quiet stone, ghost = hairline. */
+  variant?: 'primary' | 'secondary' | 'ghost';
+  /** Optional icon texture drawn at the left edge. */
+  iconKey?: string;
 }
 
 export interface Button {
   container: Phaser.GameObjects.Container;
   setEnabled: (enabled: boolean) => void;
-  /** Keyboard focus highlight (mirrors the hover texture). */
+  /** Keyboard focus highlight (mirrors the hover state). */
   setFocused: (focused: boolean) => void;
   destroy: () => void;
 }
@@ -29,43 +33,90 @@ export function createButton(
   onClick: () => void,
   opts: ButtonOptions = {},
 ): Button {
+  const variant = opts.variant ?? 'primary';
   const width = opts.width ?? 260;
   const height = opts.height ?? 52;
-  const texKey = opts.textureKey ?? 'panel_button';
-  const texHoverKey = opts.textureHoverKey ?? 'panel_button_hover';
-  const bg = scene.add.image(0, 0, texKey).setDisplaySize(width, height);
+
+  let bg: Phaser.GameObjects.GameObject & { setTexture?: (k: string) => void };
+  let hoverBg: Phaser.GameObjects.Rectangle | null = null;
+  if (variant === 'ghost') {
+    const rect = scene.add.rectangle(0, 0, width, height).setStrokeStyle(1, 0xc9a24b, 0.45);
+    bg = rect;
+  } else {
+    const texKey = opts.textureKey ?? (variant === 'secondary' ? 'panel_btn_secondary' : 'panel_button');
+    const texHoverKey = opts.textureHoverKey ?? (variant === 'secondary' ? 'panel_btn_secondary_hover' : 'panel_button_hover');
+    const img = scene.add.image(0, 0, texKey).setDisplaySize(width, height);
+    (img as unknown as Record<string, unknown>).texKey = texKey;
+    (img as unknown as Record<string, unknown>).texHoverKey = texHoverKey;
+    bg = img;
+    // Hidden hover veil for a soft gold wash on top of the texture.
+    hoverBg = scene.add.rectangle(0, 0, width - 6, height - 6, 0xe9c876, 0);
+    scene.add.container(0, 0, [hoverBg]);
+  }
+
+  const items: Phaser.GameObjects.GameObject[] = [];
+  if (variant !== 'ghost') items.push(bg as Phaser.GameObjects.GameObject);
+  if (hoverBg) items.push(hoverBg);
+
+  let icon: Phaser.GameObjects.Image | null = null;
+  if (opts.iconKey && scene.textures.exists(opts.iconKey)) {
+    icon = scene.add.image(-width / 2 + 30, 0, opts.iconKey).setDisplaySize(28, 28).setAlpha(0.9);
+    items.push(icon);
+  }
+
+  const textX = icon ? 14 : 0;
   const text = scene.add
-    .text(0, opts.subtitle ? -8 : 0, label, {
+    .text(textX, opts.subtitle ? -8 : 0, label, {
       fontFamily: FONT_SERIF,
       fontSize: opts.fontSize ?? '20px',
       color: PALETTE_HEX.bone,
       align: 'center',
-      wordWrap: { width: width - 20 },
+      wordWrap: { width: width - (icon ? 70 : 20) },
     })
     .setOrigin(0.5);
-  const items: Phaser.GameObjects.GameObject[] = [bg, text];
+  items.push(text);
   if (opts.subtitle) {
     const sub = scene.add
-      .text(0, 15, opts.subtitle, { fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.boneMuted })
+      .text(textX, 15, opts.subtitle, { fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5);
     items.push(sub);
   }
+  if (variant === 'ghost') items.unshift(bg as Phaser.GameObjects.GameObject);
+
   const container = scene.add.container(x, y, items);
   container.setSize(width, height);
   if (opts.depth !== undefined) container.setDepth(opts.depth);
 
   let enabled = !opts.disabled;
-  bg.setAlpha(enabled ? 1 : 0.4);
-  text.setAlpha(enabled ? 1 : 0.5);
+  let hovered = false;
+  const applyVisuals = () => {
+    if (variant === 'ghost') {
+      const rect = bg as Phaser.GameObjects.Rectangle;
+      rect.setStrokeStyle(1, 0xc9a24b, enabled ? (hovered ? 0.95 : 0.45) : 0.2);
+      rect.setFillStyle(0xc9a24b, enabled && hovered ? 0.08 : 0);
+      text.setAlpha(enabled ? 1 : 0.4);
+      return;
+    }
+    const img = bg as Phaser.GameObjects.Image;
+    img.setAlpha(enabled ? 1 : 0.4);
+    text.setAlpha(enabled ? 1 : 0.5);
+    if (hovered && enabled) img.setTexture(String((img as unknown as Record<string, unknown>).texHoverKey));
+    else img.setTexture(String((img as unknown as Record<string, unknown>).texKey));
+    if (hoverBg) hoverBg.setFillStyle(0xe9c876, hovered && enabled ? 0.07 : 0);
+  };
+  applyVisuals();
 
   bg.setInteractive({ useHandCursor: true });
   bg.on('pointerover', () => {
     if (!enabled) return;
-    bg.setTexture(texHoverKey);
+    hovered = true;
+    applyVisuals();
+    scene.tweens.add({ targets: container, y: y - 2, duration: 90, ease: 'Sine.easeOut' });
   });
   bg.on('pointerout', () => {
-    if (!enabled) return;
-    bg.setTexture(texKey);
+    hovered = false;
+    applyVisuals();
+    scene.tweens.add({ targets: container, y, duration: 90, ease: 'Sine.easeOut' });
   });
   bg.on('pointerdown', () => {
     if (!enabled) return;
@@ -86,15 +137,14 @@ export function createButton(
       enabled = v;
       scene.tweens.killTweensOf(container);
       container.setScale(1);
-      bg.setAlpha(v ? 1 : 0.4);
-      text.setAlpha(v ? 1 : 0.5);
-      bg.setTexture(texKey);
       if (v) bg.setInteractive({ useHandCursor: true });
       else bg.disableInteractive();
+      applyVisuals();
     },
-    setFocused: (focused) => {
+    setFocused: (focused: boolean) => {
       if (!enabled) return;
-      bg.setTexture(focused ? texHoverKey : texKey);
+      hovered = focused;
+      applyVisuals();
     },
     destroy: () => container.destroy(),
   };

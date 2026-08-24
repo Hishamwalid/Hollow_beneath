@@ -2,9 +2,7 @@ import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import type { BoardNode, FactionState } from '@data/types';
 import { CHECKPOINTS, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
-import { ALLY_DEFS } from '@systems/ally/AllyDefs';
-import { freshAllyState, bindRegion } from '@systems/ally/AllyTracking';
-import { shardsForAllyVictory } from '@systems/ally/AllyRewards';
+import { PINNED_STORY_EVENTS, STORY_EVENTS } from '@data/storyEvents';
 import { FIRST_NODE_TOOLTIPS } from '@data/tutorialText';
 import { rollDie, rollMovement } from '@systems/checks';
 import { TOTAL_NODES, CHAPTERS, NODES_PER_CHAPTER, GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -20,6 +18,8 @@ import { createDiceRoller } from '@ui/DiceRoller';
 import { createNodePreview } from '@ui/NodePreview';
 import { createPlayerPanel } from '@ui/PlayerPanel';
 import { createFactionPanel } from '@ui/FactionPanel';
+import { createPanel } from '@ui/Panel';
+import { createCoachTip } from '@ui/CoachTip';
 import { createActionGrid } from '@ui/ActionGrid';
 import { createButton } from '@ui/Button';
 import { showWhisper, applyResonanceTint } from '@ui/WhisperOverlay';
@@ -112,6 +112,8 @@ const AMBUSH_TABLE: Record<string, string[]> = {
 function isAnyFactionHostile(faction: FactionState): boolean {
   return Object.values(faction).some((v) => influenceStatus(v) === 'Hostile');
 }
+
+const PINNED_STORY_NODES = new Set(Object.keys(PINNED_STORY_EVENTS).map(Number));
 
 function degToRad(d: number): number {
   return (d * Math.PI) / 180;
@@ -227,8 +229,8 @@ function positionForNode(node: BoardNode): { x: number; y: number } {
 export class BoardScene extends Phaser.Scene {
   private playerToken?: Phaser.GameObjects.Image;
   private rollBtn?: ReturnType<typeof createButton>;
-  private logText?: Phaser.GameObjects.Text;
-  private logBg?: Phaser.GameObjects.Rectangle;
+  private logLines: Phaser.GameObjects.Text[] = [];
+  private chapterPips: Phaser.GameObjects.Rectangle[] = [];
   private playerPanel?: ReturnType<typeof createPlayerPanel>;
   private factionPanel?: ReturnType<typeof createFactionPanel>;
   private actionGrid?: ReturnType<typeof createActionGrid>;
@@ -242,6 +244,21 @@ export class BoardScene extends Phaser.Scene {
   private ghostToken?: Phaser.GameObjects.Image;
   private busy = false;
   private firstNodeTooltips: Record<string, boolean> = {};
+  private ritesOpen = false;
+  private coachBusyUntil = 0;
+
+  /** One-time-per-save contextual hint. Queues so tips never overlap. */
+  private showCoach(flagKey: string, text: string, x: number, y: number): void {
+    const player = useGameStore.getState().player;
+    if (!player || player.flags[flagKey]) return;
+    player.flags[flagKey] = true;
+    useGameStore.getState().persist();
+    const startAt = Math.max(this.game.getTime(), this.coachBusyUntil + 260);
+    this.coachBusyUntil = startAt + 6000;
+    this.time.delayedCall(Math.max(0, startAt - this.game.getTime()), () => {
+      createCoachTip(this, x, y, text);
+    });
+  }
 
   constructor() {
     super('Board');
@@ -250,6 +267,8 @@ export class BoardScene extends Phaser.Scene {
   create() {
     this.busy = false;
     this.cameras.main.setBackgroundColor(0x0b0d10);
+    audio.startAmbience('descent');
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => audio.stopAmbience());
     fadeIn(this);
     const { player, game } = useGameStore.getState();
     if (!player || !game) {
@@ -317,23 +336,38 @@ export class BoardScene extends Phaser.Scene {
     this.actionGrid = createActionGrid(this, COL3_X, ACTIONGRID_Y, [
       { icon: 'icon_character', label: 'Character', onClick: () => fadeToScene(this, 'Inventory') },
       { icon: 'icon_codex', label: 'Codex', onClick: () => fadeToScene(this, 'LoreCodex') },
-      {
-        icon: 'icon_skills', label: 'Loadout', onClick: () => fadeToScene(this, 'Loadout'),
+      { icon: 'icon_skills', label: 'Loadout', onClick: () => fadeToScene(this, 'Loadout'),
         badge: () => null,
       },
-      { icon: 'icon_shop', label: 'Shop', onClick: () => fadeToScene(this, 'ShardShop') },
+      { icon: 'icon_shard', label: 'Rites', onClick: () => this.openShardRites() },
       { icon: 'icon_menu', label: 'Menu', onClick: () => fadeToScene(this, 'Menu') },
       { icon: 'icon_settings', label: 'Settings', onClick: () => fadeToScene(this, 'Settings') },
     ], COL_W);
 
-    this.add.rectangle(COL2_X + COL_W / 2, DICE_PANEL_Y + DICE_PANEL_H / 2, COL_W, DICE_PANEL_H, 0x16191d, 0.94)
-      .setStrokeStyle(1, 0xc9a24b, 0.6);
+    const dicePanel = createPanel(this, { x: COL2_X + COL_W / 2, y: DICE_PANEL_Y + DICE_PANEL_H / 2, width: COL_W, height: DICE_PANEL_H, variant: 'stone', title: 'The Walk', depth: 1 });
+    void dicePanel;
     this.diceRoller = createDiceRoller(this, COL2_X + COL_W / 2, DICE_PANEL_Y + 70);
     this.diceRoller.container.setDepth(6);
     this.rollBtn = createButton(this, COL2_X + COL_W / 2, DICE_PANEL_Y + DICE_PANEL_H - 30, 'Roll (1d6)', () => this.handleRoll(), { width: COL_W - 24, height: 44, fontSize: '16px', depth: 6 });
 
-    this.add.rectangle(COL2_X + COL_W / 2, TILE_PANEL_Y + TILE_PANEL_H / 2, COL_W, TILE_PANEL_H, 0x16191d, 0.94)
-      .setStrokeStyle(1, 0xc9a24b, 0.6);
+    // Fresh descent: walk into the first chamber so the prologue always plays
+    // before any roll. Roll unlocks once it resolves (board re-loads at node 1).
+    if (game.currentNodeIndex < 1 && game.nodes[0]) {
+      this.rollBtn.setEnabled(false);
+      this.busy = true;
+      this.time.delayedCall(700, () => {
+        this.busy = false;
+        this.moveTo(1);
+      });
+    }
+
+    // First-descent coach: right after the prologue, teach the only verb.
+    if (game.currentNodeIndex >= 1 && game.currentNodeIndex <= NODES_PER_CHAPTER) {
+      this.showCoach('hint_roll', 'Roll the die — you will walk that many nodes.', COL2_X + COL_W / 2, DICE_PANEL_Y + DICE_PANEL_H + 18);
+    }
+
+    const aheadPanel = createPanel(this, { x: COL2_X + COL_W / 2, y: TILE_PANEL_Y + TILE_PANEL_H / 2, width: COL_W, height: TILE_PANEL_H, variant: 'stone', title: 'Ahead', depth: 1 });
+    void aheadPanel;
     this.preview = createNodePreview(this, COL2_X + COL_W / 2, TILE_PANEL_Y + 84, COL_W);
     this.preview.container.setDepth(6);
     this.preview.show(game.nodes[Math.max(0, game.currentNodeIndex - 1)]);
@@ -341,15 +375,11 @@ export class BoardScene extends Phaser.Scene {
     this.factionPanel = createFactionPanel(this, COL2_X, FACTION_PANEL_Y, COL_W);
     this.factionPanel.update(player.faction);
 
-    this.logBg = this.add.rectangle(COL2_X + COL_W / 2, LOG_PANEL_Y + LOG_PANEL_H / 2, COL_W, LOG_PANEL_H, 0x16191d, 0.9)
-      .setStrokeStyle(1, 0xc9a24b, 0.5);
+    const journal = createPanel(this, { x: COL2_X + COL_W / 2, y: LOG_PANEL_Y + LOG_PANEL_H / 2, width: COL_W, height: LOG_PANEL_H, variant: 'stone', title: 'Journal', depth: 1 });
+    void journal;
+    this.logLines = [];
     const startChapter = chapterForNode(Math.max(1, game.currentNodeIndex));
-    this.logText = this.add.text(COL2_X + 14, LOG_PANEL_Y + 14, this.chapterFlavor(startChapter), {
-      fontFamily: FONT_BODY,
-      fontSize: '14px',
-      color: PALETTE_HEX.boneMuted,
-      wordWrap: { width: COL_W - 28 },
-    }).setDepth(6);
+    this.pushLog(startChapter, game.currentNodeIndex, this.chapterFlavor(startChapter));
 
     this.updateBoardTitle(startChapter);
 
@@ -370,17 +400,35 @@ export class BoardScene extends Phaser.Scene {
       .setStrokeStyle(2, 0xc9a24b, 0.85).setDepth(30);
     this.add.rectangle(BOARD_X + BOARD_W / 2, BOARD_Y + TITLE_H / 2, BOARD_W, TITLE_H, 0x0e1013, 0.92).setDepth(4);
     this.add.rectangle(BOARD_X + BOARD_W / 2, BOARD_Y + TITLE_H, BOARD_W - 4, 2, 0xc9a24b, 0.6).setDepth(4);
-    this.titleText = this.add.text(BOARD_X + 20, BOARD_Y + 12, '', {
-      fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold,
+    this.titleText = this.add.text(BOARD_X + 20, BOARD_Y + 8, '', {
+      fontFamily: FONT_SERIF, fontSize: '24px', color: PALETTE_HEX.gold,
     }).setDepth(5);
-    this.titleSub = this.add.text(BOARD_X + BOARD_W - 20, BOARD_Y + 22, '', {
-      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted,
-    }).setOrigin(1, 0).setDepth(5);
+    this.titleSub = this.add.text(BOARD_X + 22, BOARD_Y + 40, '', {
+      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
+    }).setDepth(5);
+    if (typeof this.titleSub.setLetterSpacing === 'function') this.titleSub.setLetterSpacing(2);
   }
 
   private updateBoardTitle(chapter: number) {
     this.titleText?.setText(CHAPTER_NAMES[chapter] ?? 'The Threshold');
     this.titleSub?.setText(`Chapter ${chapter} / ${CHAPTERS}`);
+
+    // Chapter progress pips — five diamonds along the title bar's right edge.
+    if (this.chapterPips.length === 0) {
+      for (let i = 0; i < CHAPTERS; i++) {
+        const pip = this.add.rectangle(0, BOARD_Y + TITLE_H / 2, 12, 12).setAngle(45).setDepth(5);
+        this.chapterPips.push(pip);
+      }
+      const totalW = (CHAPTERS - 1) * 22;
+      this.chapterPips.forEach((pip, i) => pip.setX(BOARD_X + BOARD_W - 26 - (totalW) + i * 22));
+    }
+    this.chapterPips.forEach((pip, i) => {
+      const done = i + 1 < chapter;
+      const here = i + 1 === chapter;
+      if (here) pip.setFillStyle(0xe9c876, 1).setStrokeStyle(2, 0xc9a24b, 1);
+      else if (done) pip.setFillStyle(0xc9a24b, 0.8).setStrokeStyle(1, 0xc9a24b, 1);
+      else pip.setFillStyle(0x22262c, 1).setStrokeStyle(1, 0x9a9488, 0.6);
+    });
   }
 
   private chapterFlavor(chapter: number): string {
@@ -616,8 +664,32 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private log(msg: string) {
-    this.logText?.setText(msg);
-    this.logBg?.setAlpha(0.9);
+    const { game } = useGameStore.getState();
+    this.pushLog(chapterForNode(Math.max(1, game?.currentNodeIndex ?? 1)), Math.max(1, game?.currentNodeIndex ?? 1), msg);
+  }
+
+  /** Journal feed — newest entry on top with a node marker; older lines fade below. */
+  private pushLog(chapter: number, nodeIndex: number, msg: string) {
+    const entry = `C${chapter}·N${nodeIndex}  ${msg}`;
+    // Move existing lines down.
+    for (let i = this.logLines.length - 1; i >= 0; i--) {
+      const line = this.logLines[i];
+      const slot = i + 1;
+      if (slot >= 3) { line.destroy(); continue; }
+      line.setY(line.y + (LOG_PANEL_H - 28) / 3);
+      line.setAlpha(slot === 2 ? 0.65 : 0.4);
+    }
+    const line = this.add.text(COL2_X + 14, LOG_PANEL_Y + 26, entry, {
+      fontFamily: FONT_BODY,
+      fontSize: '13px',
+      color: PALETTE_HEX.bone,
+      wordWrap: { width: COL_W - 28 },
+    }).setDepth(6);
+    this.logLines.unshift(line);
+    if (this.logLines.length > 3) {
+      const dropped = this.logLines.pop();
+      dropped?.destroy();
+    }
   }
 
   private handleRoll() {
@@ -636,6 +708,11 @@ export class BoardScene extends Phaser.Scene {
         break;
       }
       if (CAPTURE_INDICES.includes(i) && !game.nodes[i - 1].resolved) {
+        target = i;
+        break;
+      }
+      // Pinned story beats halt movement too — crossing or landing plays them.
+      if (PINNED_STORY_NODES.has(i) && !game.nodes[i - 1].resolved) {
         target = i;
         break;
       }
@@ -845,6 +922,17 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
     if (node.type === 'event') {
+      // Pinned story beats take absolute precedence over the event pool.
+      // They resolve exactly once — marked resolved as they begin.
+      if (node.subtype.startsWith('story:')) {
+        const storyId = node.subtype.slice('story:'.length);
+        const storyEvent = STORY_EVENTS[storyId];
+        if (storyEvent) {
+          this.markResolved(node);
+          fadeToScene(this, 'Event', { eventDef: storyEvent });
+          return;
+        }
+      }
       const seen = new Set(player.history.filter((h) => h.startsWith('event_seen:')).map((h) => h.slice('event_seen:'.length)));
       const event = pickEvent(player, node.chapter, player.resonance, seen, Math.random, player.flags);
       fadeToScene(this, 'Event', { eventDef: event });
@@ -872,12 +960,6 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
     if (node.type === 'discovery') {
-      if (node.subtype.startsWith('ally:')) {
-        this.resolveAllyNode(player, node);
-        this.markResolved(node);
-        this.afterInlineResolution();
-        return;
-      }
       if (node.subtype === 'capture_point' && MINOR_LANDMARKS[node.index]) {
         this.markResolved(node);
         fadeToScene(this, 'Event', { eventDef: MINOR_LANDMARKS[node.index] });
@@ -918,42 +1000,13 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
-  /** Phase 5: a companion found in the world chooses to walk with you. */
-  private resolveAllyNode(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {
-    const allyId = node.subtype.replace('ally:', '') as keyof typeof ALLY_DEFS;
-    const def = ALLY_DEFS[allyId];
-    if (!def) {
-      this.log('Someone was here once, and left only a shape in the dust.');
-      return;
-    }
-    const existing = player.companions.find((c) => c.id === allyId);
-    if (existing) {
-      const shards = shardsForAllyVictory(existing.loyalty);
-      player.echoShards += applyShardBonus(player, shards);
-      this.log(`${def.name} finds you again — you are already companions. +${shards} Echo Shards.`);
-      return;
-    }
-    const state = freshAllyState(allyId);
-    const homeRegion = { warden_emissary: 'dominion', covenant_courier: 'covenant_deep', sable_zealot: 'sable_edge', archive_cartographer: 'keth_vor' }[allyId] as 'keth_vor' | 'dominion' | 'sable_edge' | 'covenant_deep';
-    // A companion that chooses to walk with you starts at the nominal accompany threshold (15)
-    // and is formally bound to its home region for loyalty growth. (bindRegion returns a new
-    // state, so we capture it rather than discarding the +5 loyalty bump.)
-    const bound = bindRegion({ ...state, loyalty: 15 }, homeRegion);
-    player.companions.push(bound);
-    player.echoShards += applyShardBonus(player, shardsForAllyVictory(5));
-    const s = useGameStore.getState();
-    s.addXp(8);
-    this.log(`${def.name} steps out of the hollow and chooses to walk with you. It is bound to ${homeRegion}.`);
-    this.preview?.setTip(`${def.name} joins you — it will fight beside you.`);
-  }
-
   private resolveDiscovery(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {
     // Capture points are handled separately in resolveNode (routed to a minor-landmark vignette).
     const LORE_POOL = [
       'the_hundredth_page', 'a_pressed_flower_that_isnt', 'the_counting_room', 'names_carved_then_scratched_out',
       'the_weight_of_unread_mail', 'a_childs_height_marks', 'the_last_entry', 'the_recipe_that_isnt_food',
       'the_map_that_updates_itself', 'the_second_moon_that_isnt_there', 'the_apology_never_sent',
-      'the_borrowed_hour', 'sera_voss_ledger_entry',
+      'the_borrowed_hour',
     ].filter((id) => !player.loreFragments.includes(id));
     const RELIC_POOL = ['sable_ash_blade', 'archive_field_coat', 'raiders_charm', 'dominion_boundary_seal', 'auctioneers_token', 'pressed_page'];
     const SUPPLY_POOL = ['ration', 'bandage', 'waterskin', 'traveler_salve'];
@@ -1107,12 +1160,15 @@ export class BoardScene extends Phaser.Scene {
     store.persist();
     if (CHECKPOINTS.includes(game.currentNodeIndex)) {
       audio.checkpoint();
-      const tx = this.add.text(GAME_WIDTH / 2, 300, '✦ Checkpoint Reached — Progress Saved ✦', {
+      const tx = this.add.text(GAME_WIDTH / 2, 300, '✦ Progress saved at this node ✦', {
         fontFamily: FONT_MONO, fontSize: '16px', color: '#c9a24b',
       }).setOrigin(0.5).setDepth(100).setAlpha(1);
       this.tweens.add({
         targets: tx, alpha: 0, y: 280, duration: 3000, ease: 'Power2', onComplete: () => tx.destroy(),
       });
+    }
+    if (!player.flags.hint_resonance && player.resonance >= 25) {
+      this.showCoach('hint_resonance', 'The Loom is noticing you — watch the meter.', COL3_X + COL_W / 2, PLAYER_PANEL_Y + PLAYER_PANEL_H - 46);
     }
     this.playerPanel?.update(player);
     this.factionPanel?.update(player.faction);
@@ -1130,10 +1186,127 @@ export class BoardScene extends Phaser.Scene {
     if (game.currentNodeIndex < TOTAL_NODES) this.rollBtn?.setEnabled(true);
   }
 
+  /**
+   * Shard Rites — spend run-held Echo Shards on board-level boons.
+   * Costs escalate +50% per purchase of the same rite this run.
+   */
+  private openShardRites() {
+    if (this.ritesOpen) return;
+    const store = useGameStore.getState();
+    const player = store.player;
+    if (!player) return;
+    this.ritesOpen = true;
+
+    const depth = 200;
+    const cx = GAME_WIDTH / 2;
+    const cy = GAME_HEIGHT / 2;
+    const parts: Array<{ destroy(): void }> = [];
+
+    const veil = this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.72).setDepth(depth).setInteractive();
+    parts.push(veil);
+
+    const panel = createPanel(this, { x: cx, y: cy - 10, width: 620, height: 470, variant: 'stone', title: 'Shard Rites', depth: depth + 1 });
+    parts.push(panel.container);
+
+    const balance = this.add.text(panel.width / 2 - 24, panel.contentY - 4, '', {
+      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.goldBright,
+    }).setOrigin(1, 0).setDepth(depth + 2);
+    panel.container.add(balance);
+    panel.container.add(this.add.image(-panel.width / 2 + 26, panel.contentY + 2, 'icon_shard').setDisplaySize(20, 20).setOrigin(0.5).setDepth(depth + 2));
+
+    interface RiteDef { key: string; name: string; desc: string; base: number }
+    const RITES: RiteDef[] = [
+      { key: 'mend', name: 'Mend', desc: 'Restore 40% HP & MP.', base: 15 },
+      { key: 'calm', name: 'Calm', desc: '-10 Resonance.', base: 20 },
+      { key: 'favor', name: 'Favor', desc: '+8 standing with your highest faction.', base: 25 },
+    ];
+    const costOf = (r: RiteDef) => Math.round(r.base * Math.pow(1.5, player.story.shardRites[r.key] ?? 0));
+
+    const rows: Array<Phaser.GameObjects.Text[]> = [];
+    const buttons: ReturnType<typeof createButton>[] = [];
+
+    RITES.forEach((rite, i) => {
+      const ry = panel.contentY + 44 + i * 86;
+      const nameT = this.add.text(-panel.width / 2 + 26, ry, rite.name.toUpperCase(), {
+        fontFamily: FONT_SERIF, fontSize: '17px', color: PALETTE_HEX.bone,
+      }).setLetterSpacing(1);
+      const descT = this.add.text(-panel.width / 2 + 26, ry + 22, rite.desc, {
+        fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted,
+      });
+      const costT = this.add.text(panel.width / 2 - 26, ry + 4, '', {
+        fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.goldBright,
+      }).setOrigin(1, 0);
+      const timesT = this.add.text(panel.width / 2 - 26, ry + 24, '', {
+        fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
+      }).setOrigin(1, 0);
+      panel.container.add([nameT, descT, costT, timesT]);
+      rows.push([costT, timesT]);
+
+      const btn = createButton(this, 0, ry + 58, 'Perform Rite', () => buy(rite), {
+        width: 200, height: 40, fontSize: '14px', variant: 'secondary', depth: depth + 2,
+      });
+      panel.container.add(btn.container);
+      buttons.push(btn);
+    });
+
+    const closeBtn = createButton(this, 0, panel.height / 2 - 36, 'Close', () => close(), {
+      width: 140, height: 38, fontSize: '14px', variant: 'ghost', depth: depth + 2,
+    });
+    panel.container.add(closeBtn.container);
+
+    const refresh = () => {
+      const p = useGameStore.getState().player!;
+      balance.setText(`SHARDS · RUN  ${p.echoShards}`);
+      RITES.forEach((rite, i) => {
+        const cost = costOf(rite);
+        const times = p.story.shardRites[rite.key] ?? 0;
+        rows[i][0].setText(`${cost} shards`);
+        rows[i][0].setColor(p.echoShards < cost ? PALETTE_HEX.danger : PALETTE_HEX.goldBright);
+        rows[i][1].setText(times > 0 ? `performed ×${times}` : '');
+        buttons[i].setEnabled(p.echoShards >= cost);
+      });
+    };
+
+    const buy = (rite: RiteDef) => {
+      const p = useGameStore.getState().player;
+      if (!p) return;
+      const cost = costOf(rite);
+      if (p.echoShards < cost) return;
+      p.echoShards -= cost;
+      p.story.shardRites[rite.key] = (p.story.shardRites[rite.key] ?? 0) + 1;
+      if (rite.key === 'mend') {
+        p.currentHP = Math.min(p.derived.maxHP, p.currentHP + Math.round(p.derived.maxHP * 0.4));
+        p.currentMP = Math.min(p.derived.maxMP, p.currentMP + Math.round(p.derived.maxMP * 0.4));
+      } else if (rite.key === 'calm') {
+        p.resonance = Math.max(0, p.resonance - 10);
+      } else {
+        const keys = Object.keys(p.faction) as (keyof typeof p.faction)[];
+        const best = keys.reduce((a, b) => (p.faction[a] >= p.faction[b] ? a : b));
+        p.faction[best] += 8;
+      }
+      audio.shardGain();
+      store.persist();
+      this.playerPanel?.update(p);
+      this.factionPanel?.update(p.faction);
+      this.log(`Shard Rite · ${rite.name} (${cost} shards).`);
+      this.actionGrid?.refresh();
+      refresh();
+    };
+
+    const close = () => {
+      parts.forEach((p) => p.destroy());
+      closeBtn.destroy();
+      buttons.forEach((b) => b.destroy());
+      this.ritesOpen = false;
+    };
+    veil.on('pointerdown', () => close());
+
+    refresh();
+  }
+
   private handleDeathFlow() {
     const store = useGameStore.getState();
-    const { game } = store;
-    const hadCheckpoint = !!game?.checkpointSnapshot && (game?.checkpointNodeIndex ?? 0) > 0;
+    const { game, player } = store;    const hadCheckpoint = !!game?.checkpointSnapshot && (game?.checkpointNodeIndex ?? 0) > 0;
     if (!hadCheckpoint) {
       store.handleDeath();
       fadeToScene(this, 'GameOver');
@@ -1149,7 +1322,7 @@ export class BoardScene extends Phaser.Scene {
       fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5).setDepth(d);
 
-    this.add.text(cx, cy - 40, `Fallen in Chapter ${chapterForNode(Math.max(1, game.currentNodeIndex))}.`, {
+    this.add.text(cx, cy - 40, `${player?.name ?? 'The Seeker'} falls in Chapter ${chapterForNode(Math.max(1, game.currentNodeIndex))}.`, {
       fontFamily: FONT_BODY, fontSize: '20px', color: PALETTE_HEX.bone,
     }).setOrigin(0.5).setDepth(d);
 

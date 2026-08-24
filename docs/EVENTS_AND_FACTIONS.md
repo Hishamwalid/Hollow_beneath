@@ -1,6 +1,8 @@
 # THE HOLLOW BENEATH — Events & Faction Interactions
 
-*Complete reference of every narrative event, trap, and minor landmark in the descent — and every way the four surface factions touch your run. Generated from the current data files (`src/data/events.ts`, `src/data/minorLandmarks.ts`, `src/data/bosses.ts`, `src/data/factions.ts`).*
+*Complete reference of every narrative event, trap, and minor landmark in the descent — and every way the four surface factions touch your run. Generated from the data files (`src/data/events.ts`, `src/data/minorLandmarks.ts`, `src/data/bosses.ts`, `src/data/factions.ts`).*
+
+> **Definitive Edition note:** the faction system no longer decides endings — it only colors the credits epilogue (see `WORLD_AND_FACTIONS.md`). Additionally, 11 pinned story beats (`src/data/storyEvents.ts`) play at fixed nodes 1–185 and take precedence over this event pool; boss pre-combat scenes live in `bosses.ts` / `SCENES.md`.
 
 ---
 
@@ -75,12 +77,12 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - Destroy it (STR ≥8) → **+5 Sable**, −3 Resonance, Muted Stone item
 - Walk away → **+3 Caravan**
 
-**The Caravan Merchant** *(caravan_merchant)* — ch 1–2 · Sera Voss sells supplies.
+**The Caravan Merchant** *(caravan_merchant)* — ch 1–2 · Mara, a Dust-Road trader, sells supplies.
 - Buy supplies (30g) [gate: caravan] → Ration, Waterskin, Caravan Knife
 - Blank book for 50g [gate: caravan] → Blank Book
 - Blank book for 8 Resonance [gate: caravan] → Blank Book, −8 Resonance
-- Ask why she left → **+5 Caravan, +3 Archive**
-- Rob her [COMBAT] → she was expecting it
+- Ask why she left the roads above → **+5 Caravan**
+- Rob her [COMBAT vs Dust-Road Raider] → she was expecting it
 
 **Mira Tol's Ledger** *(archivists_ledger)* — ch 1 · An Archive field scholar interviews you.
 - Answer her question (INT DC12) → **+12 Archive**, +15g, lore fragment (fail: **+2 Archive**)
@@ -109,7 +111,6 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 **The Caravan's Campfire** *(caravan_campfire)* — ch 1–2 · Travelers share fire and story.
 - Share your own story (WILL DC11) → **+12 Caravan**, −2 Resonance
 - Just listen → **+5 Caravan**
-- Ask about Sera Voss → **+4 Archive, +4 Caravan**, lore fragment
 
 **Sable Hunters** *(sable_hunters)* — ch 1–2 · Four hunters close in.
 - Hand over findings → **+18 Sable**, −5 Resonance

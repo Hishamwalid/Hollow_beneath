@@ -1,10 +1,11 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { SHARD_SHOP } from '@data/shardShop';
 import { useGameStore } from '@store/gameStore';
 import { canAfford, purchase } from '@systems/EchoShardSystem';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
+import { createTitle } from '@ui/headings';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH } from '@/config';
 
@@ -22,7 +23,7 @@ export class ShardShopScene extends Phaser.Scene {
     const cx = GAME_WIDTH / 2;
     this.rows = [];
 
-    this.add.text(cx, 50, 'Echo Shard Shop', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    createTitle(this, cx, 50, 'Echo Shard Shop');
     this.add
       .text(cx, 84, 'Permanent unlocks, spent from shards earned across every run.', {
         fontFamily: FONT_BODY,

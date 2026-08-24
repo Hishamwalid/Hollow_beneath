@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
-import { TUTORIAL_SCREENS } from '@data/tutorialText';
-import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
+import { INTRO_SCREEN, TUTORIAL_SCREENS, type TutorialScreen } from '@data/tutorialText';
+import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { createSectionLabel, createTitle, createDivider } from '@ui/headings';
+import { createButton } from '@ui/Button';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { settingsManager } from '@systems/SettingsManager';
@@ -8,9 +10,17 @@ import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 interface TutorialSceneData {
   returnTo?: string;
+  /** Single-screen mode: show only the intro page, then continue to creation. */
+  introOnly?: boolean;
 }
 
+/**
+ * Two roles:
+ *  • introOnly — one 3-line screen before the first descent (that's all).
+ *  • Field Manual — optional reference pages from Menu → How to Play.
+ */
 export class TutorialScene extends Phaser.Scene {
+  private screens: TutorialScreen[] = [];
   private screenIndex = 0;
   private fullText = '';
   private charIndex = 0;
@@ -20,6 +30,7 @@ export class TutorialScene extends Phaser.Scene {
   private promptText!: Phaser.GameObjects.Text;
   private skipText!: Phaser.GameObjects.Text;
   private iconContainer!: Phaser.GameObjects.Container;
+  private introBtn?: ReturnType<typeof createButton>;
   private busy = false;
   private returnTo = 'Menu';
 
@@ -29,29 +40,40 @@ export class TutorialScene extends Phaser.Scene {
 
   create(data?: TutorialSceneData) {
     this.returnTo = data?.returnTo ?? 'Menu';
+    this.screens = data?.introOnly ? [INTRO_SCREEN] : TUTORIAL_SCREENS;
     this.screenIndex = 0;
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
 
     const cx = GAME_WIDTH / 2;
 
+    // ---- Dedicated intro: a single journal moment before the sinkhole ---------
+    if (data?.introOnly) {
+      this.buildIntroScreen();
+      return;
+    }
+
+    if (!data?.introOnly) {
+      createSectionLabel(this, cx, 44, 'Field Manual', { origin: [0.5, 0.5] });
+    }
+
     this.titleText = this.add.text(cx, 80, '', {
       fontFamily: FONT_SERIF, fontSize: '28px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5).setDepth(10);
+    if (typeof this.titleText.setLetterSpacing === 'function') this.titleText.setLetterSpacing(2);
 
-    const panelBg = this.add.image(cx, 250, 'panel_dialog').setDisplaySize(800, 240).setDepth(10);
-    panelBg.setAlpha(0.9);
+    const panelBg = this.add.nineslice(cx, 250, 'paper_panel', undefined, 840, 280, 24, 24, 24, 24).setDepth(10);
 
-    this.bodyText = this.add.text(cx - 370, 152, '', {
-      fontFamily: FONT_BODY, fontSize: '18px', color: PALETTE_HEX.bone,
-      wordWrap: { width: 740 }, lineSpacing: 7,
+    this.bodyText = this.add.text(cx - 380, 140, '', {
+      fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.ink,
+      wordWrap: { width: 760 }, lineSpacing: 7,
     }).setDepth(11);
 
-    this.promptText = this.add.text(cx + 370, 350, '▾ Continue', {
-      fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.gold,
+    this.promptText = this.add.text(cx + 380, 372, '▾ Continue', {
+      fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.oxide,
     }).setOrigin(1, 0).setDepth(12).setAlpha(0);
 
-    this.skipText = this.add.text(GAME_WIDTH - 20, 20, '[Skip Tutorial]', {
+    this.skipText = this.add.text(GAME_WIDTH - 20, 20, data?.introOnly ? '[Skip]' : '[Close Manual]', {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(1, 0).setDepth(20).setInteractive({ useHandCursor: true });
     this.skipText.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
@@ -75,8 +97,42 @@ export class TutorialScene extends Phaser.Scene {
     this.showScreen(0);
   }
 
+  /** The one pre-descent moment: ornamented title, parchment sheet, one button.
+   *  Deliberately timer-free — three lines render instantly so nothing can
+   *  leave this screen blank (bad textSpeed values included). */
+  private buildIntroScreen() {
+    const cx = GAME_WIDTH / 2;
+    const screen = INTRO_SCREEN;
+
+    const title = createTitle(this, cx, 190, screen.title, { size: '42px' });
+    title.setDepth(5);
+    const divContainer = this.add.container(0, 0).setDepth(5);
+    createDivider(this, divContainer, cx, 244, 360);
+
+    const sheet = this.add.nineslice(cx, 430, 'paper_panel', undefined, 760, 230, 24, 24, 24, 24).setDepth(4);
+    void sheet;
+
+    const body = this.add.text(cx, 430, screen.body, {
+      fontFamily: FONT_BODY,
+      fontSize: '19px',
+      color: PALETTE_HEX.ink,
+      align: 'center',
+      wordWrap: { width: 660 },
+      lineSpacing: 9,
+    }).setOrigin(0.5).setDepth(6);
+    void body;
+
+    const btn = createButton(this, cx, 600, 'To the sinkhole', () => this.exitTutorial(), {
+      width: 280, height: 54, fontSize: '18px', variant: 'primary', depth: 6,
+    });
+    [title, btn.container].forEach((o, i) => {
+      o.setAlpha(0);
+      this.tweens.add({ targets: o, alpha: 1, duration: 500, delay: 200 + i * 350, ease: 'Sine.easeOut' });
+    });
+  }
+
   private showScreen(index: number) {
-    const screen = TUTORIAL_SCREENS[index];
+    const screen = this.screens[index];
     if (!screen) { this.exitTutorial(); return; }
 
     this.screenIndex = index;
@@ -88,14 +144,14 @@ export class TutorialScene extends Phaser.Scene {
     this.promptText.setAlpha(0);
 
     this.timer?.remove();
-    const spd = settingsManager.get().textSpeed;
+    const spd = Math.max(20, settingsManager.get().textSpeed);
     this.timer = this.time.addEvent({ delay: Math.round(14 * (100 / spd)), callback: this.tick, loop: true });
 
     this.iconContainer.removeAll(true);
     const icons = screen.icons ?? [];
     const iconStartX = GAME_WIDTH / 2 - (icons.length - 1) * 30;
     icons.forEach((key, i) => {
-      const img = this.add.image(iconStartX + i * 60, 400, key).setDisplaySize(32, 32).setDepth(13);
+      const img = this.add.image(iconStartX + i * 60, 416, key).setDisplaySize(30, 30).setDepth(13);
       this.iconContainer.add(img);
     });
   }
@@ -125,7 +181,7 @@ export class TutorialScene extends Phaser.Scene {
     this.busy = true;
     audio.click();
     const next = this.screenIndex + 1;
-    if (next >= TUTORIAL_SCREENS.length) {
+    if (next >= this.screens.length) {
       this.exitTutorial();
     } else {
       audio.pageTurn();

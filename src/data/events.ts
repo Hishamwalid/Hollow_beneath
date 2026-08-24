@@ -7,7 +7,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'The Half-Eaten Meal',
     chapterRange: [1, 1],
     flavorText:
-      'A Venn common-house. Five thousand years old. The bread on the table still looks fresh. A cup sits beside it, untouched. The chair is pulled back, as if someone stood up mid-bite and simply... never sat down again.\n\nOn the wall: "The meal is finished when the guest departs." But no one departed.',
+      'A Venn common-house. Five thousand years old. The bread on the table still looks fresh. A cup sits beside it, untouched. The chair is pulled back, as if someone stood up mid-bite and simply... never sat down again.\n\n"This is how the Venn left," you think. "Mid-bite."\n\nOn the wall: "The meal is finished when the guest departs." But no one departed.',
     choices: [
       {
         id: 'eat',
@@ -126,7 +126,7 @@ export const EVENTS: Record<string, EventDef> = {
           player.faction.sable += 10;
           player.resonance = Math.min(100, player.resonance + 3);
           ctx.setFlag('sable_scripture_unlocked');
-          return 'You recite the verse correctly, in the old cadence. Something in their posture changes. (+10 Sable, +3 Resonance)';
+          return 'You recite the verse correctly, in the old cadence. Something in their posture changes.\n\n"The Sentinel asked my mother the same question," one of them says, before they wave you through. You do not tell them she was not answering it. (+10 Sable, +3 Resonance)';
         },
       },
       {
@@ -148,7 +148,7 @@ export const EVENTS: Record<string, EventDef> = {
     chapterRange: [1, 1],
     maxResonance: 24,
     flavorText:
-      'A section of Venn wall hums at a frequency you feel in your sternum. You hear your own voice — speaking words you haven\'t said yet.',
+      'A section of Venn wall hums at a frequency you feel in your sternum. You hear your own voice — speaking words you haven\'t said yet.\n\nAnd beneath it, thinner, older, unmistakable:\n\nEVE (V.O.): "Don\'t answer it."',
     choices: [
       {
         id: 'touch',
@@ -197,7 +197,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'The Caravan Merchant',
     chapterRange: [1, 2],
     flavorText:
-      'A woman with maps tattooed on her forearms tends a fire. "Sera Voss. I left the Archive ten years ago. I sleep through the night now."',
+      'A woman with road-dust in her braids tends a fire. "Mara. Dust-Road Caravan. I trade fair, I don\'t ask questions, and I sleep through the night now."',
     choices: [
       {
         id: 'buy_supplies',
@@ -222,6 +222,17 @@ export const EVENTS: Record<string, EventDef> = {
         },
       },
       {
+        id: 'blank_book_shards',
+        label: 'Blank book — pay in shards. (12 Echo Shards)',
+        factionGate: 'caravan',
+        requirement: (p) => p.echoShards >= 12,
+        onSuccess: (player) => {
+          player.echoShards -= 12;
+          player.inventory.push({ id: 'blank_book', qty: 1 });
+          return 'She weighs the shards in her palm, nods once, and hands the book over. The pages are already, somehow, starting to fill. (-12 Echo Shards, Blank Book)';
+        },
+      },
+      {
         id: 'blank_book_resonance',
         label: 'Ask about the blank book. (Pay 8 Resonance)',
         factionGate: 'caravan',
@@ -234,13 +245,12 @@ export const EVENTS: Record<string, EventDef> = {
       },
       {
         id: 'ask_why',
-        label: 'Ask why she left.',
+        label: 'Ask why she left the roads above.',
         factionGate: 'caravan',
         onSuccess: (player, ctx) => {
           player.faction.caravan += 5;
-          player.faction.archive += 3;
-          ctx.setFlag('sera_backstory_known');
-          return '"The Archive preserves everything," she says, "including the mistake it\'s about to let someone else make. I got tired of watching." (+5 Caravan, +3 Archive)';
+          ctx.setFlag('merchant_backstory_known');
+          return '"Everything up top is priced," she says, poking the fire. "Down here everything\'s paid for already. Nobody\'s haggling yet. I like watching them not know that." (+5 Caravan)';
         },
       },
       {
@@ -251,7 +261,7 @@ export const EVENTS: Record<string, EventDef> = {
           return 'You go for the knife first. She was expecting that.';
         },
         combat: {
-          enemyIds: ['sera_voss'],
+          enemyIds: ['dust_road_raider'],
           onVictory: (player) => {
             player.gold += 80;
             player.inventory.push({ id: 'caravan_knife', qty: 1 }, { id: 'blank_book', qty: 1 });
@@ -411,7 +421,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: "Mira Tol's Ledger",
     chapterRange: [1, 1],
     flavorText:
-      'A woman in a pale blue coat sits cross-legged on a fallen column, ink-stained fingers turning a brass-hinged ledger. "Archivist Mira Tol," she says, without looking up. "You\'re carrying more Resonance than your face admits. Sit. Talk to me. I catalogue everything. Including you, now."',
+      'A woman in a pale blue coat sits cross-legged on a fallen column, ink-stained fingers turning a brass-hinged ledger. "Archivist Mira Tol," she says, without looking up. "You\'re carrying more Resonance than your face admits. Sit. Talk to me. I catalogue everything. Including you, now."\n\nShe glances up — and for the first time actually sees you. Her quill stops.\n\n"Wait. I know that face. You have her jaw." She closes the ledger slowly. "Eve\'s child. Something down here remembers her. Whatever you do, don\'t assume it remembers her kindly."',
     choices: [
       {
         id: 'answer_her_question',
@@ -472,7 +482,7 @@ export const EVENTS: Record<string, EventDef> = {
           player.faction.caravan += 10;
           player.inventory.push({ id: 'ash_marked_wrap', qty: 1 });
           ctx.setFlag('saved_marked_child');
-          return "The patrol passes without slowing. The child exhales like they've been holding it for days, then presses their marked wrap into your hands before running. \"Don't need it now,\" they say. (-15 Sable, +10 Caravan, Ash-Marked Wrap)";
+          return "The patrol passes without slowing. The child exhales like they've been holding it for days, then presses their marked wrap into your hands before running. \"Don't need it now,\" they say. Then, over their shoulder, words you will carry the rest of the way down: \"The Hollowed Man told me — she said her child would come.\" (-15 Sable, +10 Caravan, Ash-Marked Wrap)";
         },
         onFailure: () => 'The patrol rounds the corner before you can do anything but stand between them and the wall.',
         combat: { enemyIds: ['sable_zealot', 'sable_zealot'] },
@@ -566,7 +576,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'The Toll Road',
     chapterRange: [1, 2],
     flavorText:
-      'Three figures block a narrow stretch of the path, layered desert fabric, no fixed symbol. "Not all of us answer to Sera Voss," the lead one says. "Toll\'s toll. Pay it, or we take it a worse way."',
+      'Three figures block a narrow stretch of the path, layered desert fabric, no fixed symbol. "Caravan\'s gone soft," the lead one says. "Toll\'s toll. Pay it, or we take it a worse way."',
     choices: [
       {
         id: 'pay_toll',
@@ -933,7 +943,7 @@ export const EVENTS: Record<string, EventDef> = {
         onSuccess: (player, ctx) => {
           ctx.setFlag('wrote_own_page');
           player.faction.archive += 5;
-          return 'You leave something behind, for whoever comes after — not an answer, just proof someone asked the questions honestly. (+5 Archive)';
+          return 'You open the blank book and write — not an answer, just proof someone asked the questions honestly.\n\nAt the top of the page, three words: "For the next one." (+5 Archive)';
         },
       },
     ],
@@ -963,16 +973,6 @@ export const EVENTS: Record<string, EventDef> = {
         onSuccess: (player) => {
           player.faction.caravan += 5;
           return "You don't add anything. Nobody minds. Some nights the only thing asked of you is to be there. (+5 Caravan)";
-        },
-      },
-      {
-        id: 'ask_about_sera',
-        label: 'Ask what Sera Voss was like, before.',
-        onSuccess: (player, ctx) => {
-          player.faction.archive += 4;
-          player.faction.caravan += 4;
-          ctx.addLoreFragment('sera_voss_ledger_entry');
-          return '"Quieter," one of them says. "Then louder. Then quiet again, but a different kind." Nobody elaborates further, and you get the sense nobody has to. (+4 Archive, +4 Caravan, a lore fragment)';
         },
       },
     ],
@@ -1204,7 +1204,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'The Echoing Hallway',
     chapterRange: [1, 2],
     flavorText:
-      'Every step echoes twice. Once forward, once backward. One of them is not your step — it comes a fraction too late, and from slightly closer than it should.',
+      'Every step echoes twice. Once forward, once backward. One of them is not your step — it comes a fraction too late, and from slightly closer than it should.\n\nSomewhere in the doubled footsteps, a thought arrives that does not feel like yours:\n\n"I remember Mom teaching me this. Wait. Did she?"',
     choices: [
       {
         id: 'walk_through',
@@ -1321,6 +1321,17 @@ export const EVENTS: Record<string, EventDef> = {
         },
       },
       {
+        id: 'buy_courier_map_shards',
+        label: 'Ask about the route ahead. (Pay 10 Echo Shards)',
+        requirement: (p) => p.echoShards >= 10,
+        onSuccess: (player, ctx) => {
+          player.echoShards -= 10;
+          player.faction.caravan += 8;
+          ctx.setFlag('bought_route_info');
+          return '"Shards travel better than coin," she says, drawing the path in the dirt — three shortcuts, two danger zones, one place you should absolutely not sleep. (-10 Echo Shards, +8 Caravan)';
+        },
+      },
+      {
         id: 'ask_courier_rumor',
         label: 'Ask about the road ahead.',
         onSuccess: (player, ctx) => {
@@ -1355,7 +1366,7 @@ export const EVENTS: Record<string, EventDef> = {
     chapterRange: [1, 1],
     minResonance: 20,
     flavorText:
-      'The song is not celebration. It is grief. A circle of Ash Covenant novices sings a slow, aching hymn, tears cutting tracks through the ash on their cheeks. They are singing for someone they lost into the Loom.',
+      'The song is not celebration. It is grief. A circle of Ash Covenant novices sings a slow, aching hymn, tears cutting tracks through the ash on their cheeks. They are singing for someone they lost into the Loom.\n\nAs you pass, one novice turns to you, eyes wet, and says: "Eve almost joined us. She took a fragment when she left. We still sing to it."',
     choices: [
       {
         id: 'join_lament',

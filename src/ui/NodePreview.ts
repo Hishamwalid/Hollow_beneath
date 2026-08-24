@@ -1,14 +1,14 @@
 import Phaser from 'phaser';
 import type { BoardNode } from '@data/types';
-import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from './uiTheme';
+import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 
-const NODE_LABELS: Record<string, string> = {
-  event: 'A Choice Awaits',
-  combat: 'Danger Ahead',
-  rest: 'A Place to Breathe',
-  discovery: 'Something Left Behind',
-  trap: 'Something Feels Wrong',
-  landmark: 'The Cave Mouth',
+const NODE_INFO: Record<string, { label: string; explain: string; ring: number }> = {
+  event: { label: 'A Choice Awaits', explain: 'A story moment — your choices shift factions & Resonance.', ring: 0xc9a24b },
+  combat: { label: 'Danger Ahead', explain: 'Enemies bar the path. Win for XP and loot.', ring: 0xb0453f },
+  rest: { label: 'A Place to Breathe', explain: 'Recover HP / MP. Rests also calm Resonance.', ring: 0x5c8a5c },
+  discovery: { label: 'Something Left Behind', explain: 'Search for gold, items, lore, or Echo Shards.', ring: 0x5dade2 },
+  trap: { label: 'Something Feels Wrong', explain: 'A hazard — DEX check to dodge the worst.', ring: 0xe67e22 },
+  landmark: { label: 'The Cave Mouth', explain: 'A chapter boss guards this door.', ring: 0xe9c876 },
 };
 
 export interface NodePreviewCard {
@@ -19,31 +19,50 @@ export interface NodePreviewCard {
   destroy: () => void;
 }
 
-/** A vertically-stacked "tile" card: badge icon, "TILE N" title, a short description, and an optional tip. */
+/** "Next node" tile: icon badge, NODE n · name, a one-line explainer, optional tip. */
 export function createNodePreview(scene: Phaser.Scene, x: number, y: number, width = 214): NodePreviewCard {
   const badgeR = 30;
   const badge = scene.add.circle(0, -46, badgeR, 0x22262c).setStrokeStyle(2, 0xc9a24b, 0.9);
   const icon = scene.add.image(0, -46, 'node_event').setDisplaySize(28, 28);
-  const title = scene.add.text(0, -4, 'TILE —', {
-    fontFamily: FONT_SERIF, fontSize: '20px', color: PALETTE_HEX.gold,
+  const done = scene.add.text(18, -64, '✔', {
+    fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.ok,
+  }).setOrigin(0.5).setVisible(false);
+  const indexLine = scene.add.text(-width / 2 + 14, -4, '', {
+    fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
+  }).setOrigin(0, 0.5).setLetterSpacing(typeof scene.add.text === 'function' ? 1 : 0);
+  const title = scene.add.text(0, -2, 'NODE —', {
+    fontFamily: FONT_SERIF, fontSize: '19px', color: PALETTE_HEX.gold,
   }).setOrigin(0.5);
-  const sub = scene.add.text(0, 22, '', {
-    fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.boneMuted,
+  const sub = scene.add.text(0, 24, '', {
+    fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.bone,
     align: 'center', wordWrap: { width: width - 24 },
   }).setOrigin(0.5, 0);
-  const tip = scene.add.text(0, 56, '', {
+  const explain = scene.add.text(0, 46, '', {
+    fontFamily: FONT_BODY, fontSize: '12px', color: PALETTE_HEX.boneMuted,
+    fontStyle: 'italic', align: 'center', wordWrap: { width: width - 28 },
+  }).setOrigin(0.5, 0);
+  const tip = scene.add.text(0, 72, '', {
     fontFamily: FONT_BODY, fontSize: '12px', color: PALETTE_HEX.gold,
     fontStyle: 'italic', align: 'center', wordWrap: { width: width - 24 },
   }).setOrigin(0.5, 0);
-  const container = scene.add.container(x, y, [badge, icon, title, sub, tip]);
+  const container = scene.add.container(x, y, [badge, icon, done, indexLine, title, sub, explain, tip]);
 
   return {
     container,
     show: (node: BoardNode) => {
+      const info = NODE_INFO[node.type] ?? { label: node.type, explain: '', ring: 0xc9a24b };
       icon.setTexture(`node_${node.type}`);
-      title.setText(`TILE ${node.index}`);
-      sub.setText(NODE_LABELS[node.type] ?? node.type);
+      badge.setStrokeStyle(2, info.ring, 0.95);
+      title.setText(info.label.toUpperCase());
+      if (typeof title.setLetterSpacing === 'function') title.setLetterSpacing(1);
+      indexLine.setText(`NODE ${node.index}`);
+      sub.setText('');
+      explain.setText(node.resolved ? 'Resolved.' : info.explain);
+      done.setVisible(node.resolved);
       tip.setText('');
+      // Nudge layout when resolved line hidden.
+      sub.setY(node.resolved ? 20 : 24);
+      explain.setY(node.resolved ? 40 : 46);
     },
     setTip: (text: string) => tip.setText(text),
     destroy: () => container.destroy(),

@@ -1,10 +1,12 @@
 import type { DerivedStats, Equipment, StatBlock } from './types';
 import { ITEMS } from './items';
 
-export const POINT_BUY_TOTAL = 30;
-export const STAT_MIN = 1;
+/**
+ * Definitive edition: the descent is one person's journey, so every run starts
+ * from the same stat spread. The only creation choice is the player's name.
+ */
+export const STARTING_STATS: StatBlock = { str: 6, dex: 6, con: 6, int: 6, will: 6 };
 export const STAT_MAX = 10;
-export const BALANCED_REFERENCE: StatBlock = { str: 6, dex: 6, con: 6, int: 6, will: 6 };
 
 export interface EquipmentBonuses {
   weaponAtk: number;
@@ -33,42 +35,6 @@ export function computeDerivedStats(stats: StatBlock, bonuses: EquipmentBonuses)
   const dodge = Math.min(40, stats.dex * 2);
 
   return { maxHP, maxMP, attack, defense, magicAttack, magicDefense, speed, accuracy, dodge };
-}
-
-export function pointsSpent(stats: StatBlock): number {
-  return stats.str + stats.dex + stats.con + stats.int + stats.will;
-}
-
-export function isValidBuild(stats: StatBlock): boolean {
-  const vals = [stats.str, stats.dex, stats.con, stats.int, stats.will];
-  if (vals.some((v) => v < STAT_MIN || v > STAT_MAX)) return false;
-  return pointsSpent(stats) === POINT_BUY_TOTAL;
-}
-
-export const PRESET_BUILDS: Record<string, StatBlock> = {
-  Balanced: { str: 6, dex: 6, con: 6, int: 6, will: 6 },
-  Warrior: { str: 9, dex: 5, con: 8, int: 2, will: 6 },
-  Scholar: { str: 2, dex: 5, con: 4, int: 9, will: 10 },
-  Ranger: { str: 5, dex: 10, con: 4, int: 4, will: 7 },
-  Guardian: { str: 6, dex: 4, con: 10, int: 3, will: 7 },
-  Shadow: { str: 4, dex: 7, con: 5, int: 6, will: 8 },
-};
-
-const STAT_KEYS: Array<keyof StatBlock> = ['str', 'dex', 'con', 'int', 'will'];
-
-/** Which preset archetype a final stat spread most resembles, even if hand-tuned after a preset click. */
-export function closestPresetName(stats: StatBlock): string {
-  let best = 'Balanced';
-  let bestDist = Infinity;
-  for (const name of Object.keys(PRESET_BUILDS)) {
-    const preset = PRESET_BUILDS[name];
-    const dist = STAT_KEYS.reduce((sum, k) => sum + (stats[k] - preset[k]) ** 2, 0);
-    if (dist < bestDist) {
-      bestDist = dist;
-      best = name;
-    }
-  }
-  return best;
 }
 
 export function getEquipmentBonuses(equipment: Equipment): EquipmentBonuses {

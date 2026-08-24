@@ -36,9 +36,10 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
   const bg = scene.add.rectangle(width / 2, height / 2, width, height, 0x16191d, 0.94).setStrokeStyle(1, 0xc9a24b, 0.6);
   container.add(bg);
 
-  container.add(scene.add.text(width / 2, 14, 'THE PLAYER', {
+  const nameText = scene.add.text(width / 2, 14, 'THE PLAYER', {
     fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.bone,
-  }).setOrigin(0.5, 0));
+  }).setOrigin(0.5, 0);
+  container.add(nameText);
 
   const portraitSize = width - 32;
   const portraitY = 42;
@@ -73,9 +74,10 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
   return {
     container,
     update: (player: PlayerState) => {
+      nameText.setText((player.name || 'THE PLAYER').toUpperCase());
       levelText.setText(`Level: ${player.level}`);
       skillsText.setText(`Loadout ${player.equippedSkills.length}/6`);
-      shardsText.setText(`Echo Shards: ${player.echoShards}`);
+      shardsText.setText(`Shards · Run: ${player.echoShards}`);
       hpBar.setPct(player.currentHP / Math.max(1, player.derived.maxHP));
       hpText.setText(`${player.currentHP}/${player.derived.maxHP}`);
       mpBar.setPct(player.currentMP / Math.max(1, player.derived.maxMP));

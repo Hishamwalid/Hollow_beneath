@@ -1,8 +1,8 @@
-import type { BestRunStats, GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
+﻿import type { BestRunStats, GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
 import { MAX_EQUIPPED_SKILLS } from '@data/types';
 
 const STORAGE_KEY = 'hollow_beneath_save_v1';
-const VERSION = 7;
+const VERSION = 10;
 
 function simpleChecksum(payload: string): string {
   let hash = 0;
@@ -44,8 +44,10 @@ export function saveGame(meta: MetaState, activeRun: SaveBlob['activeRun']): voi
 
 /**
  * Upgrades older save blobs to the current VERSION.
+ * v8 = definitive edition: companions removed entirely; PlayerState gains
+ * `story` (eveVoiceHeard / motherJournalFound) for the new narrative.
  * v7 = page system removed: GameState.currentPage/checkpointPage and BestRunStats.page
- * are gone (chapter derives from the node index); meta.bestRun.page → chapter.
+ * are gone (chapter derives from the node index); meta.bestRun.page â†’ chapter.
  * v6 = combat revamp: classes/AP/fatigue/insight/fear/position/skill points are gone;
  * skills use a 6-slot equipped loadout; meta gains Bestiary discovery records.
  */
@@ -53,7 +55,7 @@ function migrateBlob(blob: SaveBlob): SaveBlob {
   if (blob.version >= VERSION) return blob;
   const player = blob.activeRun?.player as ((PlayerState & Record<string, unknown>) & { skillPoints?: unknown }) | null | undefined;
   if (player) {
-    // Legacy fields are dropped silently — the revamp removed them outright.
+    // Legacy fields are dropped silently â€” the revamp removed them outright.
     delete (player as Record<string, unknown>).classId;
     delete (player as Record<string, unknown>).fatigue;
     delete (player as Record<string, unknown>).insight;
@@ -65,7 +67,19 @@ function migrateBlob(blob: SaveBlob): SaveBlob {
     if (!Array.isArray(player.equippedSkills)) {
       player.equippedSkills = player.skillsKnown.slice(-MAX_EQUIPPED_SKILLS);
     }
-    if (!Array.isArray(player.companions)) player.companions = [];
+    // v8: companions no longer exist; story state is initialized fresh.
+    delete (player as Record<string, unknown>).companions;
+    if (!player.story || typeof player.story !== 'object') {
+      player.story = { eveVoiceHeard: 0, motherJournalFound: false, shardRites: {} };
+    }
+    // v10: Shard Rite purchase counters.
+    if (!player.story.shardRites || typeof player.story.shardRites !== 'object') {
+      player.story.shardRites = {};
+    }
+    // v9: the player names themselves before descending.
+    if (typeof player.name !== 'string' || player.name.trim().length === 0) {
+      player.name = "Eve's Child";
+    }
   }
   if (blob.activeRun?.game) {
     const g = blob.activeRun.game as GameState & Record<string, unknown>;
@@ -95,7 +109,7 @@ export function loadGame(): { meta: MetaState; activeRun: SaveBlob['activeRun'] 
     // Checksum is verified against the *stored* payload (pre-migration), so old saves aren't flagged corrupt.
     const payload = payloadOf(blob.meta, blob.activeRun);
     if (simpleChecksum(payload) !== blob.checksum) {
-      console.warn('Save checksum mismatch — save may be corrupted. Loading fresh meta.');
+      console.warn('Save checksum mismatch â€” save may be corrupted. Loading fresh meta.');
       return { meta: defaultMeta(), activeRun: null };
     }
     const migrated = migrateBlob(blob);

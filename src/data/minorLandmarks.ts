@@ -335,7 +335,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
           ctx.addEchoShards(3);
           ctx.addLoreFragment('the_nineteenth_marker');
           ctx.setFlag('read_nineteenth_marker');
-          return `There is a postscript, nearly invisible: "For Lyra." Your blood runs cold. +${gold} gold, +3 Echo Shards, a lore fragment, a flag set.`;
+          return `There is a postscript, nearly invisible: "For my child." Your blood runs cold. +${gold} gold, +3 Echo Shards, a lore fragment, a flag set.`;
         },
       },
     ],

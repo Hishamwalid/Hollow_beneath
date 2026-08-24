@@ -210,7 +210,7 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     id: 'the_nineteenth_marker',
     title: 'The Nineteenth Marker',
     category: 'venn',
-    text: 'The penultimate marker is the smallest, the carving hurried, almost desperate. "Almost," it says. And then, in a postscript so faint it is nearly invisible: "For Lyra." The name is correct. The stone should not know it.',
+    text: 'The penultimate marker is the smallest, the carving hurried, almost desperate. "Almost," it says. And then, in a postscript so faint it is nearly invisible: "For my child." The words are addressed to someone. Down here, that can only mean one thing: she made it this far, and she was still thinking of home.',
   },
 
   // ---- New: discovery-node flavor (10) --------------------------------------
@@ -280,12 +280,6 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     title: 'The Borrowed Hour',
     category: 'loom',
     text: "A clock, stopped, its hands pointing at a time that does not match the light outside. Wind it, and it runs backward for exactly one hour before stopping again at the same mark. No one who has tried it agrees on what they saw during that hour. All of them agree it felt like being given something back.",
-  },
-  sera_voss_ledger_entry: {
-    id: 'sera_voss_ledger_entry',
-    title: "A Page from Sera Voss's Ledger",
-    category: 'faction',
-    text: 'Ten years of Caravan trade routes, tolls, and casualties, kept in the same hand — and one line, dated ten years back almost to the day, that isn\'t about trade at all: "Left the Archive today. Slept the whole night through. Did not dream of understanding anything. Best sleep of my life."',
   },
 
   // ---- Event variant lore (B1) ------------------------------------------------

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Headless smoke test for the revamped combat system ("Echo" architecture).
  * Run with: npm run test
  *
@@ -8,7 +8,7 @@
  * endings, and the 0-HP defeat path. No Phaser, no DOM.
  */
 import type { EnemyAffinities, PlayerState, StatBlock } from '@data/types';
-import { generateBoard, chapterForIndex, scalingForIndex, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
+import { generateBoard, buildQuotaBag, chapterForIndex, scalingForIndex, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
 import { NODES_PER_CHAPTER } from './src/config';
 import { ENEMIES, SUMMON_ENEMIES, enemiesForChapter, stageForChapter } from '@data/enemies';
 import { BOSSES, TOTAL_MAJOR_BOSSES } from '@data/bosses';
@@ -17,7 +17,8 @@ import { EVENTS, eligibleEvents } from '@data/events';
 import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { WHISPERS } from '@data/whispers';
 import { ITEMS } from '@data/items';
-import { ENDINGS } from '@data/endings';
+import { ENDINGS, evaluateEnding } from '@data/endings';
+import { PINNED_STORY_EVENTS, STORY_EVENTS } from '@data/storyEvents';
 import { CombatEngine, type CombatSnapshot, type QteQuality } from '@systems/CombatEngine';
 
 let passed = 0;
@@ -29,13 +30,13 @@ function check(name: string, cond: boolean, detail?: string): void {
     passed++;
   } else {
     failed++;
-    failures.push(`${name}${detail ? ` — ${detail}` : ''}`);
-    console.error(`  ✗ ${name}${detail ? ` — ${detail}` : ''}`);
+    failures.push(`${name}${detail ? ` â€” ${detail}` : ''}`);
+    console.error(`  âœ— ${name}${detail ? ` â€” ${detail}` : ''}`);
   }
 }
 
 function section(title: string): void {
-  console.log(`\n■ ${title}`);
+  console.log(`\nâ–  ${title}`);
 }
 
 // ============================================================================
@@ -44,6 +45,17 @@ function section(title: string): void {
 
 function makeStats(): StatBlock {
   return { str: 6, dex: 6, con: 6, int: 6, will: 6 };
+}
+
+function makeCtx() {
+  return {
+    rng: Math.random,
+    setFlag: () => {},
+    hasFlag: () => false,
+    addLoreFragment: () => {},
+    addEchoShards: () => {},
+    addXp: () => {},
+  };
 }
 
 function makePlayer(overrides?: Partial<PlayerState>): PlayerState {
@@ -61,6 +73,7 @@ function makePlayer(overrides?: Partial<PlayerState>): PlayerState {
   };
   const chapter5 = chapterGrantSkills(5);
   return {
+    name: 'Test',
     stats,
     derived,
     currentHP: 500,
@@ -74,7 +87,7 @@ function makePlayer(overrides?: Partial<PlayerState>): PlayerState {
     faction: { sable: 0, archive: 0, covenant: 0, caravan: 0 },
     equipment: { weapon: 'rusty_dagger', armour: 'leather_vest', accessory: null, focus: 'cracked_lens' },
     inventory: [],
-    companions: [],
+    story: { eveVoiceHeard: 0, motherJournalFound: false, shardRites: {} },
     flags: {},
     history: [],
     loreFragments: [],
@@ -180,6 +193,48 @@ section('1. Board generation');
   );
   check('chapters cover 1..5', board.every((n) => n.chapter === chapterForIndex(n.index)));
   check('scaling grows with depth', scalingForIndex(1).hp < scalingForIndex(200).hp);
+  // Pinned story events: every pinned node exists, is an event node, and carries its id.
+  const pinnedEntries = Object.entries(PINNED_STORY_EVENTS);
+  check('11 story beats pinned', pinnedEntries.length === 11, `got ${pinnedEntries.length}`);
+  for (const [nodeStr, storyId] of pinnedEntries) {
+    const idx = Number(nodeStr);
+    const node = board[idx - 1];
+    check(`story node ${idx} generated`, !!node && node.type === 'event' && node.subtype === `story:${storyId}`,
+      node ? `${node.type}/${node.subtype}` : 'missing');
+    check(`story '${storyId}' defined`, !!STORY_EVENTS[storyId]);
+    const ev = STORY_EVENTS[storyId]!;
+    check(`story '${storyId}' choices resolvable`, ev.choices.every((c) => typeof c.onSuccess(makePlayer(), makeCtx()) === 'string'));
+  }
+  // No companions anywhere.
+  check('no companion nodes on board', board.every((n) => !n.subtype.startsWith('ally:')));
+
+  // ---- Distribution constraints ---------------------------------------------
+  const isFreeNode = (n: BoardNode) => !LANDMARK_INDICES.includes(n.index) && n.subtype !== 'capture_point' && !n.subtype.startsWith('story:');
+  let adjClashes = 0;
+  for (let i = 0; i < board.length - 1; i++) {
+    if (isFreeNode(board[i]) && isFreeNode(board[i + 1]) && board[i].type === board[i + 1].type) adjClashes++;
+  }
+  check('no same-type nodes side by side', adjClashes === 0, `${adjClashes} clashes`);
+
+  for (let ch = 1; ch <= 5; ch++) {
+    const freeTypes = board.filter((n) => n.chapter === ch && isFreeNode(n)).map((n) => n.type);
+    const expected = buildQuotaBag(freeTypes.length);
+    const tally = (arr: string[]) => {
+      const acc: Record<string, number> = arr.reduce<Record<string, number>>((a, t) => { a[t] = (a[t] ?? 0) + 1; return a; }, {});
+      return Object.keys(acc).sort().map((k) => `${k}:${acc[k]}`).join(',');
+    };
+    check(
+      `chapter ${ch} matches quota bag exactly`,
+      tally(freeTypes) === tally(expected),
+      `got [${tally(freeTypes)}] want [${tally(expected)}]`,
+    );
+  }
+
+  const replayed = generateBoard(makeRng(42));
+  check('same seed reproduces identical board', JSON.stringify(board.map((n) => [n.index, n.type, n.subtype])) === JSON.stringify(replayed.map((n) => [n.index, n.type, n.subtype])));
+  const altSeed = generateBoard(makeRng(43));
+  const differing = board.filter((n, i) => isFreeNode(n) && n.type !== altSeed[i].type).length;
+  check('different seed rearranges free nodes', differing > 20, `only ${differing} differ`);
 }
 
 // ============================================================================
@@ -189,8 +244,8 @@ section('1. Board generation');
 section('2. Content rosters');
 {
   const stdCount = Object.keys(ENEMIES).length;
-  check('≥12 standard enemies', stdCount >= 12, `got ${stdCount}`);
-  check('summon/NPC defs present', Object.keys(SUMMON_ENEMIES).length >= 5);
+  check('â‰¥12 standard enemies', stdCount >= 12, `got ${stdCount}`);
+  check('summon defs present', Object.keys(SUMMON_ENEMIES).length >= 4, `got ${Object.keys(SUMMON_ENEMIES).length}`);
   for (const [id, def] of Object.entries(ENEMIES)) {
     check(`${id} has moves`, def.moves.length > 0);
     check(`${id} has level`, typeof def.level === 'number' && def.level > 0);
@@ -212,7 +267,18 @@ section('2. Content rosters');
   check('lore fragments complete', Object.keys(LORE_FRAGMENTS).length === TOTAL_LORE_FRAGMENTS);
   check('whispers present', WHISPERS.length >= 40, `got ${WHISPERS.length}`);
   check('items present', Object.keys(ITEMS).length >= 25, `got ${Object.keys(ITEMS).length}`);
-  check('endings present', ENDINGS.length >= 6, `got ${ENDINGS.length}`);
+  check('exactly 3 endings (definitive edition)', ENDINGS.length === 3, `got ${ENDINGS.length}`);
+  // Ending evaluation: outcome flags decide everything.
+  const basePlayer = makePlayer();
+  check('fallback without flags resolves deterministically', typeof evaluateEnding(basePlayer).id === 'string');
+  const hollow = makePlayer({ flags: { final_reflection_defeated: true } });
+  check('defeat reflection â†’ THE HOLLOW', evaluateEnding(hollow).id === 'the_hollow');
+  const lostDark = makePlayer({ flags: { final_reflection_lost: true, ending_choice_dark: true } });
+  check('lost + accept â†’ LOST IN THE DARK', evaluateEnding(lostDark).id === 'lost_in_the_dark');
+  const lostClimb = makePlayer({ flags: { final_reflection_lost: true, ending_choice_climb: true } });
+  check('lost + climb â†’ THE RETURN', evaluateEnding(lostClimb).id === 'the_return');
+  // Sera Voss is gone.
+  check('sera_voss removed from roster', !ENEMIES.sera_voss && !SUMMON_ENEMIES.sera_voss);
 
   // Stage pools sanity
   check('stage 1 pool correct', JSON.stringify(enemiesForChapter(1, 0).sort()) === JSON.stringify(['dust_wight', 'echo_skeleton']));
@@ -222,7 +288,7 @@ section('2. Content rosters');
 }
 
 // ============================================================================
-// 3. Regular fight → victory + discovery
+// 3. Regular fight â†’ victory + discovery
 // ============================================================================
 
 section('3. Regular fight vs echo_skeleton (weak flame)');
@@ -285,7 +351,7 @@ section('3b. Downed & 1-More');
   // hit (the flag itself is consumed by the granting action).
   check('1-More granted (turn stays open)', snap.phase !== 'player' || snap.actionUsed === false, `phase=${snap.phase} used=${snap.actionUsed}`);
 
-  // Regression: the extra action is single-use — the following move must end the turn.
+  // Regression: the extra action is single-use â€” the following move must end the turn.
   if (snap.phase === 'player') {
     snap = engine.attack(key);
     if (snap.phase === 'player' && !snap.qte) {
@@ -299,7 +365,7 @@ section('3b. Downed & 1-More');
 // 3c. QTE surface: an unresolved timing parks the strike; resolveQte carries it
 // ============================================================================
 
-section('3c. QTE surface: skills park timing · basic attacks resolve instantly');
+section('3c. QTE surface: skills park timing Â· basic attacks resolve instantly');
 {
   // Offensive skills park a pending QTE until resolved. Frost vs echo_skeleton is
   // a NEUTRAL matchup, so this isolates the timing flow from the 1-More path.
@@ -316,16 +382,16 @@ section('3c. QTE surface: skills park timing · basic attacks resolve instantly'
   check('resolveQte clears the pending QTE', snap.qte === null);
   check('action consumed after QTE resolve', snap.phase !== 'player' || snap.actionUsed === true);
   const after = snap.enemies.find((e) => e.key === key);
-  check('timed strike dealt damage', !after || after.hp < hpBefore, `hp ${hpBefore}→${after?.hp ?? 'dead'}`);
+  check('timed strike dealt damage', !after || after.hp < hpBefore, `hp ${hpBefore}â†’${after?.hp ?? 'dead'}`);
 
-  // Basic attacks have no timing bar — they resolve immediately.
+  // Basic attacks have no timing bar â€” they resolve immediately.
   const atkEngine = new CombatEngine({ player: makeWeakPlayer(), enemyIds: ['echo_skeleton'], nodeIndex: 1, rng: makeRng(1801) });
   let asnap = atkEngine.beginRound();
   asnap = atkEngine.attack(asnap.enemies[0].key);
   check('basic attack resolves immediately (no QTE)', asnap.qte === null);
   check('basic attack consumed the action', asnap.actionUsed === true || asnap.oneMore === true);
 
-  // A missed timing window never whiffs — it connects at reduced power (×0.8).
+  // A missed timing window never whiffs â€” it connects at reduced power (Ã—0.8).
   const missEngine = new CombatEngine({
     player: makeWeakPlayer({ equippedSkills: ['frost_touch'], skillsKnown: [...chapterGrantSkills(1), 'frost_touch'] }),
     enemyIds: ['echo_skeleton'], nodeIndex: 1, rng: makeRng(1802),
@@ -336,7 +402,7 @@ section('3c. QTE surface: skills park timing · basic attacks resolve instantly'
   msnap = missEngine.useSkill('frost_touch', mkey);
   msnap = missEngine.resolveQte('miss');
   const mAfter = msnap.enemies.find((e) => e.key === mkey);
-  check('missed QTE timing still connects (reduced damage)', !mAfter || mAfter.hp < mHpBefore, `hp ${mHpBefore}→${mAfter?.hp ?? 'dead'}`);
+  check('missed QTE timing still connects (reduced damage)', !mAfter || mAfter.hp < mHpBefore, `hp ${mHpBefore}â†’${mAfter?.hp ?? 'dead'}`);
 
   // Turn order includes the player so the panel can list everyone.
   check('turn order includes the player', asnap.turnOrder.includes('player'));
@@ -353,9 +419,9 @@ section('3d. Downed re-hit grants nothing');
   let snap = engine.beginRound();
   const key = snap.enemies[0].key;
 
-  snap = engine.useSkill('frost_touch', key, 'good'); // weakness → Downed + open turn
+  snap = engine.useSkill('frost_touch', key, 'good'); // weakness â†’ Downed + open turn
   if (snap.phase === 'player' && !snap.actionUsed) {
-    // The extra action re-hits the SAME downed target's weakness — must NOT reopen the turn.
+    // The extra action re-hits the SAME downed target's weakness â€” must NOT reopen the turn.
     snap = engine.useSkill('frost_touch', key, 'good');
     check('weakness on a downed target grants no extra action', snap.phase !== 'player' || snap.actionUsed === true, `used=${snap.actionUsed}`);
   }
@@ -365,9 +431,9 @@ section('3d. Downed re-hit grants nothing');
 // 4. Affinity behaviours: null / reflect / drain
 // ============================================================================
 
-section('4. Dust Wight affinities (null blunt · rep flame · drn frost)');
+section('4. Dust Wight affinities (null blunt Â· rep flame Â· drn frost)');
 {
-  // dust_wight: wk slash, str pierce, null blunt, rep flame — frost neutral here,
+  // dust_wight: wk slash, str pierce, null blunt, rep flame â€” frost neutral here,
   // so drain is asserted via archive_cipher_wraith (drn shadow).
   const player = makeWeakPlayer();
 
@@ -381,11 +447,11 @@ section('4. Dust Wight affinities (null blunt · rep flame · drn frost)');
   const wightKey = snap.enemies[0].key;
   const wightStartHp = snap.enemies[0].hp;
 
-  // Blunt → NULL
+  // Blunt â†’ NULL
   snap = wightEngine.useSkill('heavy_guard', wightKey, 'good');
-  check('blunt nullified vs dust_wight', snap.enemies[0]?.hp === wightStartHp || snap.phase !== 'player', `hp ${wightStartHp}→${snap.enemies[0]?.hp}`);
+  check('blunt nullified vs dust_wight', snap.enemies[0]?.hp === wightStartHp || snap.phase !== 'player', `hp ${wightStartHp}â†’${snap.enemies[0]?.hp}`);
 
-  // New round (one action per turn), then Flame → REFLECT (player should take damage)
+  // New round (one action per turn), then Flame â†’ REFLECT (player should take damage)
   wightEngine.endTurn();
   const hpBeforeReflect = wightEngine.snapshot().playerHP;
   const wKey2 = wightEngine.snapshot().enemies[0]?.key ?? wightKey;
@@ -393,13 +459,13 @@ section('4. Dust Wight affinities (null blunt · rep flame · drn frost)');
   const hpAfterReflect = wightEngine.snapshot().playerHP;
   const reflected = hpAfterReflect < hpBeforeReflect;
   check('flame reflected by dust_wight', reflected || snap.phase !== 'player' || !snap.enemies.length,
-    `playerHP ${hpBeforeReflect}→${hpAfterReflect}`);
+    `playerHP ${hpBeforeReflect}â†’${hpAfterReflect}`);
 
   const wGains = wightEngine.getDiscoveryGains();
   check('null discovered', wGains.dust_wight?.blunt === 'null', JSON.stringify(wGains.dust_wight));
   check('rep discovered', wGains.dust_wight?.flame === 'rep', JSON.stringify(wGains.dust_wight));
 
-  // Shadow → DRAIN vs cipher wraith
+  // Shadow â†’ DRAIN vs cipher wraith
   const drainEngine = new CombatEngine({
     player: { ...player, equippedSkills: ['shadow_veil'] },
     enemyIds: ['archive_cipher_wraith'],
@@ -411,7 +477,7 @@ section('4. Dust Wight affinities (null blunt · rep flame · drn frost)');
   dsnap = drainEngine.useSkill('shadow_veil', dsnap.enemies[0].key, 'good');
   const after = drainEngine.snapshot().enemies[0];
   check('shadow drained by cipher wraith (healed)', !after || after.hp >= wraithHpBefore - 1 || after.hp <= 0,
-    `hp ${wraithHpBefore}→${after?.hp}`);
+    `hp ${wraithHpBefore}â†’${after?.hp}`);
   check('drn discovered', drainEngine.getDiscoveryGains().archive_cipher_wraith?.shadow === 'drn',
     JSON.stringify(drainEngine.getDiscoveryGains().archive_cipher_wraith));
 }
@@ -434,12 +500,12 @@ section('5. Guard economy & momentum');
 
   snap = engine.guard();
   check('guard sets guarding flag', snap.guarding === true);
-  check('guard restores +6 MP', snap.playerMP === Math.min(snap.playerMaxMP, mpBefore + 6), `${mpBefore}→${snap.playerMP}`);
+  check('guard restores +6 MP', snap.playerMP === Math.min(snap.playerMaxMP, mpBefore + 6), `${mpBefore}â†’${snap.playerMP}`);
   check('guard grants momentum', snap.momentum >= 1);
 }
 
 // ============================================================================
-// 6. Boss fights — all five, start to finish
+// 6. Boss fights â€” all five, start to finish
 // ============================================================================
 
 section('6. All five bosses (full fights)');
@@ -457,7 +523,7 @@ for (const [bossId, boss] of Object.entries(BOSSES)) {
   });
   const result = drive(engine, { qte: 'good', maxRounds: 90, seed: 6000 + boss.chapter * 10 });
   check(
-    `boss '${bossId}' → victory`,
+    `boss '${bossId}' â†’ victory`,
     result.snap.phase === 'victory',
     `phase=${result.snap.phase} round=${result.snap.round} enemiesLeft=${result.snap.enemies.length}`,
   );
@@ -465,7 +531,7 @@ for (const [bossId, boss] of Object.entries(BOSSES)) {
 }
 
 // ============================================================================
-// 7. Reactions: Superconduct (frost→shock)
+// 7. Reactions: Superconduct (frostâ†’shock)
 // ============================================================================
 
 section('7. Superconduct reaction');
@@ -495,7 +561,7 @@ section('7. Superconduct reaction');
     check('superconduct stuns chilled target', stunnedAfter || snap.phase !== 'player' || !snap.enemies.length,
       `statuses=${JSON.stringify(snap.enemies.find((e) => e.key === key)?.statuses ?? [])}`);
   } else {
-    check('superconduct stuns chilled target (skipped — fight state moved on)', true);
+    check('superconduct stuns chilled target (skipped â€” fight state moved on)', true);
   }
 }
 
@@ -577,7 +643,7 @@ section('10. Defeat path');
     snap = engine.endTurn();
     guard++;
   }
-  check('player dies → defeat phase', snap.phase === 'defeat', `phase=${snap.phase} hp=${snap.playerHP}`);
+  check('player dies â†’ defeat phase', snap.phase === 'defeat', `phase=${snap.phase} hp=${snap.playerHP}`);
 }
 
 // ============================================================================
@@ -605,11 +671,11 @@ section('11. Scan data');
 // Summary
 // ============================================================================
 
-console.log('\n══════════════════════════════════');
+console.log('\nâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
 console.log(`PASSED: ${passed}   FAILED: ${failed}`);
 if (failures.length > 0) {
   console.log('\nFailures:');
-  for (const f of failures) console.log(`  ✗ ${f}`);
+  for (const f of failures) console.log(`  âœ— ${f}`);
   process.exitCode = 1;
 } else {
   console.log('ALL SMOKE TESTS PASSED');

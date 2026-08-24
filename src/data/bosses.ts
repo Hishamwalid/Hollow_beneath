@@ -31,23 +31,27 @@ export const SENTINEL: BossDef = {
   theme: 'The danger of curiosity.',
   baseStats: { hp: 150, mp: 50, atk: 15, matk: 12, def: 12, mdef: 11, spd: 14 },
   approachText:
-    "It stands where the corridor narrows into a single door of tarnished silver, unmoving until you are three steps away. Then it turns — not fast, not slow, exactly the speed of something that has done this before. Its surface is engraved, edge to edge, with a language that keeps almost resolving into words you know. It does not raise a weapon. It simply waits, the way a locked door waits, to see what you'll try.",
+    'The Archive Threshold. A gold-lit doorway stands at the end of a hall. Before it stands THE ARGENT SENTINEL — a silver guardian engraved edge-to-edge with a language that almost resolves into words you know. It does not attack. It studies.\n\nTHE ARGENT SENTINEL: "Why do you seek the Door?"',
   preCombatChoices: [
     {
-      id: 'will_check',
-      label: 'Try to read its intent. (WILL check, DC 10)',
-      apply: (_player, flags, rng) => {
-        if (statCheck(_player.stats.will, 10, rng)) {
-          flags.sentinelInsight = 1;
-          return 'You sense it is testing, not attacking. (Start the fight with +1 Momentum.)';
-        }
-        return "Its intent stays unreadable. You'll have to find out the hard way.";
+      id: 'want_answers',
+      label: '"I want answers."',
+      apply: () => {
+        return 'THE ARGENT SENTINEL: "Answers are not treasures. They are weights."\n\nIt settles into its stance — measuring you.';
+      },
+    },
+    {
+      id: 'want_mother',
+      label: '"I want to know what my mother saw."',
+      apply: (player) => {
+        player.history.push('sentinel_mother_recognized');
+        return 'The Sentinel tilts its head. A gesture almost like recognition.\n\nTHE ARGENT SENTINEL: "...Then you are not here for the Door. You are here for the threshold."';
       },
     },
     {
       id: 'attack_now',
-      label: 'Strike before it finishes turning.',
-      apply: () => 'Silver shrieks against your blade as it completes its turn anyway.',
+      label: 'Attack.',
+      apply: () => 'The Sentinel raises no weapon. It simply waits.\n\nSilver shrieks against your blade as it completes its turn anyway.',
     },
   ],
   phases: sentinelPhases,
@@ -94,7 +98,7 @@ export const SENTINEL: BossDef = {
     },
   ],
   aftermathText: () =>
-    'The silver light fades from its engravings all at once, like a held breath finally let go. It does not fall so much as settle, the way a door settles back into its frame. Somewhere underneath the corridor, you feel — rather than hear — something unlock.',
+    'The silver light fades from its engravings all at once, like a held breath finally let go. It collapses — silver flaking away like ash.\n\nTHE ARGENT SENTINEL: "You are not the one I remember."\n\n"Who do you remember?"\n\nTHE ARGENT SENTINEL: "The woman."\n\nA pause. The last of the gold light goes out of it.\n\nTHE ARGENT SENTINEL: "She asked the same question."\n\nThe Sentinel dissolves. The First Door opens. The map turns like a page.',
   getRewards: () => ({
     factionDelta: { archive: 20 },
     resonanceDelta: 5,
@@ -136,7 +140,7 @@ export const PATRIARCH: BossDef = {
   theme: 'Faith as anesthetic.',
   baseStats: { hp: 210, mp: 70, atk: 16, matk: 20, def: 16, mdef: 18, spd: 12 },
   approachText:
-    "He is kneeling when you find him, in front of a fire that isn't consuming anything you can see. He does not stand. 'You've been so loud,' he says, not unkindly, 'asking things that already have answers.' The ash on his sleeves is old, layered, a decade of small burnings. When he finally looks up, his eyes have the calm of a man who has already forgiven you for what you're about to make him do.",
+    'The Dark Vault. A forward chapel of the Sable Order. Incense and ash. At the altar stands PATRIARCH OREN CASS — ash-marked, certain, and not entirely wrong.\n\nPATRIARCH OREN CASS: "Keth-7. The expedition that lost its leader, its geologist, and its way. Yet you persist."\n\n"I\'m looking for my mother."\n\nHe nods. CASS: "Eve."\n\n"You knew her?"\n\nCASS: "Everyone who has gone deep enough knows Eve."\n\n"What did she do?"\n\nCASS: "She tried to save us."\n\n"From the Loom?"\n\n"No."\n\nHe turns. His eyes are hollow in a different way — not empty, but full, overflowing with something that has nowhere to go.\n\nCASS: "From ourselves."',
   preCombatChoices: [
     {
       id: 'accept',
@@ -149,7 +153,7 @@ export const PATRIARCH: BossDef = {
         player.currentMP = Math.min(player.currentMP, player.derived.maxMP);
         player.flags.accepted_purification = true;
         player.history.push('accepted_purification');
-        return "You accept his mercy. The weight lifts — and so, quietly, does a part of you that used to be there. (Resonance reset to 0, Max MP -20% permanently, +30 Sable)";
+        return 'You kneel. Oren places ash on your forehead.\n\nCASS: "Go in peace. The Door beyond is sealed by my blessing."\n\nThe fight is skipped. But as you leave, he whispers: "She still waits. Not for rescue. For the next one." (Resonance reset to 0, Max MP -20% permanently, +30 Sable)';
       },
     },
     {
@@ -157,28 +161,16 @@ export const PATRIARCH: BossDef = {
       label: 'Refuse him.',
       apply: (player) => {
         player.faction.sable += 5;
-        return 'You refuse. Cass nods, unsurprised, and reaches for the fire himself.';
+        return '"I don\'t need your salvation. I need the truth."\n\nCASS: "The truth is what we are trying to prevent."\n\nHe reaches for the fire himself.';
       },
     },
     {
       id: 'ask',
-      label: 'Ask what he burned. (INT ≥ 7)',
-      requirement: (p) => p.stats.int >= 7,
-      apply: (player, flags) => {
-        player.faction.sable += 10;
-        player.resonance = Math.min(100, player.resonance + 5);
-        flags.cassDefWeakened = 1;
-        return "He tells you. His voice doesn't shake, but his hands do. (Patriarch's Defense -20% this fight)";
-      },
-    },
-    {
-      id: 'confront',
       label: '"I know what you burned."',
-      requirement: (p) => !!p.flags.sable_scripture_unlocked,
       apply: (player, flags) => {
         player.faction.sable += 10;
-        flags.scriptureDefWeakened = 1;
-        return '"I know what you burned." The Patriarch freezes. For a moment, you see fear in his eyes. (Defense -10% this fight, +10 Sable)';
+        flags.cassDefWeakened = 1;
+        return '"I know what you burned."\n\nOren\'s face crumples. He attacks immediately, enraged — and careless. (Patriarch\'s Defense -20% this fight)';
       },
     },
   ],
@@ -323,8 +315,8 @@ export const PATRIARCH: BossDef = {
   ],
   aftermathText: (flags) =>
     (flags.cassDefWeakened ?? 0) === 1
-      ? 'He kneels again before he falls, and this time it looks less like prayer. "You already knew," he says. "That\'s the part I couldn\'t forgive." The fire behind him finally goes out.'
-      : "He goes down still murmuring the same rite, three words behind where he should be. The fire behind him gutters and, for the first time since you arrived, actually looks like it's burning something.",
+      ? 'He kneels again before he falls, ash mixing with blood, still smiling.\n\nPATRIARCH OREN CASS: "She is still down there. Waiting. Not for rescue. For the next one."\n\n"The next what?"\n\nCASS: "The next Seeker. The next sacrifice. The next..."\n\nHe dies smiling. The fire behind him finally goes out. The Second Door opens.'
+      : "He goes down still murmuring the same rite, three words behind where he should be — and then, suddenly clear, as if surfacing from deep water:\n\nPATRIARCH OREN CASS: \"She is still down there. Waiting. Not for rescue. For the next one.\"\n\n\"The next what?\"\n\nCASS: \"The next Seeker. The next sacrifice. The next...\"\n\nHe dies, smiling. The Second Door opens.",
   getRewards: () => ({
     factionDelta: { sable: 25 },
     resonanceDelta: 8,
@@ -360,7 +352,7 @@ export const CHORUS: BossDef = {
   theme: 'The self as a chosen fiction.',
   baseStats: { hp: 260, mp: 80, atk: 17, matk: 21, def: 12, mdef: 16, spd: 15 },
   approachText:
-    "It used to be several people. You can still see the seams — a hand that doesn't match the shoulder, a voice that changes mid-word into someone else's cadence. When it speaks, it speaks in chorus, every syllable a small argument about who gets to say it. 'We volunteered,' it tells you, all at once. 'That's the part everyone forgets to ask.'",
+    'The Loom Gate. Forty figures stand in a circle, wearing the robes of Archive scholars. They move as one. They speak as one. But the voice is not human — it is a chord, a harmony, a consensus.\n\nTHE MERGED CHORUS: "You call us forty."\n\n"You are forty people."\n\nTHE MERGED CHORUS: "Were."\n\n"Then what are you?"\n\nTHE MERGED CHORUS: "Less. And more."\n\nThe seams show — a hand that doesn\'t match the shoulder, a cadence changing mid-word.\n\nTHE MERGED CHORUS: "How many memories make a person? How many voices make a self? We entered as scholars. We catalogued. We measured. We thought understanding would protect us."\n\nOne of the mouths opens wider than it should.\n\nTHE MERGED CHORUS: "The Loom does not destroy identity. It optimizes it. Forty egos. Forty fears. Forty lonely midnights. Reduced to one clear note."\n\nAnd then, softer, in forty voices at once:\n\nTHE MERGED CHORUS: "We remember Eve. She almost joined us. She chose solitude instead. A strange choice."',
   preCombatChoices: [
     {
       id: 'insight',
@@ -463,15 +455,15 @@ export const CHORUS: BossDef = {
   ],
   aftermathText: (flags) => {
     if ((flags.chorusOffer ?? 0) === 1) {
-      return "The voices do not scatter so much as settle — into you, a little. Something that was several people looks at you with what might be gratitude, and stops being anything at all. You feel heavier, and more crowded, in a way that isn't entirely unwelcome.";
+      return "You offered yourself instead. The voices settle — into you, a little — and then, gently, refuse.\n\nTHE MERGED CHORUS: \"Not yet. You are not finished. She wasn't either.\"\n\nThey collapse inward, a harmony resolving to silence.";
     }
     if ((flags.chorusAppeal ?? 0) === 1) {
-      return "They argue themselves apart mid-collapse, still correcting each other's citations on the way down. It might be the most scholarly death you've ever witnessed.";
+      return 'They argue themselves apart mid-collapse, still correcting each other\'s citations on the way down.';
     }
     if ((flags.chorusChallenge ?? 0) === 1) {
-      return 'The Chorus fragments the moment you name what was done to it. Whatever held all those voices together simply stops bothering, and they go their separate, quiet ways.';
+      return 'The Chorus fragments the moment you name what was done to it.';
     }
-    return "The seams finally give. What was several people separates back into something more like silence, and less like anyone. You are fairly sure, standing there, that you heard it thank you — though you couldn't say in which voice.";
+    return 'The seams finally give. The voices separate, screaming in forty pitches, then silence.\n\nOne figure remains — an old woman, her face the only one still human. She mouths three words, soundlessly:\n\nARCHIVE SCHOLAR: "She... loved... you."\n\nShe collapses. The Third Door opens.';
   },
   getRewards: (flags) => {
     if ((flags.chorusOffer ?? 0) === 1) {
@@ -533,7 +525,7 @@ export const FOSSIL_KING: BossDef = {
   theme: 'Power that outlived its purpose.',
   baseStats: { hp: 320, mp: 60, atk: 22, matk: 20, def: 18, mdef: 18, spd: 11 },
   approachText:
-    "The throne is stone, and so, mostly, is he — a king fossilizing in real time, mid-decree, one hand still raised for an order nobody living remembers how to follow. His voice comes from somewhere behind his own calcified mouth, layered and slow. 'Kneel,' he says, from habit more than expectation. 'Or don't. There's no one left to enforce it but me, and I am so very tired.'",
+    'A throne room of black basalt. DOMINION, LAST OF ITS COURT, sits mid-decree — a king fossilizing in real time, one hand still raised for an order nobody living remembers how to follow. His voice comes from somewhere behind his own calcified mouth, layered and slow.\n\nTHE FOSSIL KING: "Kneel. The empire persists."\n\n"Your empire is dust."\n\nTHE FOSSIL KING: "Dust is merely empire in another form."\n\n"Why did you stay when the Venn left?"\n\nTHE FOSSIL KING: "Someone must issue the last order. Even if there is no one left to hear it."',
   preCombatChoices: [
     {
       id: 'ask_become',
@@ -674,8 +666,8 @@ export const FOSSIL_KING: BossDef = {
   ],
   aftermathText: (flags) =>
     (flags.ultimateCharging ?? 0) === 1
-      ? 'He falls mid-syllable, the ultimate decree unfinished, and something in his stone face looks — almost — relieved. "...thank...you..." is all that makes it out before the quiet takes the rest.'
-      : 'The last of him settles into the throne completely, indistinguishable now from the stone around it. The Court he ruled crumbles a little further with him, the way an argument does once no one is left to keep having it.',
+      ? 'He falls mid-syllable, the ultimate decree unfinished, and something in his stone face looks — almost — relieved.\n\nTHE FOSSIL KING, dissolving into sand: "Eve... stood where you stand. She wept. Not for herself. For the next one. For..."\n\nGone. The Fourth Door opens.'
+      : 'The last of him settles into the throne completely, indistinguishable now from the stone around it.\n\nTHE FOSSIL KING, dissolving into sand: "Eve... stood where you stand. She wept. Not for herself. For the next one. For..."\n\nGone. The Fourth Door opens.',
   getRewards: () => ({
     factionDelta: { caravan: 15, archive: 10 },
     resonanceDelta: 10,
@@ -726,7 +718,7 @@ export const REFLECTION: BossDef = {
   theme: 'You were the mystery all along.',
   baseStats: { hp: 360, mp: 90, atk: 22, matk: 22, def: 15, mdef: 15, spd: 18 },
   approachText:
-    "The last chamber is mirrors, floor to ceiling, and every one of them is you — not flattering, not distorted, just accurate in a way that's somehow worse. When it finally steps out of the glass, it isn't wearing your face so much as your posture, your specific way of being afraid. 'You made choices,' it says, in your own voice, pitched slightly wrong. 'I'd like to show you what they were for.'",
+    "The Final Chamber. The door the Venn walked through. Before it stands THE FINAL REFLECTION — you, but finished. Calm. Certain. Wearing your face with an expression you have never seen in a mirror.\n\nTHE FINAL REFLECTION: \"You entered the Beneath to discover what happened to your mother.\"\n\nIt steps forward. Its movements are your movements, perfected.\n\nTHE FINAL REFLECTION: \"You discovered that you are walking toward becoming exactly what she became.\"\n\nIt raises a hand. Your own techniques appear as shadows around it.\n\nTHE FINAL REFLECTION: \"I am not your enemy. I am your completion. The thought you were too afraid to finish. The power was real. The dream was real. The Beneath was real. But there was a price.\"\n\nThe Reflection smiles. It is your smile, but hollow.\n\nTHE FINAL REFLECTION: \"The person who reaches the end and obtains the absolute power becomes part of the Hollow. There is no true return.\"",
   phases: reflectionPhases,
   moves: [
     {
@@ -812,6 +804,23 @@ export const REFLECTION: BossDef = {
         const dmg = bossMagic(ctx.self.matk, ctx.player.mdef, 1.05);
         ctx.applyDamageToPlayer(dmg, primaryType, `${ctx.self.name} — Repeated Question`);
         ctx.log.push(`${ctx.self.name} repeats itself for ${dmg} damage.`);
+        return '';
+      },
+    },
+    {
+      id: 'eve_memory', label: "Eve's Memory", weight: 10000,
+      description: 'Phase-4 dialogue branching on journal found / Eve voices heard.',
+      condition: (ctx) => ctx.phaseKey === 'answer' && (ctx.self.flags.eveLinesSpoken ?? 0) < 2,
+      resolve(ctx) {
+        const spoke = (ctx.self.flags.eveLinesSpoken ?? 0);
+        ctx.self.flags.eveLinesSpoken = spoke + 1;
+        if ((ctx.self.flags.motherJournalFound ?? 0) === 1 && spoke === 0) {
+          ctx.log.push('THE FINAL REFLECTION: "She already said yes. And now you have to say it too."');
+        } else if ((ctx.self.flags.eveVoiceHeard ?? 0) >= 3) {
+          ctx.log.push('THE FINAL REFLECTION: "You keep asking if I\'m really her. Does it matter?"');
+        } else {
+          ctx.log.push('THE FINAL REFLECTION, calm, almost gentle: "The cycle is not a trap. It is a staircase. Step up. Or step away."');
+        }
         return '';
       },
     },

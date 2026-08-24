@@ -41,6 +41,13 @@
   font-display: swap;
 }
 
+/* Lock the page to light rendering: browsers' forced/auto dark modes invert
+   our hand-tuned palette (parchment panels go grey, text vanishes). The game
+   is already a dark world — the browser must not "help". */
+:root {
+  color-scheme: light only;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -51,6 +58,7 @@ html, body {
   font-family: 'HollowFell', Georgia, 'Times New Roman', serif;
   -webkit-user-select: none;
   user-select: none;
+  color-scheme: light only;
 }
 
 #app {

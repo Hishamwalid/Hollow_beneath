@@ -150,6 +150,11 @@ export class LandmarkScene extends Phaser.Scene {
     this.choiceMenu = undefined;
 
     const combatFlags: Record<string, number> = {};
+    // Definitive edition: the Final Reflection reads your story state.
+    if (bossId === 'reflection' && player.story) {
+      combatFlags.motherJournalFound = player.story.motherJournalFound ? 1 : 0;
+      combatFlags.eveVoiceHeard = player.story.eveVoiceHeard;
+    }
     const text = choice.apply(player, combatFlags, Math.random);
     useGameStore.getState().persist();
 

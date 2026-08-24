@@ -162,7 +162,6 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     dust_road_raider: 0xc08a3e,
     archive_cipher_wraith: 0x4a6fa5,
     the_unread: 0x2c1f3d,
-    sera_voss: 0xb08a4e,
   };
   for (const id of Object.keys({ ...ENEMIES, ...SUMMON_ENEMIES })) {
     circleToken(scene, `tok_${id}`, enemyColors[id] ?? 0x77777f, PALETTE.bone, 52);
@@ -195,6 +194,127 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
       g.fillRoundedRect(2, 2, 20, 20, 4);
     });
   }
+
+  // ---- Expedition-journal kit -------------------------------------------------
+
+  // Aged parchment sheet — 9-slice friendly (deckled edges stay in the border).
+  if (!scene.textures.exists('paper_panel')) {
+    const W = 128;
+    const g = scene.add.graphics();
+    // base sheet with slightly ragged silhouette
+    g.fillStyle(0xe6ddc4, 1);
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(6, 3),
+        new Phaser.Math.Vector2(W - 5, 2),
+        new Phaser.Math.Vector2(W - 2, 8),
+        new Phaser.Math.Vector2(W - 1, W - 6),
+        new Phaser.Math.Vector2(W - 7, W - 2),
+        new Phaser.Math.Vector2(5, W - 1),
+        new Phaser.Math.Vector2(2, W - 9),
+        new Phaser.Math.Vector2(3, 6),
+      ],
+      true,
+    );
+    // darker rim for depth
+    g.lineStyle(2, 0xb9ab88, 0.9);
+    g.strokePoints(
+      [
+        new Phaser.Math.Vector2(6, 3),
+        new Phaser.Math.Vector2(W - 5, 2),
+        new Phaser.Math.Vector2(W - 2, 8),
+        new Phaser.Math.Vector2(W - 1, W - 6),
+        new Phaser.Math.Vector2(W - 7, W - 2),
+        new Phaser.Math.Vector2(5, W - 1),
+        new Phaser.Math.Vector2(2, W - 9),
+        new Phaser.Math.Vector2(3, 6),
+      ],
+      true,
+    );
+    // fiber flecks (deterministic scatter)
+    g.fillStyle(0xc4b591, 0.55);
+    for (let i = 0; i < 42; i++) {
+      const fx = 14 + ((i * 37) % (W - 28));
+      const fy = 14 + ((i * 53) % (W - 28));
+      g.fillRect(fx, fy, 2, 1);
+    }
+    g.fillStyle(0xefe7d2, 0.6);
+    for (let i = 0; i < 26; i++) {
+      const fx = 16 + ((i * 71) % (W - 32));
+      const fy = 16 + ((i * 29) % (W - 32));
+      g.fillRect(fx, fy, 1, 1);
+    }
+    g.generateTexture('paper_panel', W, W);
+    g.destroy();
+  }
+
+  // Wax faction seals — round stamp with embossed sigil line.
+  for (const f of Object.values(FACTIONS)) {
+    shapeTexture(scene, `seal_${f.id}`, 40, (g) => {
+      g.fillStyle(f.color, 1);
+      g.fillCircle(20, 20, 17);
+      g.fillStyle(0x000000, 0.22);
+      g.fillCircle(20, 21, 17);
+      g.fillStyle(f.color, 1);
+      g.fillCircle(20, 19, 15);
+      g.lineStyle(2, 0xe8e2d4, 0.85);
+      g.strokeCircle(20, 19, 11);
+      g.lineStyle(2, 0xe8e2d4, 0.85);
+      g.lineBetween(20, 12, 26, 19);
+      g.lineBetween(26, 19, 20, 26);
+      g.lineBetween(20, 26, 14, 19);
+      g.lineBetween(14, 19, 20, 12);
+    });
+  }
+
+  // Echo Shard icon — faceted gold shard for rites/buttons.
+  shapeTexture(scene, 'icon_shard', 40, (g) => {
+    g.fillStyle(PALETTE.goldBright, 1);
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(20, 4),
+        new Phaser.Math.Vector2(32, 16),
+        new Phaser.Math.Vector2(26, 36),
+        new Phaser.Math.Vector2(14, 36),
+        new Phaser.Math.Vector2(8, 16),
+      ],
+      true,
+    );
+    g.lineStyle(2, 0x8a6a2f, 1);
+    g.strokePoints(
+      [
+        new Phaser.Math.Vector2(20, 4),
+        new Phaser.Math.Vector2(32, 16),
+        new Phaser.Math.Vector2(26, 36),
+        new Phaser.Math.Vector2(14, 36),
+        new Phaser.Math.Vector2(8, 16),
+      ],
+      true,
+    );
+    g.lineStyle(1, 0xfff3d0, 0.8);
+    g.lineBetween(20, 6, 20, 34);
+  });
+
+  // Resonance sigil (spiral) for the HUD meter.
+  shapeTexture(scene, 'res_sigil', 36, (g) => {    g.lineStyle(2, PALETTE.gold, 1);
+    const cx = 18;
+    const cy = 18;
+    let r = 2;
+    let a = 0;
+    const pts: Phaser.Math.Vector2[] = [];
+    while (r < 14) {
+      a += 0.35;
+      r += 0.18;
+      pts.push(new Phaser.Math.Vector2(cx + r * Math.cos(a), cy + r * Math.sin(a)));
+    }
+    if (pts.length > 1) {
+      g.beginPath();
+      g.moveTo(pts[0].x, pts[0].y);
+      for (const p of pts.slice(1)) g.lineTo(p.x, p.y);
+      g.strokePath();
+    }
+  });
+
 
   // Board HUD action-row icons
   shapeTexture(scene, 'icon_character', 56, (g) => {
@@ -253,9 +373,9 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   panelTexture(scene, 'panel_stat', 300, 165, PALETTE.stone, PALETTE.boneMuted);
   panelTexture(scene, 'panel_button', 260, 52, PALETTE.stoneLight, PALETTE.gold, 8);
   panelTexture(scene, 'panel_button_hover', 260, 52, PALETTE.gold, PALETTE.goldBright, 8);
+  panelTexture(scene, 'panel_btn_secondary', 260, 52, PALETTE.stone, PALETTE.boneMuted, 8);
+  panelTexture(scene, 'panel_btn_secondary_hover', 260, 52, 0x2c313a, PALETTE.gold, 8);
   panelTexture(scene, 'panel_stepper', 40, 40, PALETTE.stoneLight, PALETTE.gold, 6);
-  panelTexture(scene, 'panel_preset', 120, 38, PALETTE.stoneLight, PALETTE.gold, 6);
-  panelTexture(scene, 'panel_preset_hover', 120, 38, PALETTE.gold, PALETTE.goldBright, 6);
   panelTexture(scene, 'panel_combat_hud', 780, 160, PALETTE.stone, PALETTE.gold);
   panelTexture(scene, 'panel_enemy', 150, 220, PALETTE.stone, PALETTE.boneMuted, 6, 0);
   shapeTexture(scene, 'particle', 8, (g) => { g.fillStyle(0xffffff, 1); g.fillCircle(4, 4, 3); });

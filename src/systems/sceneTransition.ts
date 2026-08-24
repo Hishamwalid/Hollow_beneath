@@ -15,7 +15,3 @@ export function fadeToScene(scene: Phaser.Scene, target: string, data?: object):
 export function fadeIn(scene: Phaser.Scene): void {
   scene.cameras.main.fadeIn(250, 0, 0, 0);
 }
-
-export function resetTransition(): void {
-  transitioning = false;
-}
