@@ -499,8 +499,8 @@ export interface TurnOrderPanelHandle {
   destroy: () => void;
 }
 
-const PANEL_W = 162;
-const ROW_W = 142;
+const PANEL_W = 180;
+const ROW_W = 160;
 const ROW_MAX_H = 33.3;
 const ROW_SPACING = 39.3;
 const PORTRAIT_SIZE = 33;
@@ -539,9 +539,13 @@ export function createTurnOrderPanel(scene: Phaser.Scene, x: number, y: number):
     const spacing = ROW_SPACING;
     const rowH = ROW_MAX_H;
     const panelH = 42 + (n - 1) * spacing + rowH + 8;
+    // Top-anchored: the panel's top edge stays at -75 (its default half-height)
+    // so extra rows extend downward instead of pushing the title out of the frame.
+    const TOP_EDGE = -(150 / 2);
     bg.setSize(PANEL_W, panelH);
-    title.setPosition(0, -(panelH / 2) + 14);
-    const startY = -(panelH / 2) + 42;
+    bg.setPosition(0, TOP_EDGE + panelH / 2);
+    title.setPosition(0, TOP_EDGE + 14);
+    const startY = TOP_EDGE + 42;
     order.forEach((key, i) => {
       const isCurrent = key === actor;
       const ry = startY + i * spacing;

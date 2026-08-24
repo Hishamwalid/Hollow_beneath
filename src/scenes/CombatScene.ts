@@ -1133,14 +1133,13 @@ export class CombatScene extends Phaser.Scene {
     if (prev && !prev.disabled) {
       prev.bg.setFillStyle(0x21252a);
       prev.t.setColor('#ffffff');
-      prev.right?.setColor(PALETTE_HEX.goldBright);
+      // Chip text stays bright gold in every state — dark-on-dark is unreadable.
     }
     this.inlineFocus = index;
     const cur = this.inlineRows[index];
     if (cur && !cur.disabled) {
       cur.bg.setFillStyle(0xc9a24b);
       cur.t.setColor('#0b0d10');
-      cur.right?.setColor('#0b0d10');
     }
   }
 
@@ -1197,12 +1196,12 @@ export class CombatScene extends Phaser.Scene {
     menu.add(this.add.rectangle(0, 0, w, h, 0x9b741e).setStrokeStyle(2, 0x0b0d10).setOrigin(0.5));
     menu.add(this.add.rectangle(0, 0, w - 6, h - 6, 0x14171b).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0.5));
     menu.add(this.add.text(0, -h / 2 + 26, title, { fontFamily: FONT_SERIF, fontSize: '17px', color: PALETTE_HEX.gold }).setOrigin(0.5));
-    // Back button (top-left, boxed) replaces the old bottom BACK row.
-    const backBox = this.add.rectangle(-w / 2 + 20, -h / 2 + 26, 30, 30, 0x21252a).setStrokeStyle(1.5, 0xc9a24b).setOrigin(0.5);
-    const backIcon = this.add.text(backBox.x, backBox.y, '←', { fontFamily: FONT_SERIF, fontSize: '18px', color: '#ffffff' }).setOrigin(0.5);
+    // Back button (top-left, golden box) replaces the old bottom BACK row.
+    const backBox = this.add.rectangle(-w / 2 + 20, -h / 2 + 26, 30, 30, 0xc9a24b).setStrokeStyle(2, 0x0b0d10).setOrigin(0.5);
+    const backIcon = this.add.text(backBox.x, backBox.y, '←', { fontFamily: FONT_SERIF, fontSize: '18px', color: '#0b0d10' }).setOrigin(0.5);
     backBox.setInteractive({ useHandCursor: true });
-    backBox.on('pointerover', () => { backBox.setFillStyle(0xc9a24b); backIcon.setColor('#0b0d10'); });
-    backBox.on('pointerout', () => { backBox.setFillStyle(0x21252a); backIcon.setColor('#ffffff'); });
+    backBox.on('pointerover', () => { backBox.setFillStyle(0xe9c876); });
+    backBox.on('pointerout', () => { backBox.setFillStyle(0xc9a24b); });
     backBox.on('pointerdown', () => { audio.click(); this.closeInlineMenu(); });
     menu.add(backBox);
     menu.add(backIcon);
@@ -1225,13 +1224,13 @@ export class CombatScene extends Phaser.Scene {
           const txt = this.add.text(0, 0, parts[p], { fontFamily: FONT_MONO, fontSize: '12px', fontStyle: 'bold', color: PALETTE_HEX.goldBright });
           const chipW = txt.width + 14;
           const chipX = cursor - chipW / 2;
-          cursor = chipX - 6;
           const chip = this.add.rectangle(chipX, 0, chipW, 20, 0x0b0d10, 0.9).setStrokeStyle(1, 0xc9a24b, 0.8);
           txt.setPosition(chipX, 0).setOrigin(0.5, 0.5);
           rightChips.push(chip);
           c.add(chip);
           c.add(txt);
           if (!right) right = txt;
+          cursor = chipX - 12; // clear gap between the element and cost chips
         }
       }
       const entry = {
