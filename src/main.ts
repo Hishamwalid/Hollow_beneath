@@ -22,8 +22,27 @@ import { TutorialScene } from '@scenes/TutorialScene';
 import { PathPointPickerScene } from '@scenes/PathPointPickerScene';
 import { NodePreviewScene } from '@scenes/dev/NodePreviewScene';
 
+function showErrorOverlay(label: string, detail: unknown) {
+  let overlay = document.getElementById('hb-error-overlay');
+  if (!overlay) {
+    overlay = document.createElement('pre');
+    overlay.id = 'hb-error-overlay';
+    overlay.style.cssText =
+      'position:fixed;left:8px;bottom:8px;max-width:80vw;max-height:45vh;overflow:auto;' +
+      'background:#3a0d0d;color:#ffd9d9;border:1px solid #b0453f;padding:10px;font:12px monospace;' +
+      'z-index:99999;white-space:pre-wrap;pointer-events:none;';
+    document.body.appendChild(overlay);
+  }
+  overlay.textContent += `${label}\n${detail instanceof Error ? (detail.stack ?? detail.message) : String(detail)}\n\n`;
+}
+
 window.addEventListener('error', (e) => {
   console.error('GLOBAL ERROR:', e.error ?? e.message, e);
+  showErrorOverlay('GLOBAL ERROR:', e.error ?? e.message);
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('UNHANDLED REJECTION:', e.reason);
+  showErrorOverlay('UNHANDLED REJECTION:', e.reason);
 });
 
 // ---------------------------------------------------------------------------
@@ -48,6 +67,53 @@ factoryProto.text = function (
   return factoryText.call(this, x, y, content, { ...(style ?? {}), resolution: TEXT_RESOLUTION });
 } as AnyFn;
 
+// --- Dev/debug hook: /?debugEvent=1 boots straight into a story event scene ---
+const DEBUG_EVENT = new URLSearchParams(window.location.search).has('debugEvent');
+
+async function buildDebugScenes(): Promise<Phaser.Types.Scenes.SceneType[]> {
+  const [{ useGameStore }, { STARTING_STATS }, { STORY_EVENTS }] = await Promise.all([
+    import('@store/gameStore'),
+    import('@data/stats'),
+    import('@data/storyEvents'),
+  ]);
+  useGameStore.getState().startNewRun({ ...STARTING_STATS }, 'Debug');
+  class DebugBoot extends Phaser.Scene {
+    constructor() {
+      super('DebugBoot');
+    }
+    async create() {
+      const { generatePlaceholderTextures } = await import('@placeholder/PlaceholderTextures');
+      generatePlaceholderTextures(this);
+      this.scene.start('Event', { eventDef: STORY_EVENTS.eves_first_voice });
+    }
+  }
+  return [DebugBoot, EventScene];
+}
+
+let sceneList: Phaser.Types.Scenes.SceneType[] = [
+  BootScene,
+  PreloadScene,
+  TutorialScene,
+  MenuScene,
+  CharacterCreationScene,
+  ShardShopScene,
+  LoreCodexScene,
+  BoardScene,
+  EventScene,
+  CombatScene,
+  LandmarkScene,
+  EndingScene,
+  CreditsScene,
+  TheOfferScene,
+  GameOverScene,
+  SettingsScene,
+  InventoryScene,
+  LoadoutScene,
+  PathPointPickerScene,
+  NodePreviewScene,
+];
+if (DEBUG_EVENT) sceneList = await buildDebugScenes();
+
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   width: GAME_WIDTH,
@@ -61,28 +127,7 @@ const config: Phaser.Types.Core.GameConfig = {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [
-    BootScene,
-    PreloadScene,
-    TutorialScene,
-    MenuScene,
-    CharacterCreationScene,
-    ShardShopScene,
-    LoreCodexScene,
-    BoardScene,
-    EventScene,
-    CombatScene,
-    LandmarkScene,
-    EndingScene,
-    CreditsScene,
-    TheOfferScene,
-    GameOverScene,
-    SettingsScene,
-    InventoryScene,
-    LoadoutScene,
-    PathPointPickerScene,
-    NodePreviewScene,
-  ],
+  scene: sceneList,
 };
 
 const game = new Phaser.Game(config);

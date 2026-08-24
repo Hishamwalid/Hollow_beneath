@@ -59,7 +59,8 @@ export function createDialogBox(
   let nameplate: Phaser.GameObjects.Text | null = null;
 
   const container = scene.add.container(x, y, [shadow, bg, text, prompt]);
-  if (parchment) container.bringToTop(bg); // keep nineslice above its shadow
+  // Render order [shadow, bg, text, prompt] is already correct — do NOT
+  // bringToTop(bg) here; that moves the parchment above the text and hides it.
   container.setDepth(30);
   container.setAlpha(0);
   scene.tweens.add({ targets: container, alpha: 1, duration: 240, ease: 'Sine.easeOut' });
@@ -93,8 +94,20 @@ export function createDialogBox(
     prompt.setVisible(false);
     text.setText('');
     timer?.remove();
-    const spd = Math.max(20, settingsManager.get().textSpeed);
-    timer = scene.time.addEvent({ delay: Math.round(14 * (100 / spd)), callback: tick, loop: true });
+    // Guard against corrupted settings (null/string) producing NaN delays that
+    // silently kill the typewriter — the known cause of empty dialog boxes.
+    const rawSpeed = Number(settingsManager.get().textSpeed);
+    const spd = Number.isFinite(rawSpeed) && rawSpeed > 0 ? Math.max(20, rawSpeed) : 100;
+    const delay = Math.round(14 * (100 / spd));
+    timer = scene.time.addEvent({ delay: Number.isFinite(delay) && delay > 0 ? delay : 14, callback: tick, loop: true });
+    // Self-diagnostic: if nothing has rendered after 900ms the timer is dead.
+    scene.time.delayedCall(900, () => {
+      if (timer && charIndex === 0) {
+        console.error('[DialogBox] Typewriter stalled — textSpeed:', settingsManager.get().textSpeed, 'text:', t.slice(0, 60));
+        text.setText(t); // fail visible rather than blank
+        prompt.setVisible(true);
+      }
+    });
   }
 
   return {
@@ -108,12 +121,22 @@ export function createDialogBox(
       beats = b.filter((s) => s.trim().length > 0);
       beatIndex = 0;
       beatsDone = onDone;
+      // Prevent a repeated doneCallback from firing showChoices twice.
+      let beatsFinished = false;
       inBeats = beats.length > 0;
       if (!inBeats) {
         onDone?.();
         return;
       }
-      const beatCb = (i: number) => (i >= beats.length - 1 ? () => beatsDone?.() : undefined);
+      const beatCb = (i: number) =>
+        i >= beats.length - 1
+          ? () => {
+              if (!beatsFinished) {
+                beatsFinished = true;
+                beatsDone?.();
+              }
+            }
+          : undefined;
       startType(beats[0], beatCb(0));
     },
     setSpeaker: (name) => {

@@ -63,11 +63,12 @@ export class EventScene extends Phaser.Scene {
 
     // ---- Header -----------------------------------------------------------------
     const headerY = cinematic ? 70 : 64;
-    this.add.text(GAME_WIDTH / 2, headerY, event.title.toUpperCase(), {
+    const titleText = this.add.text(GAME_WIDTH / 2, headerY, event.title.toUpperCase(), {
       fontFamily: FONT_SERIF,
       fontSize: cinematic ? '30px' : '28px',
       color: cinematic ? PALETTE_HEX.gold : PALETTE_HEX.gold,
-    }).setOrigin(0.5).setLetterSpacing(typeof this.add.text === 'function' ? 3 : 0);
+    }).setOrigin(0.5);
+    if (typeof titleText.setLetterSpacing === 'function') titleText.setLetterSpacing(3);
 
     const subParts: string[] = [`Chapter ${chapter} of ${CHAPTERS}`];
     if (!cinematic && currentGame) subParts.push(`Node ${currentGame.currentNodeIndex}`);
@@ -120,6 +121,7 @@ export class EventScene extends Phaser.Scene {
       this.dialog.setText(flavor, () => this.showChoices(event.choices));
     }
 
+    this.input.removeAllListeners('pointerdown');
     this.input.on('pointerdown', () => this.dialog?.skip());
   }
 

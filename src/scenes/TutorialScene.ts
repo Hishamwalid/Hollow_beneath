@@ -144,8 +144,11 @@ export class TutorialScene extends Phaser.Scene {
     this.promptText.setAlpha(0);
 
     this.timer?.remove();
-    const spd = Math.max(20, settingsManager.get().textSpeed);
-    this.timer = this.time.addEvent({ delay: Math.round(14 * (100 / spd)), callback: this.tick, loop: true });
+    // Same NaN guard as DialogBox — corrupted settings must not freeze typing.
+    const rawSpeed = Number(settingsManager.get().textSpeed);
+    const spd = Number.isFinite(rawSpeed) && rawSpeed > 0 ? Math.max(20, rawSpeed) : 100;
+    const delay = Math.round(14 * (100 / spd));
+    this.timer = this.time.addEvent({ delay: Number.isFinite(delay) && delay > 0 ? delay : 14, callback: this.tick, loop: true });
 
     this.iconContainer.removeAll(true);
     const icons = screen.icons ?? [];
