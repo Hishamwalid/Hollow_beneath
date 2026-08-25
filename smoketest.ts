@@ -4,7 +4,7 @@
  *
  * Exercises: board generation, content rosters, full fights vs every boss,
  * affinity discovery (wk/str/null/rep/drn), Down/1-More, Guard MP economy,
- * reactions (Superconduct/Eclipse/Overcharge), chapter loadouts, events,
+ * reactions (Brittle Frost/Eclipse/Overcharge), chapter loadouts, events,
  * endings, and the 0-HP defeat path. No Phaser, no DOM.
  */
 import type { EnemyAffinities, PlayerState, StatBlock } from '@data/types';
@@ -267,7 +267,7 @@ section('2. Content rosters');
   check('lore fragments complete', Object.keys(LORE_FRAGMENTS).length === TOTAL_LORE_FRAGMENTS);
   check('whispers present', WHISPERS.length >= 40, `got ${WHISPERS.length}`);
   check('items present', Object.keys(ITEMS).length >= 25, `got ${Object.keys(ITEMS).length}`);
-  check('exactly 3 endings (definitive edition)', ENDINGS.length === 3, `got ${ENDINGS.length}`);
+  check('exactly 4 endings (3 witnessed + hidden Silence)', ENDINGS.length === 4, `got ${ENDINGS.length}`);
   // Ending evaluation: outcome flags decide everything.
   const basePlayer = makePlayer();
   check('fallback without flags resolves deterministically', typeof evaluateEnding(basePlayer).id === 'string');
@@ -277,11 +277,21 @@ section('2. Content rosters');
   check('lost + accept â†’ LOST IN THE DARK', evaluateEnding(lostDark).id === 'lost_in_the_dark');
   const lostClimb = makePlayer({ flags: { final_reflection_lost: true, ending_choice_climb: true } });
   check('lost + climb â†’ THE RETURN', evaluateEnding(lostClimb).id === 'the_return');
+  const silence = makePlayer({
+    resonance: 80,
+    flags: { ng_plus: true, silence_path_unlocked: true, loom_silenced: true },
+  });
+  check('NG+ + silenced loom + transcendent â†’ THE SILENCE', evaluateEnding(silence).id === 'the_silence');
+  const silenceLocked = makePlayer({ resonance: 80, flags: { silence_path_unlocked: true, loom_silenced: true } });
+  check('Silence locked without NG+', evaluateEnding(silenceLocked).id !== 'the_silence');
   // Sera Voss is gone.
   check('sera_voss removed from roster', !ENEMIES.sera_voss && !SUMMON_ENEMIES.sera_voss);
 
   // Stage pools sanity
-  check('stage 1 pool correct', JSON.stringify(enemiesForChapter(1, 0).sort()) === JSON.stringify(['dust_wight', 'echo_skeleton']));
+  check(
+    'stage 1 pool correct (human leftovers of the dig)',
+    JSON.stringify(enemiesForChapter(1, 0).sort()) === JSON.stringify(['keth_deserter', 'rust_picker', 'sable_scout']),
+  );
   check('memory_wraith gated at res 25', enemiesForChapter(3, 30).includes('memory_wraith'));
   check('the_unread gated at res 50', enemiesForChapter(5, 60).includes('the_unread'));
   check('stageForChapter boundaries', stageForChapter(1) === 1 && stageForChapter(3) === 3 && stageForChapter(5) === 5);
@@ -531,10 +541,10 @@ for (const [bossId, boss] of Object.entries(BOSSES)) {
 }
 
 // ============================================================================
-// 7. Reactions: Superconduct (frostâ†’shock)
+// 7. Reactions: Brittle Frost (frostâ†’shock)
 // ============================================================================
 
-section('7. Superconduct reaction');
+section('7. Brittle Frost reaction');
 {
   const player = makePlayer({
     equippedSkills: ['frost_touch', 'shock_arc'],
@@ -611,6 +621,22 @@ section('9. Event sweep');
   check('all event choices execute cleanly', threw === 0, `${threw} threw`);
   check('event choices resolved', resolved > 100, `resolved ${resolved}`);
   check('chapter 1 has eligible events at low resonance', eligibleEvents(1, 0, new Set(), {}).length > 0);
+
+  // Scripted fights must promise enemies that are legal in the event's earliest
+  // chapter (wild-pool member at high Resonance, or a summon) — otherwise
+  // sanitizeFightEnemies silently rewrites the foe the prose describes.
+  let scriptedFights = 0;
+  for (const event of Object.values(EVENTS)) {
+    const minCh = event.chapterRange[0];
+    const legal = new Set([...enemiesForChapter(minCh, 100), ...Object.keys(SUMMON_ENEMIES)]);
+    for (const choice of event.choices) {
+      for (const id of choice.combat?.enemyIds ?? []) {
+        scriptedFights++;
+        check(`${event.id} combat '${id}' legal at ch${minCh}`, legal.has(id));
+      }
+    }
+  }
+  check('scripted fights swept', scriptedFights >= 15, `found ${scriptedFights}`);
 }
 
 function structuredCloneish(p: PlayerState): PlayerState {

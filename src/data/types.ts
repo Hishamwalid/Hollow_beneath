@@ -72,7 +72,7 @@ export type ControlId =
   // Revamp additions:
   | 'downed'      // enemy skips its next turn standing up (weakness/crit landed)
   | 'staggered'   // player loses their next action (enemy crit, unless Guarding)
-  | 'chilled';    // Frost marker → Shock triggers Superconduct (stun)
+  | 'chilled';    // Frost marker → Shock triggers Brittle Frost (stun)
 export type BuffId =
   | 'focus' | 'barrier' | 'regeneration' | 'fortify' | 'blessing' | 'haste'
   | 'reflection' | 'brace' | 'atk_up' | 'defense_up' | 'echo_surge';
@@ -119,7 +119,7 @@ export type QteQuality = 'perfect' | 'good' | 'miss';
 export type SkillEffect =
   | { kind: 'damage'; type: DamageType; power: number; target: 'single' | 'all'; stat: 'atk' | 'magic'; guaranteed?: boolean }
   | { kind: 'status'; id: StatusId; turns: number; stacks?: number; target: 'single' | 'all' }
-  | { kind: 'buff'; id: StatusId; turns: number }
+  | { kind: 'buff'; id: StatusId; turns: number; stacks?: number }
   | { kind: 'heal'; pct?: number; flat?: number }
   | { kind: 'barrier'; pct: number; turns: number }
   | { kind: 'cost'; hpFlat?: number; hpPct?: number }
@@ -379,6 +379,8 @@ export interface EventDef {
   maxResonance?: number;
   repeatable?: boolean;
   requiresAnyFlag?: string[];
+  /** Devoted-tier gate: the event only fires while this faction is at/above value. */
+  minFaction?: { key: keyof FactionState; value: number };
   flavorText: string;
   choices: EventChoice[];
 }

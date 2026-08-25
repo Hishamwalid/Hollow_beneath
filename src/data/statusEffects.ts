@@ -26,7 +26,7 @@ export const CONTROL_LABELS: Record<ControlId, string> = {
   root: 'Root — cannot flee, speed halved',
   downed: 'Downed — skips their next turn standing up',
   staggered: 'Staggered — lose your next action (Guard prevents this)',
-  chilled: 'Chilled — Frost-marked; Shock triggers Superconduct',
+  chilled: 'Chilled — Frost-marked; Shock triggers Brittle Frost',
 };
 
 export const BUFF_LABELS: Record<BuffId, string> = {
@@ -85,7 +85,7 @@ export interface ReactionDef {
 }
 
 export const REACTIONS: Record<string, ReactionDef> = {
-  superconduct: { id: 'superconduct', label: 'Superconduct', requires: 'chilled', consumesMarker: true },   // Frost → Shock: 1-turn Stun
+  superconduct: { id: 'superconduct', label: 'Brittle Frost', requires: 'chilled', consumesMarker: true },   // Frost → Shock: 1-turn Stun
   overcharge: { id: 'overcharge', label: 'Overcharge', requires: 'shock_dot', consumesMarker: false },      // Shock → Flame: bonus splash
   eclipse: { id: 'eclipse', label: 'Eclipse', requires: 'sacred_mark', consumesMarker: true },              // Sacred-mark → Shadow: strip buffs + ×2
 };

@@ -30,6 +30,8 @@ function heavyHit(ctx: EnemyTurnContext, power: number, type: EnemyTurnContext['
 
 export const ENEMIES: Record<string, EnemyDef> = {
   // ---- Stage 1: Surface Threshold ------------------------------------------
+  // Retired from spawning (Chapter 1 is now human-hostile territory), kept for
+  // lore references (LOST IN THE DARK), preloaded art sets, and smoke tests.
   dust_wight: {
     id: 'dust_wight',
     name: 'Dust Wight',
@@ -80,6 +82,83 @@ export const ENEMIES: Record<string, EnemyDef> = {
           if (ctx.rng() < 0.15) {
             ctx.applyStatusToPlayer('fear', 1);
             return `${line} The clatter leaves you shaken. (Fear, 1 turn)`;
+          }
+          return line;
+        },
+      },
+    ],
+  },
+
+  // ---- Stage 1 humans: deserters, scavengers, and Order watchers -------------
+  keth_deserter: {
+    id: 'keth_deserter',
+    name: 'Keth Deserter',
+    level: 2,
+    hp: 55, mp: 15, atk: 11, matk: 3, def: 7, mdef: 5, spd: 10,
+    attackType: 'pierce',
+    affinities: { slash: 'str', blunt: 'wk', sacred: 'null' },
+    xp: 13,
+    description: 'A broken survivor of Anya Korr\'s company, all nerves and borrowed gear.',
+    moves: [
+      {
+        id: 'desperate_jab', label: 'Desperate Jab', weight: 3,
+        description: 'Basic Pierce attack.',
+        resolve(ctx) { return hitPlayer(ctx, 1.0, 'pierce', 'Desperate Jab'); },
+      },
+      {
+        id: 'wild_swing', label: 'Wild Swing', weight: 2,
+        description: 'Slash attack with a high crit rate.',
+        resolve(ctx) { return hitPlayer(ctx, 1.0, 'slash', 'Wild Swing', { critChance: 0.25 }); },
+      },
+    ],
+  },
+
+  rust_picker: {
+    id: 'rust_picker',
+    name: 'Rust-Picker',
+    level: 2,
+    hp: 48, mp: 10, atk: 10, matk: 3, def: 6, mdef: 4, spd: 12,
+    attackType: 'slash',
+    affinities: { slash: 'str', pierce: 'wk', flame: 'wk' },
+    xp: 12,
+    description: 'A scavenger stripping the abandoned camp for anything that rings.',
+    moves: [
+      {
+        id: 'hook_blade', label: 'Hook Blade', weight: 3,
+        description: 'Basic Slash attack.',
+        resolve(ctx) { return hitPlayer(ctx, 1.0, 'slash', 'Hook Blade'); },
+      },
+      {
+        id: 'thrown_cleat', label: 'Thrown Cleat', weight: 2,
+        description: 'Low Blunt damage.',
+        resolve(ctx) { return hitPlayer(ctx, 0.85, 'blunt', 'Thrown Cleat'); },
+      },
+    ],
+  },
+
+  sable_scout: {
+    id: 'sable_scout',
+    name: 'Sable Scout',
+    level: 3,
+    hp: 60, mp: 25, atk: 9, matk: 8, def: 7, mdef: 8, spd: 13,
+    attackType: 'blunt',
+    affinities: { shock: 'str', blunt: 'wk', flame: 'rep' },
+    xp: 16,
+    description: 'The Order\'s advance watcher on the site, censer smoking under a desert scarf.',
+    moves: [
+      {
+        id: 'sling_stone', label: 'Sling Stone', weight: 3,
+        description: 'Blunt damage from a practiced spin-and-release.',
+        resolve(ctx) { return hitPlayer(ctx, 1.0, 'blunt', 'Sling Stone'); },
+      },
+      {
+        id: 'censer_ash', label: 'Censer Ash', weight: 2,
+        description: 'Flame damage with a chance to inflict Burn.',
+        resolve(ctx) {
+          const line = magicHitPlayer(ctx, 0.9, 'flame', 'Censer Ash');
+          if (ctx.rng() < 0.35) {
+            ctx.applyStatusToPlayer('burn', 2);
+            return `${line} Censer ash clings and catches. (Burn, 2 turns)`;
           }
           return line;
         },
@@ -166,13 +245,13 @@ export const ENEMIES: Record<string, EnemyDef> = {
     moves: [
       {
         id: 'spark_arc', label: 'Spark Arc', weight: 3,
-        description: 'Shock damage; Superconducts Chilled targets (Stun).',
+        description: 'Shock damage; Brittle Frosts Chilled targets (Stun).',
         resolve(ctx) {
           const chilled = ctx.player.statuses.some((s) => s.id === 'chilled');
           const line = magicHitPlayer(ctx, 1.2, 'shock', 'Spark Arc');
           if (chilled) {
             ctx.applyStatusToPlayer('stun', 1);
-            return `${line} SUPERCONDUCT — the arc finds the frost in your veins. (Stun, 1 turn)`;
+            return `${line} BRITTLE FROST — the arc finds the frost in your veins. (Stun, 1 turn)`;
           }
           return line;
         },
@@ -197,7 +276,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     attackType: 'pierce',
     affinities: { pierce: 'wk', flame: 'wk', blunt: 'str' },
     xp: 34,
-    description: 'Human combatant in layered desert fabrics — answers to no faction.',
+    description: 'Human combatant in layered desert fabrics — deniable toll-men the Caravan pretends not to know, following the descent down because dead delvers carry maps.',
     moves: [
       {
         id: 'quick_stride', label: 'Quick Stride', weight: 3,
@@ -206,7 +285,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
       },
       {
         id: 'pocket_sand', label: 'Pocket Sand', weight: 2,
-        description: 'Reduces your Accuracy by 20% for 2 turns.',
+        description: 'Reduces your Accuracy by 30% for 2 turns.',
         condition: (ctx) => !ctx.player.statuses.some((s) => s.id === 'blind'),
         resolve(ctx) {
           ctx.applyStatusToPlayer('blind', 2);
@@ -291,7 +370,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     attackType: 'pierce',
     affinities: { shadow: 'wk', slash: 'wk', sacred: 'null', frost: 'str' },
     xp: 52,
-    description: 'Masked Sable elite with flame motifs worked into heavier armor.',
+    description: 'Masked Sable elite with flame motifs worked into heavier armor — a pursuit party that followed the heretic roads far past reason.',
     moves: [
       {
         id: 'judgment_pierce', label: 'Judgment Pierce', weight: 3,
@@ -332,7 +411,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
       },
       {
         id: 'acid_spit', label: 'Acid Spit', weight: 2,
-        description: 'Reduces your Defense by 40% for 2 turns.',
+        description: 'Reduces your Defense by 50% for 2 turns.',
         condition: (ctx) => !ctx.player.statuses.some((s) => s.id === 'armour_break'),
         resolve(ctx) {
           ctx.applyStatusToPlayer('armour_break', 2);
@@ -347,7 +426,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     name: 'Dominion Echo-Soldier',
     level: 12,
     hp: 150, mp: 35, atk: 21, matk: 9, def: 17, mdef: 12, spd: 11,
-    attackType: 'slash',
+    attackType: 'pierce',
     affinities: { sacred: 'wk', blunt: 'wk', slash: 'rep', pierce: 'str' },
     xp: 55,
     description: 'Ancient armored construct — spear and shield, weathered metal.',
@@ -480,7 +559,7 @@ export const SUMMON_ENEMIES: Record<string, EnemyDef> = {
 };
 
 // ============================================================================
-// Stage pools — which enemies can appear where (see docs/ENEMY_ROSTER_BY_STAGE.md)
+// Stage pools — which enemies can appear where.
 // ============================================================================
 
 export function stageForChapter(chapter: number): number {
@@ -488,7 +567,7 @@ export function stageForChapter(chapter: number): number {
 }
 
 const STAGE_ENEMY_POOLS: string[][] = [
-  ['dust_wight', 'echo_skeleton'],
+  ['keth_deserter', 'rust_picker', 'sable_scout'],
   ['venn_custodian', 'sable_zealot', 'ash_seer'],
   ['dust_road_raider', 'archive_cipher_wraith'],
   ['sable_inquisitor', 'ash_mutant', 'echo_soldier'],

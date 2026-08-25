@@ -53,11 +53,14 @@ export function applyUnlocksToNewRun(player: PlayerState, unlocks: string[]): vo
   if (unlocks.includes('venn_fragment') && !player.loreFragments.includes('venn_fragment_starter')) {
     player.loreFragments.push('venn_fragment_starter');
   }
-  if (unlocks.includes('sable_blessing')) player.faction.sable += 10;
-  if (unlocks.includes('archive_clearance')) player.faction.archive += 10;
-  if (unlocks.includes('covenant_whisper')) player.faction.covenant += 10;
-  if (unlocks.includes('caravan_map')) player.faction.caravan += 10;
+  // Blessings start you Friendly, not merely "liked" — they cross the band.
+  if (unlocks.includes('sable_blessing')) player.faction.sable += 25;
+  if (unlocks.includes('archive_clearance')) player.faction.archive += 25;
+  if (unlocks.includes('covenant_whisper')) player.faction.covenant += 25;
+  if (unlocks.includes('caravan_map')) player.faction.caravan += 25;
   if (unlocks.includes('resonance_anchor')) player.resonance = Math.max(player.resonance, 25);
   if (unlocks.includes('survivors_mark')) player.derived.dodge = Math.min(45, player.derived.dodge + 5);
   if (unlocks.includes('true_sight')) player.flags.true_sight = true;
+  // New Game+: a harder Beneath that remembers what you did in it.
+  if (unlocks.includes('new_game_plus')) player.flags.ng_plus = true;
 }

@@ -138,10 +138,13 @@ export function takeCheckpoint(game: GameState, player: PlayerState): GameState 
   };
 }
 
-/** Restores player + board position to the last checkpoint after a death. */
+/** Restores player + board position to the last checkpoint after a death.
+ *  The descent is merciful, not free: you continue at half HP and MP. */
 export function restoreCheckpoint(game: GameState): { game: GameState; player: PlayerState | null } {
   if (!game.checkpointSnapshot) return { game: { ...game, isDead: false }, player: null };
   const restoredPlayer = JSON.parse(JSON.stringify(game.checkpointSnapshot)) as PlayerState;
+  restoredPlayer.currentHP = Math.max(1, Math.round(restoredPlayer.derived.maxHP * 0.5));
+  restoredPlayer.currentMP = Math.max(0, Math.round(restoredPlayer.derived.maxMP * 0.5));
   const restoredNode = game.checkpointNodeIndex ?? 1;
   const restoredGame: GameState = {
     ...game,

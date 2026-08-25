@@ -277,6 +277,14 @@ export class CombatEngine {
   private lastRoundActors: string[] = [];
   /** Damage each enemy dealt during the most recent enemy phase (drives UI damage beats). */
   private phaseDamage: Record<string, number> = {};
+  // ---- Living-depth systems (adaptation, gambit, battlefield) ----------------
+  private playerTypeTally: Partial<Record<DamageType, number>> = {};
+  private bossAdapt?: { type: DamageType; until: number; original: AffinityKind };
+  private harmonyRage?: { atk: number; matk: number };
+  private harmonyEnrageUntil = 0;
+  private gambitFired = false;
+  private revelationFired = false;
+  private battlefieldState?: { id: string; label: string; turns: number };
 
   constructor(setup: CombatSetup) {
     this.rng = setup.rng;
@@ -307,9 +315,17 @@ export class CombatEngine {
     this.momentum = Math.min(MOMENTUM_CAP, setup.player.momentum);
     if (this.hasPassive('chorus_echo')) this.momentum = Math.min(MOMENTUM_CAP, this.momentum + 1);
 
-    const scale = scalingForIndex(Math.max(1, setup.nodeIndex));
+    const rawScale = scalingForIndex(Math.max(1, setup.nodeIndex));
     const resHp = resonanceEnemyHpMultiplier(setup.player.resonance);
     const resAtk = resonanceEnemyAtkMultiplier(setup.player.resonance);
+    // New Game+: the Beneath remembers you, and leans in.
+    const ngPlus = !!setup.player.flags.ng_plus;
+    const scale = {
+      hp: rawScale.hp * (ngPlus ? 1.25 : 1),
+      atk: rawScale.atk * (ngPlus ? 1.2 : 1),
+      def: rawScale.def * (ngPlus ? 1.15 : 1),
+    };
+    if (ngPlus) this.log.push('NEW GAME+ — the Beneath remembers you, and does not pretend otherwise.');
 
     if (setup.bossId || setup.bossDef) {
       const boss = setup.bossDef ?? BOSSES[setup.bossId!];
@@ -335,6 +351,27 @@ export class CombatEngine {
         e.known.add(type);
         e.affinities[type] = kind;
       }
+    }
+
+    // True Sight unlock: two random truths surface unasked per foe.
+    if (setup.player.flags.true_sight) {
+      for (const e of this.enemies) {
+        const unknown = DAMAGE_TYPES.filter((t) => !e.known.has(t));
+        for (let i = 0; i < 2 && unknown.length > 0; i++) {
+          const idx = Math.floor(this.rng() * unknown.length);
+          this.discoverAffinity(e, unknown.splice(idx, 1)[0]);
+        }
+      }
+      if (this.enemies.length > 0) this.log.push('True Sight — the veil thins before the fight begins.');
+    }
+
+    // Battlefield states: deep-strata weather that reshapes every exchange.
+    if (!setup.bossId && !setup.bossDef && setup.nodeIndex >= 81 && this.rng() < 0.25) {
+      const id = this.rng() < 0.5 ? 'dust_storm' : 'sacred_ground';
+      this.battlefieldState = { id, label: id === 'dust_storm' ? 'Dust Storm' : 'Sacred Ground', turns: 99 };
+      this.log.push(id === 'dust_storm'
+        ? 'DUST STORM — grit fouls every aim. (-10% accuracy)'
+        : 'SACRED GROUND — hallowed light seeps up through the stone. (Sacred +20%)');
     }
 
     this.buildTurnOrder();
@@ -560,7 +597,7 @@ export class CombatEngine {
       this.firstSkillUsed = true;
       this.gainMomentum(1);
     }
-    if (skill.id === 'cleanse_surge') removeAllDebuffs(this.player.statuses);
+    if (skill.id === 'cleanse_surge' || skill.id === 'echo_ward') removeAllDebuffs(this.player.statuses);
 
     const allEffects = [...implicitDamage, ...(skill.effects ?? [])] as NonNullable<typeof skill.effects>;
     const primaryTarget = allEffects.some((fx) => fx.kind === 'damage' && fx.target === 'all')
@@ -588,7 +625,7 @@ export class CombatEngine {
           break;
         }
         case 'buff':
-          applyStatus(this.player.statuses, fx.id, fx.turns);
+          applyStatus(this.player.statuses, fx.id, fx.turns, fx.stacks ?? 1);
           break;
         case 'heal': {
           if (hasStatus(this.player.statuses, 'heal_block')) {
@@ -706,7 +743,16 @@ export class CombatEngine {
       case 'harmony': {
         const heal = Math.round(this.player.maxHp * 0.25);
         this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
-        this.log.push(`HARMONY — you recover ${heal} HP.${this.bossDef ? ' The boss enrages.' : ''}`);
+        const boss = this.bossKey ? this.aliveByKey(this.bossKey) : undefined;
+        if (boss) {
+          this.harmonyRage = { atk: boss.atk, matk: boss.matk };
+          boss.atk = Math.round(boss.atk * 1.3);
+          boss.matk = Math.round(boss.matk * 1.3);
+          this.harmonyEnrageUntil = this.round + 2;
+          this.log.push(`HARMONY — you recover ${heal} HP. ${boss.name} ENRAGES (+30%, 2 turns).`);
+        } else {
+          this.log.push(`HARMONY — you recover ${heal} HP.`);
+        }
         break;
       }
       case 'archive': {
@@ -764,6 +810,12 @@ export class CombatEngine {
     if (target.hp <= 0) return;
     this.lastAttackerKey = undefined;
 
+    // Confusion: motor control, not aim — even a timed strike can wander.
+    if (hasStatus(this.player.statuses, 'confuse') && this.rng() < 0.3) {
+      this.log.push('Confusion — your strike wanders wide of anything real.');
+      return;
+    }
+
     // Cipher Barrier negates the next skill
     if ((target.flags.nullify_next_skill ?? 0) === 1 && label !== 'Attack') {
       target.flags.nullify_next_skill = 0;
@@ -781,7 +833,9 @@ export class CombatEngine {
     // Hit roll: any resolved QTE timing connects (a missed window just lands at
     // reduced power); un-timed strikes use the standard accuracy roll.
     if (!opts.guaranteed && !opts.qte) {
-      const chance = Math.max(15, Math.min(95, this.player.accuracy - target.dodge));
+      const blind = hasStatus(this.player.statuses, 'blind') ? 30 : 0;
+      const storm = this.battlefieldState?.id === 'dust_storm' ? 10 : 0;
+      const chance = Math.max(15, Math.min(95, this.player.accuracy - blind - storm - target.dodge));
       if (this.rng() * 100 > chance) {
         this.log.push(`${label} misses ${target.name}.`);
         this.momentum = 0;
@@ -791,6 +845,7 @@ export class CombatEngine {
 
     // Affinity discovery
     const kind = this.discoverAffinity(target, type);
+    this.playerTypeTally[type] = (this.playerTypeTally[type] ?? 0) + 1;
 
     // Null short-circuit
     if (kind === 'null') {
@@ -817,17 +872,37 @@ export class CombatEngine {
     if (this.resDmgBonus > 1 && !target.isBoss) mult *= this.resDmgBonus;
     if (this.echoSurgeTurns > 0) mult *= 1.2;
     if (this.overclockActive) mult *= 1.7;
+    if (hasStatus(this.player.statuses, 'exhausted')) mult *= 0.75;
+    if (type === 'sacred' && this.battlefieldState?.id === 'sacred_ground') mult *= 1.2;
     if (this.unravelPending) mult *= 2.5;
 
     let dmg = Math.max(3, Math.round(source - effDef / 2));
     dmg = Math.max(3, Math.round(dmg * power * mult * (0.9 + this.rng() * 0.2)));
     dmg = Math.round(dmg * this.diff.playerDmgMult);
 
+    // Desperate Gambit — once per fight, below a quarter health, the blow lands
+    // like it is the last one you have.
+    if (!this.gambitFired && this.player.hp <= this.player.maxHp * 0.25) {
+      this.gambitFired = true;
+      dmg = Math.round(dmg * 1.5);
+      this.log.push('DESPERATE GAMBIT — cornered, you swing past your own limit!');
+      this.bannersQueue.push('DESPERATE GAMBIT! ×1.5');
+    }
+
     // Crit
     let critChance = BASE_CRIT + (opts.critBonus ?? 0);
     if (this.critAllTurn) critChance = 1;
     const crit = this.rng() < critChance;
     if (crit) dmg = Math.round(dmg * 1.5);
+
+    // Counter Stance (enemy-side reflection status) — null/drain paths already returned.
+    if (hasStatus(target.statuses, 'reflection')) {
+      removeStatus(target.statuses, 'reflection');
+      const back = Math.max(1, Math.round(dmg * 0.6));
+      this.log.push(`${target.name}'s counter-stance turns ${label} back on you! (${back})`);
+      this.damagePlayer(back, type, `${target.name} — Counter`, { guaranteed: true });
+      return;
+    }
 
     // Reflect
     if (kind === 'rep') {
@@ -866,8 +941,8 @@ export class CombatEngine {
     if (incoming === 'shock' && hasStatus(target.statuses, 'chilled')) {
       removeStatus(target.statuses, 'chilled');
       applyStatus(target.statuses, 'stun', 1);
-      this.log.push('SUPERCONDUCT! The arc finds the frost. (Stun)');
-      this.bannersQueue.push('SUPERCONDUCT!');
+      this.log.push('BRITTLE FROST! The arc finds the frost. (Stun)');
+      this.bannersQueue.push('BRITTLE FROST!');
       return 1.25;
     }
     if (incoming === 'shadow' && hasStatus(target.statuses, 'sacred_mark')) {
@@ -878,6 +953,8 @@ export class CombatEngine {
       return 2.0;
     }
     if (incoming === 'flame' && hasStatus(target.statuses, 'shock_dot')) {
+      removeStatus(target.statuses, 'shock_dot');
+      this.log.push('OVERCHARGE! The lingering charge detonates.');
       this.bannersQueue.push('OVERCHARGE!');
       return 1.3;
     }
@@ -890,6 +967,12 @@ export class CombatEngine {
       const kind = target.affinities[type] ?? '-';
       if (!this.discoveryGains[target.defId]) this.discoveryGains[target.defId] = {};
       this.discoveryGains[target.defId][type] = kind;
+      // Revelation — first fresh weakness read on a boss feeds Momentum.
+      if (kind === 'wk' && target.isBoss && !this.revelationFired) {
+        this.revelationFired = true;
+        this.gainMomentum(1);
+        this.bannersQueue.push('REVELATION! (+1 Momentum)');
+      }
     }
     return target.affinities[type] ?? '-';
   }
@@ -914,6 +997,43 @@ export class CombatEngine {
   private resolveEnemyPhase(): void {
     const acted: string[] = [];
     this.phaseDamage = {};
+
+    // Harmony enrage expiry
+    if (this.harmonyRage && this.round > this.harmonyEnrageUntil) {
+      const b = this.bossKey ? this.aliveByKey(this.bossKey) : undefined;
+      if (b) {
+        b.atk = this.harmonyRage.atk;
+        b.matk = this.harmonyRage.matk;
+        this.log.push(`${b.name}'s rage subsides.`);
+      }
+      this.harmonyRage = undefined;
+    }
+
+    // Boss adaptation — every third round, the boss reads your favorite answer
+    // and stiffens against it for two rounds.
+    const adaptBoss = this.bossKey ? this.aliveByKey(this.bossKey) : undefined;
+    if (adaptBoss && adaptBoss.isBoss) {
+      if (this.bossAdapt && this.round > this.bossAdapt.until) {
+        adaptBoss.affinities[this.bossAdapt.type] = this.bossAdapt.original;
+        this.log.push(`${adaptBoss.name} forgets your pattern.`);
+        this.bossAdapt = undefined;
+      }
+      if (!this.bossAdapt && this.round >= 3 && this.round % 3 === 0) {
+        let best: DamageType | null = null;
+        let n = 0;
+        for (const t of DAMAGE_TYPES) {
+          const c = this.playerTypeTally[t] ?? 0;
+          if (c > n) { n = c; best = t; }
+        }
+        if (best && n >= 3 && (adaptBoss.affinities[best] ?? '-') === '-') {
+          this.bossAdapt = { type: best, until: this.round + 2, original: adaptBoss.affinities[best] ?? '-' };
+          adaptBoss.affinities[best] = 'str';
+          this.log.push(`${adaptBoss.name} reads your pattern — it stiffens against ${best}.`);
+          this.bannersQueue.push('IT ADAPTS!');
+        }
+      }
+    }
+
     for (const key of [...this.turnOrder]) {
       if (this.phase !== 'player') return;
       const e = this.aliveByKey(key);
@@ -1346,7 +1466,7 @@ export class CombatEngine {
       allies: [] as Array<{ id: string; name: string }>,
       playerResonance: this.playerStateRef.resonance,
       fear: 0,
-      battlefieldState: undefined,
+      battlefieldState: this.battlefieldState ? { ...this.battlefieldState } : undefined,
       playerRow: undefined,
       enemies: this.enemies.filter((e) => e.hp > 0).map((e) => ({
         key: e.key,

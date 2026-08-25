@@ -95,12 +95,13 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   shock_arc: {
     id: 'shock_arc',
     name: 'Shock Arc',
-    description: 'Magic — MP cost. Shock damage; triggers Superconduct (Stun) on Chilled targets.',
+    description: 'Magic — MP cost. Shock damage; leaves a Shock DoT (Overcharge fuel) and triggers Brittle Frost (Stun) on Chilled targets.',
     mpCost: 7,
     damageType: 'shock',
     skillPower: 1.4,
     stat: 'magic',
     target: 'single',
+    effects: [{ kind: 'status', id: 'shock_dot', turns: 2, stacks: 1, target: 'single' }],
     chapter: 2,
   },
   cleanse_surge: {
@@ -115,13 +116,14 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   // ---- Chapter 3 loadout: Deepening & Memory Loss ----------------------------
   chain_plasma: {
     id: 'chain_plasma',
-    name: 'Chain Plasma',
-    description: 'Magic — MP cost. Arcing Shock damage to all enemies.',
+    name: 'Chain Lightning',
+    description: 'Magic — MP cost. Arcing Shock damage to all enemies, leaving Shock DoTs (Overcharge fuel).',
     mpCost: 12,
     damageType: 'shock',
     skillPower: 1.2,
     stat: 'magic',
     target: 'all',
+    effects: [{ kind: 'status', id: 'shock_dot', turns: 2, stacks: 1, target: 'all' }],
     chapter: 3,
   },
   inferno_wave: {
@@ -149,7 +151,7 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   },
   barrier_protocol: {
     id: 'barrier_protocol',
-    name: 'Barrier Protocol',
+    name: 'Aegis Ward',
     description: 'Utility — MP cost. Raises a shield equal to 25% of your max HP.',
     mpCost: 9,
     effects: [{ kind: 'barrier', pct: 25, turns: 99 }],
@@ -191,12 +193,13 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     effects: [{ kind: 'status', id: 'bleed', turns: 3, stacks: 1, target: 'single' }],
     chapter: 4,
   },
+  // ---- Chapter 4 loadout: Corruption & Mutants -------------------------------
   mass_renew: {
     id: 'mass_renew',
     name: 'Mass Renew',
-    description: 'Utility — MP cost. Regenerates HP over 3 turns.',
-    mpCost: 10,
-    effects: [{ kind: 'buff', id: 'regeneration', turns: 3 }],
+    description: 'Utility — MP cost. Regenerates 10% max HP per turn for 4 turns.',
+    mpCost: 12,
+    effects: [{ kind: 'buff', id: 'regeneration', turns: 4, stacks: 2 }],
     chapter: 4,
   },
 
@@ -223,7 +226,7 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   },
   absolute_zero: {
     id: 'absolute_zero',
-    name: 'Absolute Zero',
+    name: "Winter's Grasp",
     description: 'Magic — MP cost. Devastating Frost storm; may Stun each enemy.',
     mpCost: 16,
     damageType: 'frost',
@@ -341,30 +344,31 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
   reckless_swing: {
     id: 'reckless_swing',
     name: 'Reckless Swing',
-    description: 'A heavy overcommitted strike. Costs 8% of your current HP to cast.',
-    hpCost: { pct: 8 },
+    description: 'A heavy overcommitted strike — your strongest raw hit. Costs 10% of your current HP to cast.',
+    hpCost: { pct: 10 },
     damageType: 'slash',
-    skillPower: 1.8,
+    skillPower: 2.1,
     stat: 'atk',
     target: 'single',
   },
   hunters_mark: {
     id: 'hunters_mark',
     name: "Hunter's Mark",
-    description: 'A precise Pierce strike that cannot miss.',
+    description: 'A precise Pierce strike that cannot miss, hunting the weak point (+30% crit).',
     damageType: 'pierce',
     skillPower: 1.3,
     stat: 'atk',
     target: 'single',
     guaranteed: true,
+    critChanceBonus: 0.3,
   },
   overwritten_truth: {
     id: 'overwritten_truth',
     name: 'Overwritten Truth',
     description: 'A precise, INT-scaled strike of corrected fact.',
-    mpCost: 6,
+    mpCost: 8,
     damageType: 'shock',
-    skillPower: 1.7,
+    skillPower: 2.0,
     stat: 'magic',
     target: 'single',
   },
@@ -384,9 +388,32 @@ export const NAMED_SKILLS: Record<string, SkillDef> = {
     name: 'Sealing Strike',
     description: 'A Sable rite turned to combat use. Sacred damage.',
     damageType: 'sacred',
-    skillPower: 1.1,
+    skillPower: 1.4,
     stat: 'atk',
     target: 'single',
+  },
+
+  // ---- Resonance Abilities (granted by the Loom at Transcendent resonance) ---
+  loom_lance: {
+    id: 'loom_lance',
+    name: 'Loom Lance',
+    description: 'RESONANCE — MP cost. A needle of borrowed certainty. Shadow damage that cannot miss.',
+    mpCost: 14,
+    damageType: 'shadow',
+    skillPower: 2.0,
+    stat: 'magic',
+    target: 'single',
+    guaranteed: true,
+  },
+  echo_ward: {
+    id: 'echo_ward',
+    name: 'Echo Ward',
+    description: "RESONANCE — MP cost. The chord answers for you once: cleanses debuffs, restores 10% HP, raises a 30% shield.",
+    mpCost: 12,
+    effects: [
+      { kind: 'barrier', pct: 30, turns: 99 },
+      { kind: 'heal', pct: 10 },
+    ],
   },
 };
 

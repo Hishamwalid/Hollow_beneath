@@ -58,7 +58,7 @@ export function resolveTrap(trap: TrapDef, player: PlayerState, rng: () => numbe
 }
 
 export function pickEvent(player: PlayerState, chapter: number, resonance: number, seen: Set<string>, rng: () => number, flags: Record<string, boolean> = {}): EventDef {
-  const pool = eligibleEvents(chapter, resonance, seen, flags);
+  const pool = eligibleEvents(chapter, resonance, seen, flags, player.faction);
   if (pool.length === 0) return generateFallbackEvent(player, rng);
   return pick(pool, rng) ?? generateFallbackEvent(player, rng);
 }

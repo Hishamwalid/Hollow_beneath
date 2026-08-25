@@ -138,7 +138,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const rng = mulberry32(seed);
     const player = createStartingPlayer(stats, meta.purchasedUnlocks, meta.totalRuns, name);
     const nodes = generateBoard(rng);
-    // A fresh descent forgets the Bestiary: all affinity slots start unknown again.
+    // Bestiary knowledge persists across descents (discoveredAffinities/bestiaryKills).
     const game: GameState = {
       currentNodeIndex: 0,
       path: [],
@@ -159,7 +159,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       player,
       game,
-      meta: { ...meta, discoveredAffinities: {}, bestiaryKills: {} },
+      meta,
     });
     get().persist();
   },
@@ -194,10 +194,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!player || !game) return;
     const refund = deathRefund(player.echoShards);
     const runStats = computeRunStatsImpl(player, game, meta, refund, null);
-    // Bank Bestiary progress even on death.
-    for (const [id, aff] of Object.entries(meta.discoveredAffinities)) {
-      void id; void aff; // discoveries are merged at combat end via commitDiscoveries
-    }
     const newMeta = {
       ...meta,
       echoShards: meta.echoShards + refund,
