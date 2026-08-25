@@ -749,8 +749,8 @@ export class BoardScene extends Phaser.Scene {
   /** Journal feed — newest entry on top with a node marker; older lines glide down. */
   /** The Journal keeps the whole run's history — masked viewport + wheel scroll. */
   private buildJournalScroller(): void {
-    const viewY = LOG_PANEL_Y + 30;
-    const viewH = Math.max(60, LOG_PANEL_H - 42);
+    const viewY = LOG_PANEL_Y + 44;
+    const viewH = Math.max(60, LOG_PANEL_H - 56);
     this.journalText = this.add
       .text(COL2_X + 14, viewY, '', {
         fontFamily: FONT_BODY,
@@ -786,8 +786,8 @@ export class BoardScene extends Phaser.Scene {
     this.journalEntries.unshift(entry);
     if (this.journalEntries.length > 40) this.journalEntries.pop();
     if (!this.journalText) return;
-    const viewY = LOG_PANEL_Y + 30;
-    const viewH = Math.max(60, LOG_PANEL_H - 42);
+    const viewY = LOG_PANEL_Y + 44;
+    const viewH = Math.max(60, LOG_PANEL_H - 56);
     this.journalText.setText(this.journalEntries.join('\n'));
     // Newest entry slides in at the top; history waits under the wheel.
     const maxScroll = Math.max(0, this.journalText.height - viewH);
@@ -812,7 +812,7 @@ export class BoardScene extends Phaser.Scene {
     if (!lastId) return;
     const title = STORY_EVENTS[lastId].title;
     const line = STORY_BEAT_REMINDERS[lastId] ?? '';
-    this.lastBeatChip = this.add.text(COL2_X + 14, LOG_PANEL_Y + 10, `✦ ${title} — ${line}`, {
+    this.lastBeatChip = this.add.text(COL2_X + 14, LOG_PANEL_Y + 24, `✦ ${title} — ${line}`, {
       fontFamily: FONT_BODY,
       fontSize: '11px',
       color: PALETTE_HEX.gold,

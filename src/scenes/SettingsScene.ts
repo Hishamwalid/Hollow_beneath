@@ -15,7 +15,7 @@ import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 // swaps its own highlight. Credits page through instead of truncating.
 // ============================================================================
 
-const CREDITS_PER_PAGE = 12;
+const CREDITS_PER_PAGE = 6;
 
 export class SettingsScene extends Phaser.Scene {
   private creditsPage = 0;
@@ -56,7 +56,7 @@ export class SettingsScene extends Phaser.Scene {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5);
 
-    createSlider(this, cx - 80, y, 240, initial, (v) => {
+    createSlider(this, cx - 40, y, 240, initial, (v) => {
       // Store rounded like the label says — one truth, no drift.
       const rounded = Math.round(v);
       settingsManager.set({ masterVolume: rounded });
@@ -75,7 +75,7 @@ export class SettingsScene extends Phaser.Scene {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5);
 
-    createSlider(this, cx - 80, y, 240, initial, (v) => {
+    createSlider(this, cx - 40, y, 240, initial, (v) => {
       const rounded = Math.round(v);
       settingsManager.set({ musicVolume: rounded });
       audio.setMusicVolume(rounded);
@@ -90,14 +90,14 @@ export class SettingsScene extends Phaser.Scene {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5);
 
-    this.add.text(cx - 100, y + 20, 'Slower', {
+    this.add.text(cx - 100, y + 26, 'Slower', {
       fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5);
-    this.add.text(cx + 140, y + 20, 'Faster', {
+    this.add.text(cx + 140, y + 26, 'Faster', {
       fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(1, 0.5);
 
-    createSlider(this, cx - 80, y, 240, initial, (v) => {
+    createSlider(this, cx - 40, y, 240, initial, (v) => {
       settingsManager.set({ textSpeed: Math.round(v) });
       valueLabel.setText(`${Math.round(v)}%`);
     });
@@ -123,7 +123,7 @@ export class SettingsScene extends Phaser.Scene {
   }
 
   private buildLargeTextToggle(cx: number, initial: boolean) {
-    const y = 382;
+    const y = 392;
     createSectionLabel(this, cx - 300, y, 'Large Text', { color: PALETTE_HEX.bone });
     this.add.text(cx - 296, y + 18, 'scales dialog & ending prose ~15%', {
       fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
@@ -136,7 +136,7 @@ export class SettingsScene extends Phaser.Scene {
   /** Segmented difficulty control — the active mode carries a gold underline. */
   private buildDifficulty(cx: number) {
     const modes = ['easy', 'normal', 'hard', 'ironman'] as const;
-    const y = 420;
+    const y = 428;
     let current = settingsManager.get().difficulty;
 
     createSectionLabel(this, cx - 300, y, 'Difficulty', { color: PALETTE_HEX.bone });
@@ -173,30 +173,32 @@ export class SettingsScene extends Phaser.Scene {
   }
 
   private buildCredits(cx: number) {
-    const topY = 445;
+    const topY = 462;
     this.add.rectangle(cx, topY - 8, 600, 1, parseInt(PALETTE_HEX.gold.replace('#', ''), 16), 0.3);
     createSectionLabel(this, cx - 300, topY + 10, 'Credits');
     this.creditsPagerText = this.add.text(cx + 300, topY + 10, '', {
       fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(1, 0.5);
 
-    this.renderCreditsPage(cx, topY + 36);
-
-    const prevBtn = this.add.text(cx - 40, GAME_HEIGHT - 118, '‹', {
-      fontFamily: FONT_MONO, fontSize: '18px', color: PALETTE_HEX.gold,
+    // Pager arrows live inline beside the counter — the old bottom placement
+    // rendered underneath the Clear All Data button.
+    const prevBtn = this.add.text(cx + 318, topY + 10, '‹', {
+      fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    const nextBtn = this.add.text(cx + 40, GAME_HEIGHT - 118, '›', {
-      fontFamily: FONT_MONO, fontSize: '18px', color: PALETTE_HEX.gold,
+    const nextBtn = this.add.text(cx + 356, topY + 10, '›', {
+      fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     prevBtn.on('pointerdown', () => this.flipCredits(-1));
     nextBtn.on('pointerdown', () => this.flipCredits(1));
+
+    this.renderCreditsPage(cx, topY + 36);
   }
 
   private flipCredits(delta: number): void {
     const pageCount = Math.max(1, Math.ceil(CREDITS.length / CREDITS_PER_PAGE));
     this.creditsPage = Phaser.Math.Clamp(this.creditsPage + delta, 0, pageCount - 1);
     audio.pageTurn();
-    this.renderCreditsPage(GAME_WIDTH / 2, 481);
+    this.renderCreditsPage(GAME_WIDTH / 2, 498);
   }
 
   private renderCreditsPage(cx: number, startY: number): void {

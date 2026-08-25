@@ -48,6 +48,7 @@ export class EventScene extends Phaser.Scene {
   private dialog?: DialogBox;
   private dialogCenterY = 300;
   private choiceMenu?: ChoiceMenu;
+  private cinematicMode = false;
   private continueBtn?: ReturnType<typeof createButton>;
   /** 1–N hotkey bindings for the visible choice rows (badges promise them). */
   private choiceKeys: Array<[string, () => void]> = [];
@@ -72,6 +73,7 @@ export class EventScene extends Phaser.Scene {
     }
 
     const cinematic = !!STORY_EVENTS[event.id];
+    this.cinematicMode = cinematic;
     this.cameras.main.setBackgroundColor(cinematic ? 0x000000 : 0x0b0d10);
     if (cinematic) {
       this.buildLetterbox();
@@ -226,7 +228,8 @@ export class EventScene extends Phaser.Scene {
       GAME_WIDTH / 2,
       this.underDialog(64),
       menuItems,
-      { width: 760, spacing: 66, maxShift: 44, bottomBound: GAME_HEIGHT - 40 },
+      // Cinematic letterbox eats the bottom 52px — keep cards clear of it.
+      { width: 760, spacing: 66, maxShift: 44, bottomBound: this.cinematicMode ? GAME_HEIGHT - 72 : GAME_HEIGHT - 40 },
     );
 
     // The numeral badges finally mean something: 1–N pick their row.

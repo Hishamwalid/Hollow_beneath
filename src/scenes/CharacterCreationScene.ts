@@ -37,7 +37,7 @@ export class CharacterCreationScene extends Phaser.Scene {
     const intro = this.add
       .text(
         cx,
-        130,
+        152,
         "You stand at the mouth of the sinkhole.\n\nThe journal is heavy in your hands. The desert wind is loud.\nSeven hundred years of Seekers have climbed down before you.\nYou never dreamed their dream.",
         { fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.boneMuted, align: 'center', lineSpacing: 6 },
       )

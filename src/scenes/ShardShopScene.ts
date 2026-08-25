@@ -62,7 +62,7 @@ export class ShardShopScene extends Phaser.Scene {
       chip.add([shardIcon, costText]);
 
       // Wax-stamp OWNED — pressed into the row like a seal on a ledger line.
-      const ownedStamp = this.add.container(cx + 330, y).setVisible(false).setAngle(-8);
+      const ownedStamp = this.add.container(cx + 352, y).setVisible(false).setAngle(-8);
       const stampBg = this.add.rectangle(0, 0, 92, 26, 0x000000, 0).setStrokeStyle(2, num(PALETTE_HEX.waxRed), 0.9);
       const stampText = this.add.text(0, 0, 'OWNED', {
         fontFamily: FONT_MONO, fontSize: '12px', color: '#c96a5c', fontStyle: 'bold',

@@ -13,9 +13,9 @@ import { ENEMIES } from '@data/enemies';
 import { BOSSES } from '@data/bosses';
 import type { DamageType, EnemyAffinities } from '@data/types';
 import { DAMAGE_TYPES, DAMAGE_TYPE_ABBREV } from '@data/types';
+const PER_PAGE = 3;
 
-const PER_PAGE = 4;
-const ROW_H = 130;
+const ROW_H = 150;
 const LIST_TOP = 125;
 
 type CodexTab = 'lore' | 'bestiary';
@@ -200,7 +200,7 @@ export class LoreCodexScene extends Phaser.Scene {
 
         const lv = entry.level != null ? `   Lv ${entry.level}` : '';
         const kills = entry.kills > 0 ? `   · slain ×${entry.kills}` : '';
-        const name = this.add.text(cx - 440, rowY - ROW_H / 2 + 16, `${entry.name}${lv}${kills}`, {
+        const name = this.add.text(cx - 440, rowY - ROW_H / 2 + 10, `${entry.name}${lv}${kills}`, {
           fontFamily: FONT_SERIF,
           fontSize: '17px',
           color: PALETTE_HEX.gold,
