@@ -383,21 +383,9 @@ export class CombatScene extends Phaser.Scene {
     const psAdj = layoutAdj('playerSprite');
     this.playerSprite = this.add.image(PLAYER_SPRITE_BASE.x + psAdj.dx, PLAYER_SPRITE_BASE.y + psAdj.dy, 'player_idle').setDepth(6);
     this.showPlayerTexture('player_idle');
-    // Idle breathing — chest rises while the boots stay glued to the shadow.
-    // scaleY expansion + counter-offset pins the bottom edge exactly, so the
-    // whole sprite never hovers (the old ±3px position bob lifted everything).
-    const spr = this.playerSprite;
-    const breathH = spr.displayHeight;
+    // Idle breathing — the explorer is alive between exchanges.
     if (!reducedMotion()) {
-      this.tweens.add({
-        targets: spr,
-        scaleY: { from: 1, to: 1.03 },
-        y: { from: spr.y, to: spr.y - breathH * 0.015 },
-        duration: 1600,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut',
-      });
+      this.tweens.add({ targets: this.playerSprite, y: '+=3', duration: 1700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
     const alAdj = layoutAdj('allySprite');
     const allyName = initialSnap.allies[0]?.name ?? '';
