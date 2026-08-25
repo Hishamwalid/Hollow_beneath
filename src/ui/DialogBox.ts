@@ -131,6 +131,48 @@ export function createDialogBox(
     layout(text.height + 48);
     text.setText('');
   }
+
+  /** Usable height for body text inside the sheet (box height minus padding). */
+  const TEXT_BUDGET = MAX_H - 48;
+
+  function measureHeight(t: string): number {
+    text.setText(t);
+    const h = text.height;
+    text.setText('');
+    return h;
+  }
+
+  /** Split a passage into chunks that each fit the sheet: paragraphs first,
+   *  then sentence-packed chunks, then words as a last resort. Returns the
+   *  original text untouched when it already fits on one page. */
+  function paginate(t: string): string[] {
+    const paragraphs = t
+      .split(/\n{2,}/)
+      .map((s) => s.replace(/\s*\n\s*/g, ' ').trim())
+      .filter((s) => s.length > 0);
+    if (paragraphs.length === 0) return [t];
+    const out: string[] = [];
+    for (const para of paragraphs) {
+      if (measureHeight(para) <= TEXT_BUDGET) {
+        out.push(para);
+        continue;
+      }
+      // Paragraph too tall for one page — split on sentence ends, pack greedily.
+      const sentences = para.split(/(?<=[.!?…]["”']?)\s+/).map((s) => s.trim()).filter(Boolean);
+      let chunk = '';
+      for (const sentence of sentences) {
+        const candidate = chunk ? `${chunk} ${sentence}` : sentence;
+        if (!chunk || measureHeight(candidate) <= TEXT_BUDGET) {
+          chunk = candidate;
+        } else {
+          out.push(chunk);
+          chunk = sentence;
+        }
+      }
+      if (chunk) out.push(chunk);
+    }
+    return out;
+  }
   let fullText = '';
   let charIndex = 0;
   let timer: Phaser.Time.TimerEvent | null = null;
@@ -180,16 +222,8 @@ export function createDialogBox(
     });
   }
 
-  return {
-    container,
-    getHeight: () => curH,
-    setText: (t, onDone) => {
-      inBeats = false;
-      beats = [];
-      beatLabel.setVisible(false);
-      startType(t, onDone);
-    },
-    setBeats: (b, onDone) => {
+    /** Queue paragraphs as clickable beats (progress label + prompt + advance). */
+    function startBeats(b: string[], onDone?: () => void): void {
       beats = b.filter((s) => s.trim().length > 0);
       beatIndex = 0;
       beatsDone = onDone;
@@ -210,7 +244,26 @@ export function createDialogBox(
             }
           : undefined;
       startType(beats[0], beatCb(0));
+    }
+
+    return {
+    container,
+    getHeight: () => curH,
+    setText: (t, onDone) => {
+      // Overflow guard: a passage taller than the sheet (MAX_H caps it at ~5
+      // lines) would spill out of the parchment. Split it into fitting chunks
+      // and page them through the beat queue instead.
+      const parts = paginate(t);
+      if (parts.length > 1) {
+        startBeats(parts, onDone);
+        return;
+      }
+      inBeats = false;
+      beats = [];
+      beatLabel.setVisible(false);
+      startType(parts[0] ?? t, onDone);
     },
+    setBeats: (b, onDone) => startBeats(b, onDone),
     setSpeaker: (name) => {
       if (nameplate) { nameplate.destroy(); nameplate = null; }
       if (nameplateBg) { nameplateBg.destroy(); nameplateBg = null; }
