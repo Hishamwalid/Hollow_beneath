@@ -166,6 +166,11 @@ export class EventScene extends Phaser.Scene {
   private underDialog(gap: number): number {
     return this.dialogCenterY + (this.dialog?.getHeight() ?? 200) / 2 + gap;
   }
+  /** Y of a coach tip sitting a few px above the (dynamic) narration sheet, so
+   * it can never overlap the choice cards that grow up from underDialog. */
+  private aboveDialog(gap: number): number {
+    return this.dialogCenterY - (this.dialog?.getHeight() ?? 200) / 2 - gap;
+  }
   private buildLetterbox() {
     const top = this.add.rectangle(GAME_WIDTH / 2, 26, GAME_WIDTH, 52, 0x000000, 0.92).setDepth(4);
     const bottom = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 26, GAME_WIDTH, 52, 0x000000, 0.92).setDepth(4);
@@ -196,7 +201,7 @@ export class EventScene extends Phaser.Scene {
     if (!player.flags.hint_event && visible.length > 0) {
       player.flags.hint_event = true;
       useGameStore.getState().persist();
-      createCoachTip(this, GAME_WIDTH / 2, this.underDialog(150), 'Your choices shift factions and Resonance.', {
+      createCoachTip(this, GAME_WIDTH / 2, this.aboveDialog(40), 'Your choices shift factions and Resonance.', {
         width: 400, durationMs: 4200, depth: 60,
       });
     }

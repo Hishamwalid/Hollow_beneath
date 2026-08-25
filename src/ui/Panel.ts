@@ -1,12 +1,12 @@
-import Phaser from 'phaser';
+﻿import Phaser from 'phaser';
 import { FONT_SERIF, PALETTE_HEX, SZ } from './uiTheme';
 
 // ============================================================================
-// Panel kit — the shared framed-container system ("Expedition Journal").
+// Panel kit â€” the shared framed-container system ("Expedition Journal").
 //
-//   parchment → aged-paper sheet, ink text (narration / dialogue / codex)
-//   stone     → dark instrument card with gold hairline (board HUD cards)
-//   ghost     → translucent veil (cinematic overlays, letterboxing)
+//   parchment â†’ aged-paper sheet, ink text (narration / dialogue / codex)
+//   stone     â†’ dark instrument card with gold hairline (board HUD cards)
+//   ghost     â†’ translucent veil (cinematic overlays, letterboxing)
 //
 // Panels are pure presentation: they position content, draw a titled frame,
 // and expose a content origin so screens stop hand-placing rectangles.
@@ -21,6 +21,8 @@ export interface PanelOptions {
   height: number;
   /** Optional heading drawn inside the frame (origin top-left content area). */
   title?: string;
+  /** Draw the hairline rule under the title (default true). */
+  titleRule?: boolean;
   variant?: PanelVariant;
   depth?: number;
 }
@@ -60,8 +62,10 @@ export function createPanel(scene: Phaser.Scene, opts: PanelOptions): PanelHandl
         fontSize: SZ.sm,
         color: PALETTE_HEX.oxide,
       }).setLetterSpacing(2);
-      const rule = scene.add.rectangle(-opts.width / 2 + PAD, -opts.height / 2 + 40, opts.width - PAD * 2, 1, 0x33291c, 0.35);
-      container.add(rule);
+      if (opts.titleRule !== false) {
+        const rule = scene.add.rectangle(0, -opts.height / 2 + 40, opts.width - PAD * 2, 1, 0x33291c, 0.35);
+        container.add(rule);
+      }
       contentY = -opts.height / 2 + 52;
     }
   } else if (variant === 'stone') {
@@ -73,8 +77,10 @@ export function createPanel(scene: Phaser.Scene, opts: PanelOptions): PanelHandl
         fontSize: '15px',
         color: PALETTE_HEX.gold,
       }).setLetterSpacing(2);
-      const rule = scene.add.rectangle(-opts.width / 2 + PAD, -opts.height / 2 + 34, opts.width - PAD * 2, 1, 0xc9a24b, 0.4);
-      container.add(rule);
+      if (opts.titleRule !== false) {
+        const rule = scene.add.rectangle(0, -opts.height / 2 + 34, opts.width - PAD * 2, 1, 0xc9a24b, 0.4);
+        container.add(rule);
+      }
       contentY = -opts.height / 2 + 44;
     }
   } else {

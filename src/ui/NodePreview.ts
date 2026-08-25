@@ -25,28 +25,25 @@ export function createNodePreview(scene: Phaser.Scene, x: number, y: number, wid
   // Vertical stack sized to fit a 180px panel: badge top ≈ -78, tip bottom ≈ +84.
   const badge = scene.add.circle(0, -48, badgeR, 0x22262c).setStrokeStyle(2, 0xc9a24b, 0.9);
   const icon = scene.add.image(0, -48, 'node_event').setDisplaySize(28, 28);
-  const done = scene.add.text(18, -66, '✔', {
-    fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.ok,
-  }).setOrigin(0.5).setVisible(false);
-  const indexLine = scene.add.text(0, -14, '', {
-    fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
-  }).setOrigin(0.5).setLetterSpacing(typeof scene.add.text === 'function' ? 1 : 0);
-  const title = scene.add.text(0, 4, 'NODE —', {
+  const indexLine = scene.add.text(0, -6, '', {
+    fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold,
+  }).setOrigin(0.5).setAlpha(0.9).setLetterSpacing(typeof scene.add.text === 'function' ? 2 : 0);
+  const title = scene.add.text(0, 14, 'NODE —', {
     fontFamily: FONT_SERIF, fontSize: '17px', color: PALETTE_HEX.gold,
   }).setOrigin(0.5);
-  const sub = scene.add.text(0, 26, '', {
+  const sub = scene.add.text(0, 36, '', {
     fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.bone,
     align: 'center', wordWrap: { width: width - 24 },
   }).setOrigin(0.5, 0);
-  const explain = scene.add.text(0, 48, '', {
+  const explain = scene.add.text(0, 58, '', {
     fontFamily: FONT_BODY, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     fontStyle: 'italic', align: 'center', wordWrap: { width: width - 28 },
   }).setOrigin(0.5, 0);
-  const tip = scene.add.text(0, 72, '', {
+  const tip = scene.add.text(0, 82, '', {
     fontFamily: FONT_BODY, fontSize: '12px', color: PALETTE_HEX.gold,
     fontStyle: 'italic', align: 'center', wordWrap: { width: width - 24 },
   }).setOrigin(0.5, 0);
-  const container = scene.add.container(x, y, [badge, icon, done, indexLine, title, sub, explain, tip]);
+  const container = scene.add.container(x, y, [badge, icon, indexLine, title, sub, explain, tip]);
 
   return {
     container,
@@ -59,11 +56,7 @@ export function createNodePreview(scene: Phaser.Scene, x: number, y: number, wid
       indexLine.setText(`NODE ${node.index}`);
       sub.setText('');
       explain.setText(node.resolved ? 'Resolved.' : info.explain);
-      done.setVisible(node.resolved);
       tip.setText('');
-      // Nudge layout when resolved line hidden.
-      sub.setY(node.resolved ? 22 : 26);
-      explain.setY(node.resolved ? 42 : 48);
     },
     setTip: (text: string) => tip.setText(text),
     destroy: () => container.destroy(),

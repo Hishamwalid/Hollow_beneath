@@ -480,7 +480,7 @@ export function createActionGrid(
     const label = scene.add
       .text(cell.cx, cell.cy, item.label, {
         fontFamily: FONT_SERIF,
-        fontSize: '14px',
+        fontSize: '16px',
         color: '#ffffff',
       })
       .setOrigin(0.5);
@@ -559,8 +559,11 @@ const ROW_MAX_H = 33.3;
 const ROW_SPACING = 39.3;
 const PORTRAIT_SIZE = 33;
 const PORTRAIT_BOX = 38;
-const PORTRAIT_X = -38.3;
-const TEXT_X = -6;
+// Rows are ROW_W (204) wide and centered, so they span ±102. The portrait sits
+// flush against the left edge and the name hugs it, leaving no dead space.
+const PORTRAIT_X = -(ROW_W / 2) + PORTRAIT_BOX / 2 + 2; // ≈ -83, portrait flush left
+const TEXT_X = -(ROW_W / 2) + PORTRAIT_BOX + 8;           // ≈ -57, name starts right after the portrait
+const NAME_WRAP_W = ROW_W - PORTRAIT_BOX - 26;           // full name width for 2-line wrap
 
 export function createTurnOrderPanel(scene: Phaser.Scene, x: number, y: number): TurnOrderPanelHandle {
   const container = scene.add.container(x, y).setDepth(10);
@@ -609,7 +612,7 @@ export function createTurnOrderPanel(scene: Phaser.Scene, x: number, y: number):
           fontFamily: FONT_MONO,
           fontSize: n > 3 ? '11px' : '12px',
           color: isCurrent ? PALETTE_HEX.gold : PALETTE_HEX.bone,
-          wordWrap: { width: ROW_W / 2 - 22, useAdvancedWrap: true },
+          wordWrap: { width: NAME_WRAP_W, useAdvancedWrap: true },
           lineSpacing: 1,
         })
         .setOrigin(0, 0.5);

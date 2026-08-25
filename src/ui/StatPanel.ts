@@ -51,7 +51,7 @@ const PANEL_W = 258.7;
 const PANEL_H = 106;
 
 /** Dark outline so text stays readable on the light book-page panel. */
-const STROKE = { stroke: '#0b0d10', strokeThickness: 3 };
+const STROKE = { stroke: '#0b0d10', strokeThickness: 2 };
 
 export function createStatPanel(scene: Phaser.Scene, x: number, y: number): StatPanelHandle {
   const container = scene.add.container(x, y).setDepth(10).setScale(1.15);
