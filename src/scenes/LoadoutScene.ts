@@ -45,7 +45,7 @@ export class LoadoutScene extends Phaser.Scene {
     this.slotsText = this.add.text(cx, GAME_HEIGHT - 108, '', { fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.gold }).setOrigin(0.5);
 
     // Archive pager sits under the right column; wired in render() bounds.
-    this.pager = createPager(this, cx + 292, GAME_HEIGHT - 108, (page) => {
+    this.pager = createPager(this, 652 + 304, GAME_HEIGHT - 108, (page) => {
       this.archivePage = page;
       audio.pageTurn();
       this.render();
@@ -58,7 +58,7 @@ export class LoadoutScene extends Phaser.Scene {
 
   /** One-line confirmation that drifts up where the swap happened. */
   private announceSwap(text: string): void {
-    floatDelta(this, GAME_WIDTH / 2 + 292, GAME_HEIGHT - 150, text, '#e9c876', { depth: 50, fontSize: 14 });
+    floatDelta(this, 652 + 304, GAME_HEIGHT - 150, text, '#e9c876', { depth: 50, fontSize: 14 });
   }
 
   private render() {
@@ -77,9 +77,10 @@ export class LoadoutScene extends Phaser.Scene {
     this.slotsText?.setText(`Equipped ${equipped.length} / ${MAX_EQUIPPED_SKILLS}   ·   Archive ${archiveAll.length}`);
     this.pager?.update(this.archivePage, pageCount);
 
-    const colW = 560;
-    const leftX = GAME_WIDTH / 2 - colW / 2 - 12;
-    const rightX = GAME_WIDTH / 2 + colW / 2 + 12;
+    // Columns derived from the canvas — the archive column used to run 204px off-screen.
+    const colW = 608;
+    const leftX = 20;
+    const rightX = leftX + colW + 24;
     const topY = 120;
     const rowH = 74;
 

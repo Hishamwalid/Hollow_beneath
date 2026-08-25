@@ -28,6 +28,7 @@ export class TutorialScene extends Phaser.Scene {
   private titleText!: Phaser.GameObjects.Text;
   private bodyText!: Phaser.GameObjects.Text;
   private promptText!: Phaser.GameObjects.Text;
+  private introMode = false;
   private skipText!: Phaser.GameObjects.Text;
   private iconContainer!: Phaser.GameObjects.Container;
   private introBtn?: ReturnType<typeof createButton>;
@@ -62,14 +63,17 @@ export class TutorialScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(10);
     if (typeof this.titleText.setLetterSpacing === 'function') this.titleText.setLetterSpacing(2);
 
-    const panelBg = this.add.nineslice(cx, 250, 'paper_panel', undefined, 840, 280, 24, 24, 24, 24).setDepth(10);
+    // The primer needs a taller sheet — two pages were overflowing into the icon strip.
+    const introOnly = !!data?.introOnly;
+    this.introMode = introOnly;
+    const panelBg = this.add.nineslice(cx, introOnly ? 250 : 280, 'paper_panel', undefined, 840, introOnly ? 280 : 340, 24, 24, 24, 24).setDepth(10);
 
     this.bodyText = this.add.text(cx - 380, 140, '', {
       fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.ink,
       wordWrap: { width: 760 }, lineSpacing: 7,
     }).setDepth(11);
 
-    this.promptText = this.add.text(cx + 380, 372, '▾ Continue', {
+    this.promptText = this.add.text(cx + 380, introOnly ? 372 : 436, '▾ Continue', {
       fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.oxide,
     }).setOrigin(1, 0).setDepth(12).setAlpha(0);
 
@@ -166,8 +170,9 @@ export class TutorialScene extends Phaser.Scene {
     this.iconContainer.removeAll(true);
     const icons = screen.icons ?? [];
     const iconStartX = GAME_WIDTH / 2 - (icons.length - 1) * 30;
+    const iconY = this.introMode ? 416 : 464;
     icons.forEach((key, i) => {
-      const img = this.add.image(iconStartX + i * 60, 416, key).setDisplaySize(30, 30).setDepth(13);
+      const img = this.add.image(iconStartX + i * 60, iconY, key).setDisplaySize(30, 30).setDepth(13);
       this.iconContainer.add(img);
     });
   }

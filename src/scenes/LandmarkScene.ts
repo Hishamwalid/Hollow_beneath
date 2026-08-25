@@ -222,14 +222,23 @@ export class LandmarkScene extends Phaser.Scene {
     useGameStore.getState().persist();
 
     this.dialog?.destroy();
-    const dialog = createDialogBox(this, GAME_WIDTH / 2, GAME_HEIGHT - 140, 820, 160);
+    const dialog = createDialogBox(this, GAME_WIDTH / 2, GAME_HEIGHT - 170, 820, 160);
     this.dialog = dialog;
     dialog.setText(text || '...', () => {
       if (choice.skipsCombat) {
         useGameStore.getState().recordCheckpoint();
         useGameStore.getState().persist();
+        // Sit below the sheet's real height, above it in draw order — the old
+        // fixed placement rendered underneath the parchment.
         this.continueBtn?.destroy();
-        this.continueBtn = createButton(this, GAME_WIDTH / 2, GAME_HEIGHT - 40, 'Continue', () => fadeToScene(this, 'Board'), { width: 220 });
+        this.continueBtn = createButton(
+          this,
+          GAME_WIDTH / 2,
+          GAME_HEIGHT - 170 + dialog.getHeight() / 2 + 20,
+          'Continue',
+          () => fadeToScene(this, 'Board'),
+          { width: 220, depth: 40 },
+        );
       } else {
         fadeToScene(this, 'Combat', { mode: 'boss', bossId, nodeIndex: BOSSES[bossId].chapter * NODES_PER_CHAPTER, precombatFlags: combatFlags });
       }

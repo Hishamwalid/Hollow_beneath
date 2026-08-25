@@ -372,7 +372,7 @@ export class CombatScene extends Phaser.Scene {
     this.statPanel = createStatPanel(this, STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy);
     // Active status readout — tinted chip row, the player's afflictions never invisible.
     this.playerStatusChips = this.add
-      .container(STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy - 128)
+      .container(STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy - 138)
       .setDepth(10);
     const prAdj = layoutAdj('playerRow');
     this.playerRowText = this.add
@@ -2058,7 +2058,7 @@ export class CombatScene extends Phaser.Scene {
     const color = isCharge ? '#c9a24b' : isUlt ? '#e1665c' : isAdapt ? '#8e5fd9' : isWindow ? '#e9c876' : isCombo ? '#9b59b6' : '#5dade2';
     const label = banner.replace(/^(COMBO |REACTION |WEAKNESS WINDOW — |CHARGE — |ULTIMATE — |ADAPTATION — )/, '');
     const title = isCharge ? 'CHARGE' : isUlt ? 'ULTIMATE' : isAdapt ? 'ADAPTATION' : isWindow ? 'WEAKNESS WINDOW' : isCombo ? 'COMBO' : 'REACTION';
-    const t = this.add.text(GAME_WIDTH / 2, 170, `${title}: ${label}`, {
+    const t = this.add.text(GAME_WIDTH / 2, 182, `${title}: ${label}`, {
       fontFamily: FONT_SERIF,
       fontSize: '24px',
       color,
@@ -2640,7 +2640,7 @@ export class CombatScene extends Phaser.Scene {
       }).setDepth(depth + 1));
     });
 
-    const gotBtn = createButton(this, cx, 236, 'Got it', () => {
+    const gotBtn = createButton(this, cx, 230, 'Got it', () => {
       panel.destroy();
       lines.forEach((l) => l.destroy());
       gotBtn.destroy();

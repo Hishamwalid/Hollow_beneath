@@ -79,10 +79,10 @@ export class InventoryScene extends Phaser.Scene {
 
     const panelX = cx - 380;
     this.renderGold();
-    this.addSectionHeader(panelX, 120, 'Equipped');
+    this.addSectionHeader(panelX, 120, 'Equipped', 215, 430);
     this.renderEquipment(panelX, player);
-    this.addSectionHeader(panelX + 320, 120, 'Carried');
-    this.renderInventoryList(panelX + 320, player);
+    this.addSectionHeader(panelX + 470, 120, 'Carried', 230, 460);
+    this.renderInventoryList(panelX + 470, player);
 
     // Esc closes any open picker, otherwise returns to the board.
     this.input.keyboard?.on('keydown-ESC', () => {
@@ -99,9 +99,9 @@ export class InventoryScene extends Phaser.Scene {
     this.goldText?.setText(`Gold: ${player?.gold ?? 0}`);
   }
 
-  private addSectionHeader(x: number, y: number, label: string): void {
+  private addSectionHeader(x: number, y: number, label: string, ruleCenterOffset = 250, ruleWidth = 500): void {
     createSectionLabel(this, x, y, label);
-    this.add.rectangle(x + 250, y + 10, 500, 1, num(PALETTE_HEX.gold), 0.3);
+    this.add.rectangle(x + ruleCenterOffset, y + 10, ruleWidth, 1, num(PALETTE_HEX.gold), 0.3);
   }
 
   /** Re-renders only the equipment column — no fadeIn replay, no scroll loss. */
@@ -124,7 +124,7 @@ export class InventoryScene extends Phaser.Scene {
       const y = 165 + i * 50;
       const currentId = player.equipment[slot];
 
-      const bg = this.add.rectangle(panelX + 250, y, 540, 38, SURFACE_HEX.row).setStrokeStyle(1, SURFACE_HEX.border);
+      const bg = this.add.rectangle(panelX + 245, y, 430, 38, SURFACE_HEX.row).setStrokeStyle(1, SURFACE_HEX.border);
       bg.setInteractive({ useHandCursor: true })
         .on('pointerover', () => bg.setFillStyle(SURFACE_HEX.rowHoverAlt))
         .on('pointerout', () => bg.setFillStyle(SURFACE_HEX.row))
@@ -180,7 +180,7 @@ export class InventoryScene extends Phaser.Scene {
       const desc = def?.description ?? '';
       const kind = def?.kind ?? '';
 
-      const rowBg = this.add.rectangle(panelX + 220, y, 500, 38, SURFACE_HEX.row).setStrokeStyle(1, SURFACE_HEX.hairline);
+      const rowBg = this.add.rectangle(panelX + 235, y, 470, 38, SURFACE_HEX.row).setStrokeStyle(1, SURFACE_HEX.hairline);
       container.add(rowBg);
       container.add(this.add.text(panelX + 20, y, `×${entry.qty}`, { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold }).setOrigin(0, 0.5));
       container.add(this.add.text(panelX + 60, y - 8, itemName, { fontFamily: FONT_SERIF, fontSize: '14px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5));
@@ -189,11 +189,11 @@ export class InventoryScene extends Phaser.Scene {
     });
 
     if (!this.listPager) {
-      this.listPager = createPager(this, panelX + 220, 480, (page) => {
+      this.listPager = createPager(this, panelX + 235, 480, (page) => {
         this.listPage = page;
         audio.pageTurn();
         const p = useGameStore.getState().player;
-        if (p) this.renderInventoryList(panelX, p);
+        if (p) this.renderInventoryList(panelX + 470, p);
       }, { depth: 5 });
     }
     this.listPager.update(this.listPage, pageCount);
@@ -212,7 +212,10 @@ export class InventoryScene extends Phaser.Scene {
       return def && def.kind === kind && e.qty > 0;
     });
 
-    const modal = createModal(this, `Choose ${SLOT_LABELS[slot]}`, 640, 420, {
+    // Modal grows with the roster so the last row can never spill past the frame.
+    const rowCount = (currentId ? 1 : 0) + 1 + compatibleItems.length;
+    const modalH = Math.min(680, Math.max(420, 150 + rowCount * 44));
+    const modal = createModal(this, `Choose ${SLOT_LABELS[slot]}`, 640, modalH, {
       variant: 'stone',
       depth: 50,
       onClose: () => { this.picker = undefined; },

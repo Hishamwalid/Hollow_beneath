@@ -28,8 +28,8 @@ export interface DialogOptions {
 }
 
 const MIN_H = 128;
-// ~5 body lines at 19px + line spacing; Large Text needs a taller ceiling.
-const MAX_H = Math.round(190 * proseScale());
+// Ceiling is derived per-instance (see createDialogBox) so toggling Large Text
+// applies on the next dialog without a page reload.
 
 /**
  * Narration panel. Default look is an aged parchment sheet with ink text —
@@ -47,6 +47,8 @@ export function createDialogBox(
   opts: DialogOptions = {},
 ): DialogBox {
   const parchment = (opts.variant ?? 'parchment') === 'parchment';
+  // Per-instance ceiling — reads the live Large Text setting each time a box opens.
+  const maxH = Math.round(190 * proseScale());
   let curH = height;
 
   function makeBg(h: number): Phaser.GameObjects.NineSlice {
@@ -109,7 +111,7 @@ export function createDialogBox(
 
   /** Re-fit the sheet to a new height (clamped), repositioning everything. */
   function layout(h: number): void {
-    const nh = Math.round(Math.max(MIN_H, Math.min(MAX_H, h)));
+    const nh = Math.round(Math.max(MIN_H, Math.min(maxH, h)));
     if (nh === curH) return;
     curH = nh;
     shadow.setSize(width, curH);
@@ -134,7 +136,7 @@ export function createDialogBox(
   }
 
   /** Usable height for body text inside the sheet (box height minus padding). */
-  const TEXT_BUDGET = MAX_H - 48;
+  const TEXT_BUDGET = maxH - 48;
 
   function measureHeight(t: string): number {
     text.setText(t);

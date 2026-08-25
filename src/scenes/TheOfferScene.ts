@@ -41,7 +41,7 @@ export class TheOfferScene extends Phaser.Scene {
       .setOrigin(0.5).setDepth(6);
 
     this.add
-      .text(cx, GAME_HEIGHT / 2 + 44,
+      .text(cx, GAME_HEIGHT / 2 + 52,
         'And beneath it — fainter, worn, hers:\n\nEVE: "Choose. Either way, I will not let go of you."',
         { fontFamily: FONT_BODY, fontSize: `${Math.round(15 * proseScale())}px`, color: PALETTE_HEX.oxide, fontStyle: 'italic', align: 'center', wordWrap: { width: 820 }, lineSpacing: 6 })
       .setOrigin(0.5).setDepth(6);
@@ -52,7 +52,7 @@ export class TheOfferScene extends Phaser.Scene {
     });
     darkBtn.container.setDepth(10);
     this.add
-      .text(cx - 190, GAME_HEIGHT - 128, 'Sink into the stone. Become part of the architecture.',
+      .text(cx - 190, GAME_HEIGHT - 124, 'Sink into the stone. Become part of the architecture.',
         { fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5);
 
@@ -62,7 +62,7 @@ export class TheOfferScene extends Phaser.Scene {
     });
     climbBtn.container.setDepth(10);
     this.add
-      .text(cx + 190, GAME_HEIGHT - 128, 'Go home. Live. Forget. The same fate as Eve\'s.',
+      .text(cx + 190, GAME_HEIGHT - 124, 'Go home. Live. Forget. The same fate as Eve\'s.',
         { fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5);
 
