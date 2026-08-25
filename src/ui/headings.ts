@@ -45,7 +45,7 @@ export function createSubtitle(scene: Phaser.Scene, x: number, y: number, text: 
 export function createSectionLabel(scene: Phaser.Scene, x: number, y: number, text: string, opts: TextOpts = {}): Phaser.GameObjects.Text {
   const t = scene.add.text(x, y, text.toUpperCase(), {
     fontFamily: FONT_MONO,
-    fontSize: opts.size ?? '12px',
+    fontSize: opts.size ?? SZ.xs,
     color: opts.color ?? PALETTE_HEX.gold,
   }).setOrigin(opts.origin?.[0] ?? 0, opts.origin?.[1] ?? 0.5);
   if (typeof t.setLetterSpacing === 'function') t.setLetterSpacing(2);
@@ -53,7 +53,7 @@ export function createSectionLabel(scene: Phaser.Scene, x: number, y: number, te
 }
 
 /** Ornamental divider — hairline with a center diamond. Returns height used. */
-export function createDivider(scene: Phaser.Scene, container: Phaser.GameObjects.Container, cx: number, y: number, width: number, color = 0xc9a24b): number {
+export function createDivider(scene: Phaser.Scene, container: Phaser.GameObjects.Container, cx: number, y: number, width: number, color = parseInt(PALETTE_HEX.gold.replace('#', ''), 16)): number {
   const line = scene.add.rectangle(cx, y, width, 1, color, 0.45);
   const gem = scene.add.rectangle(cx, y, 6, 6, color).setAngle(45);
   container.add([line, gem]);

@@ -1,4 +1,4 @@
-﻿import type { BestRunStats, GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
+import type { BestRunStats, GameState, MetaState, PlayerState, SaveBlob } from '@data/types';
 import { MAX_EQUIPPED_SKILLS } from '@data/types';
 
 const STORAGE_KEY = 'hollow_beneath_save_v1';
@@ -47,7 +47,7 @@ export function saveGame(meta: MetaState, activeRun: SaveBlob['activeRun']): voi
  * v8 = definitive edition: companions removed entirely; PlayerState gains
  * `story` (eveVoiceHeard / motherJournalFound) for the new narrative.
  * v7 = page system removed: GameState.currentPage/checkpointPage and BestRunStats.page
- * are gone (chapter derives from the node index); meta.bestRun.page â†’ chapter.
+ * are gone (chapter derives from the node index); meta.bestRun.page → chapter.
  * v6 = combat revamp: classes/AP/fatigue/insight/fear/position/skill points are gone;
  * skills use a 6-slot equipped loadout; meta gains Bestiary discovery records.
  */
@@ -55,7 +55,7 @@ function migrateBlob(blob: SaveBlob): SaveBlob {
   if (blob.version >= VERSION) return blob;
   const player = blob.activeRun?.player as ((PlayerState & Record<string, unknown>) & { skillPoints?: unknown }) | null | undefined;
   if (player) {
-    // Legacy fields are dropped silently â€” the revamp removed them outright.
+    // Legacy fields are dropped silently — the revamp removed them outright.
     delete (player as Record<string, unknown>).classId;
     delete (player as Record<string, unknown>).fatigue;
     delete (player as Record<string, unknown>).insight;
@@ -109,7 +109,7 @@ export function loadGame(): { meta: MetaState; activeRun: SaveBlob['activeRun'] 
     // Checksum is verified against the *stored* payload (pre-migration), so old saves aren't flagged corrupt.
     const payload = payloadOf(blob.meta, blob.activeRun);
     if (simpleChecksum(payload) !== blob.checksum) {
-      console.warn('Save checksum mismatch â€” save may be corrupted. Loading fresh meta.');
+      console.warn('Save checksum mismatch — save may be corrupted. Loading fresh meta.');
       return { meta: defaultMeta(), activeRun: null };
     }
     const migrated = migrateBlob(blob);

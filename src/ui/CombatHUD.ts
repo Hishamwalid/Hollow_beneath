@@ -1,7 +1,8 @@
-﻿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import type { EnemyView } from '@systems/CombatEngine';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { spawnHitParticles } from '@/systems/particles';
+import { reducedMotion } from '@systems/motion';
 
 export interface EnemyDisplay {
   container: Phaser.GameObjects.Container;
@@ -12,7 +13,7 @@ export interface EnemyDisplay {
   setState: (state: 'idle' | 'attack' | 'hit' | 'guard') => void;
   /** The enemy definition id (e.g. 'sentinel'), stable across the fight. */
   defId: string;
-  /** Switches the phase-suffixed sprite set (1 â†’ `<state>1` frames, 2 â†’ `<state>2`). */
+  /** Switches the phase-suffixed sprite set (1 → `<state>1` frames, 2 → `<state>2`). */
   setPhase: (phase: 1 | 2) => void;
   /** Plays a multi-frame sequence of textures (transform / defeat / victory), cancelling any prior sequence. */
   playSequence: (frames: string[], intervalMs: number, onDone?: () => void) => void;
@@ -20,7 +21,7 @@ export interface EnemyDisplay {
 }
 
 /** Resizes a centered (origin 0.5,0.5) pill to snugly cover `text`, including its stroke.
- *  Assumes pill and text share the same local position (e.g. both children of nameGroup at 0,0) â€”
+ *  Assumes pill and text share the same local position (e.g. both children of nameGroup at 0,0) —
  *  only the size changes, so it never touches position and can't produce NaN geometry from an
  *  unset/mid-update text position. */
 function fitNamePill(pill: Phaser.GameObjects.Rectangle, text: Phaser.GameObjects.Text, paddingX = 14, paddingY = 6): void {
@@ -57,6 +58,29 @@ export function createEnemyDisplay(
     .text(0, 0, 'DOWNED', { fontFamily: FONT_MONO, fontSize: '11px', color: '#e9c876', fontStyle: 'bold' })
     .setOrigin(0.5);
   downedPill.add([downedBg, downedText]);
+  // Persistent "⚡ CHARGING" telegraph — stays visible until the move lands.
+  const chargePill = scene.add.container(0, -124).setVisible(false);
+  const chargeBg = scene.add.rectangle(0, 0, 120, 20, 0x2a1010, 0.9).setStrokeStyle(1.5, 0xb0453f).setOrigin(0.5);
+  const chargeText = scene.add
+    .text(0, 0, '', { fontFamily: FONT_MONO, fontSize: '11px', color: '#ff8a75', fontStyle: 'bold' })
+    .setOrigin(0.5);
+  chargePill.add([chargeBg, chargeText]);
+  let chargeTween: Phaser.Tweens.Tween | undefined;
+  // Compact status chip row under the HP bar (DOWNED keeps its own pill).
+  const STATUS_ABBR: Record<string, string> = {
+    poison: 'PSN', burn: 'BRN', bleed: 'BLD', curse: 'CRS', frostbite: 'FRB', shock: 'SHK',
+    sleep: 'SLP', fear: 'FEAR', silence: 'SLNT', blind: 'BLND', confuse: 'CNF', stun: 'STN',
+    root: 'ROOT', slowed: 'SLOW', vulnerable: 'VULN', cursed: 'CRSD', pacified: 'PAC',
+    atk_up: 'ATK+', def_up: 'DEF+', spd_up: 'SPD+', regen: 'REG', barrier: 'BAR',
+    veil_step: 'VEIL', momentum_gain: 'MOM', atk_down: 'ATK-', def_down: 'DEF-', spd_down: 'SPD-',
+  };
+  const statusText = scene.add
+    .text(0, -79, '', {
+      fontFamily: FONT_MONO, fontSize: '9px', color: '#ff8a75', fontStyle: 'bold',
+      align: 'center', wordWrap: { width: 180 },
+    })
+    .setOrigin(0.5)
+    .setVisible(false);
   const hpBg = scene.add.rectangle(-BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0x0b0d10, 0.45).setOrigin(0, 0.5);
   const hpFg = scene.add.rectangle(-BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0xb10000).setOrigin(0, 0.5).setStrokeStyle(1, 0x0b0d10);
   // Persona-style target reticle: a gold ring centered on the enemy's body.
@@ -72,7 +96,7 @@ export function createEnemyDisplay(
     ticks.strokePath();
   }
   reticle.add([ringOuter, ringInner, ticks]);
-  container.add([shadow, token, hpBg, hpFg, downedPill, reticle]);
+  container.add([shadow, token, hpBg, hpFg, downedPill, chargePill, statusText, reticle]);
   token.on('pointerdown', onClick);
   token.on('pointerover', () => { if (!selected) token.setScale(baseScaleX * 1.06, baseScaleY * 1.06); });
   token.on('pointerout', () => { if (!selected) token.setScale(baseScaleX, baseScaleY); });
@@ -108,6 +132,20 @@ export function createEnemyDisplay(
     baseScaleY = token.scaleY;
   };
   applyTexture('idle');
+
+  // Idle breathing: every foe sways gently while it waits. Dies with the token.
+  let idleTween: Phaser.Tweens.Tween | undefined;
+  if (!reducedMotion()) {
+    idleTween = scene.tweens.add({
+      targets: token,
+      y: -3.5,
+      duration: 1500 + Math.random() * 700,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+      delay: Math.random() * 600,
+    });
+  }
 
   const setState = (state: 'idle' | 'attack' | 'hit' | 'guard') => {
     stopSequence();
@@ -186,6 +224,35 @@ export function createEnemyDisplay(
       }
       container.setVisible(view.alive);
       downedPill.setVisible(view.alive && view.statuses.some((s) => s.id === 'downed'));
+      // Status chips under the HP bar — afflictions and buffs always readable.
+      const chips = view.statuses
+        .filter((s) => s.id !== 'downed')
+        .map((s) => {
+          const abbr = STATUS_ABBR[s.id] ?? s.id.toUpperCase();
+          return s.turnsRemaining > 1 ? `${abbr}·${s.turnsRemaining}` : abbr;
+        });
+      statusText.setText(chips.join(' · '));
+      statusText.setVisible(view.alive && chips.length > 0);
+      // Persistent charge telegraph: label + pulse while a charged move brews.
+      const charging = view.alive && !!view.pendingChargeLabel;
+      if (charging) {
+        const label = `⚡ ${view.pendingChargeLabel}`.toUpperCase();
+        if (chargeText.text !== label) {
+          chargeText.setText(label);
+          chargeBg.setSize(Math.max(90, chargeText.width + 20), 20);
+        }
+        if (!chargePill.visible) {
+          chargePill.setVisible(true).setAlpha(0);
+          scene.tweens.add({ targets: chargePill, alpha: 1, duration: 180 });
+          if (!reducedMotion()) {
+            chargeTween = scene.tweens.add({ targets: chargePill, scale: 1.07, duration: 460, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+          }
+        }
+      } else if (chargePill.visible) {
+        chargePill.setVisible(false);
+        if (chargeTween) { chargeTween.stop(); chargeTween = undefined; }
+        chargePill.setScale(1);
+      }
       const pct = Math.max(0, view.hp / view.maxHp);
       hpFg.width = BAR_W * pct;
       if ((view.weakWindowTurns ?? 0) > 0) {
@@ -215,7 +282,7 @@ export function createEnemyDisplay(
       if (!sequencing) applyTexture(currentState);
     },
     playSequence,
-    destroy: () => { if (reticleTween) reticleTween.stop(); stopSequence(); container.destroy(); },
+    destroy: () => { if (reticleTween) reticleTween.stop(); if (chargeTween) chargeTween.stop(); if (idleTween) idleTween.stop(); stopSequence(); container.destroy(); },
   };
   return handle;
 }
@@ -253,7 +320,7 @@ export function createApPips(scene: Phaser.Scene, x: number, y: number, labelTex
 
 export interface TooltipPanelHandle {
   container: Phaser.GameObjects.Container;
-  /** Shows a transient message (hover descriptions, errors) â€” `hide` restores the default text. */
+  /** Shows a transient message (hover descriptions, errors) — `hide` restores the default text. */
   show: (text: string) => void;
   /** Restores the default tooltip text. */
   hide: () => void;
@@ -324,7 +391,7 @@ export function createCombatLogPanel(scene: Phaser.Scene, x: number, y: number):
       entries.length = 0;
       let y = -(COMBAT_LOG_H / 2) + 26;
       for (const line of lines.slice(-COMBAT_LOG_TAIL)) {
-        const isRound = /^â€” Round \d+ â€”$/.test(line);
+        const isRound = /^— Round \d+ —$/.test(line);
         const t = scene.add
           .text(0, y, line, {
             fontFamily: FONT_MONO,
@@ -363,7 +430,7 @@ const COL_XS = [-181.6, 8.4];
 const ROW_YS = [-67.9, -19.3, 29.3];
 const BTN_W = 177.3;
 const BTN_H = 41.3;
-/** Book-page container behind the action buttons (design-proportioned 614Ã—274 â†’ canvas).
+/** Book-page container behind the action buttons (design-proportioned 614×274 → canvas).
  *  Offset to the buttons' visual center (grid cells are not symmetric around the container origin). */
 const PANEL_BACK_W = 409.3;
 const PANEL_BACK_H = 182.7;
@@ -451,7 +518,13 @@ export function createActionGrid(
         tooltip.hide();
         item.onUnhover?.();
       });
-      bg.on('pointerdown', item.onClick);
+      bg.on('pointerdown', () => {
+        // Same press-squish vocabulary as every other button in the game.
+        if (!reducedMotion()) {
+          scene.tweens.add({ targets: [bg, inner], scale: 0.95, duration: 60, yoyo: true, ease: 'Sine.easeOut' });
+        }
+        item.onClick();
+      });
     }
     entries.push({ bg, inner, label, item, enabled });
     container.add([bg, inner, label]);

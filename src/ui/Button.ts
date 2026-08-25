@@ -20,6 +20,8 @@ export interface ButtonOptions {
 export interface Button {
   container: Phaser.GameObjects.Container;
   setEnabled: (enabled: boolean) => void;
+  /** Current interactable state (keyboard guards use it). */
+  isEnabled: () => boolean;
   /** Keyboard focus highlight (mirrors the hover state). */
   setFocused: (focused: boolean) => void;
   destroy: () => void;
@@ -134,6 +136,7 @@ export function createButton(
 
   return {
     container,
+    isEnabled: () => enabled,
     setEnabled: (v: boolean) => {
       enabled = v;
       scene.tweens.killTweensOf(container);

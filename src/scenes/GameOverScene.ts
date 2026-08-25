@@ -18,11 +18,14 @@ export class GameOverScene extends Phaser.Scene {
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x330000, 0.15);
     fadeIn(this);
     audio.defeat();
-    this.time.addEvent({
-      delay: 400, loop: true, callback: () => {
-        spawnHitParticles(this, Math.random() * GAME_WIDTH, Math.random() * GAME_HEIGHT * 0.5);
-      },
-    });
+    // A few settling bursts of ash — not an endless fireworks loop.
+    if (!reducedMotion()) {
+      this.time.addEvent({
+        delay: 420, repeat: 7, callback: () => {
+          spawnHitParticles(this, Math.random() * GAME_WIDTH, Math.random() * GAME_HEIGHT * 0.4, 0x9a9488);
+        },
+      });
+    }
     // The dark closes in: a slow vignette tightens over the defeat screen.
     if (!reducedMotion()) {
       const vignette = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT)

@@ -43,6 +43,9 @@ export class LandmarkScene extends Phaser.Scene {
       return;
     }
     audio.bossPhase();
+    // A guardian's threshold hums with the Loom's presence.
+    audio.startAmbience('loom');
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => audio.stopAmbience());
 
     if (data.stage === 'aftermath') {
       this.showAftermath(data.bossId, data.combatFlags ?? {});
@@ -102,9 +105,11 @@ export class LandmarkScene extends Phaser.Scene {
     this.tweens.add({ targets: themeText, alpha: 1, duration: 500, delay: 600, ease: 'Sine.easeOut' });
 
     const border = this.add.rectangle(cx, GAME_HEIGHT / 2 - 10, 500, 120, 0x000000, 0).setStrokeStyle(1, 0xc9a24b, 0.3).setDepth(depth + 1);
-    this.tweens.add({
-      targets: border, strokeAlpha: { from: 0.3, to: 0.8 }, duration: 1000, yoyo: true, repeat: -1,
-    });
+    if (!reducedMotion()) {
+      this.tweens.add({
+        targets: border, alpha: { from: 0.35, to: 1 }, duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+      });
+    }
 
     this.input.once('pointerdown', () => {
       this.tweens.add({
@@ -124,6 +129,7 @@ export class LandmarkScene extends Phaser.Scene {
     this.add.text(GAME_WIDTH / 2, 100, boss.theme, { fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic' }).setOrigin(0.5);
     const isSentinel = bossId === 'sentinel' && this.textures.exists('enemy_sentinel_half');
     const halfBodyKey = isSentinel ? 'enemy_sentinel_half' : `tok_${bossId}`;
+    if (bossId === 'sentinel') this.stageSinkholeMouth();
     const bodyImg = this.add.image(GAME_WIDTH / 2, 230, halfBodyKey);
     const fr = this.textures.getFrame(halfBodyKey);
     const bh = 250;
@@ -138,6 +144,26 @@ export class LandmarkScene extends Phaser.Scene {
     this.input.on('pointerdown', () => dialog.skip());
   }
 
+  /** Canon staging: the Sentinel guards the sinkhole mouth at the dig site —
+   *  a coin of gold light climbing from below and the expedition's cut rope. */
+  private stageSinkholeMouth(): void {
+    const cx = GAME_WIDTH / 2;
+    // The shaft: a wide, faint column of daylight-and-Loom-light.
+    const shaft = this.add.triangle(cx + 20, -60, -100, -280, 100, -280, 260, 430, 0xf5efdc, 0.06).setDepth(-1);
+    const glow = this.add.ellipse(cx + 10, 92, 320, 64, 0xe9c876, 0.09).setDepth(-1);
+    // The expedition's rope, cut clean where they went down.
+    const rope = this.add.graphics().setDepth(-1);
+    rope.lineStyle(2.5, 0x8f6a27, 0.8);
+    rope.beginPath();
+    rope.moveTo(cx + 168, 118);
+    rope.lineTo(cx + 177, 205);
+    rope.lineTo(cx + 170, 300);
+    rope.strokePath();
+    if (!reducedMotion()) {
+      this.tweens.add({ targets: [shaft, glow], alpha: { from: 0.65, to: 1 }, duration: 2800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
+  }
+
   private showPreCombatChoices(bossId: string) {
     const boss = BOSSES[bossId];
     const { player } = useGameStore.getState();
@@ -148,19 +174,40 @@ export class LandmarkScene extends Phaser.Scene {
         : [{ id: 'face', label: 'Face it.', apply: () => '' }];
     const visible = choices.filter((c) => !c.requirement || c.requirement(player));
 
+    // 1–N hotkeys for the approach choices.
+    this.clearChoiceKeys();
+    const numKeys = ['ONE', 'TWO', 'THREE', 'FOUR'];
+    visible.forEach((c, i) => {
+      if (i >= numKeys.length) return;
+      const evt = `keydown-${numKeys[i]}`;
+      const handler = () => this.pickPreCombatChoice(bossId, c);
+      this.input.keyboard?.on(evt, handler);
+      this.choiceKeys.push([evt, handler]);
+    });
+
     this.choiceMenu?.destroy();
     this.choiceMenu = createChoiceMenu(
       this,
       GAME_WIDTH / 2,
       GAME_HEIGHT - 150,
-      visible.map((c) => ({ label: c.label, onSelect: () => this.pickPreCombatChoice(bossId, c) })),
+      visible.map((c) => ({
+        label: c.label,
+        onSelect: () => this.pickPreCombatChoice(bossId, c),
+      })),
       { width: 700, spacing: 54 },
     );
+  }
+
+  private choiceKeys: Array<[string, () => void]> = [];
+  private clearChoiceKeys(): void {
+    this.choiceKeys.forEach(([evt, fn]) => this.input.keyboard?.off(evt, fn));
+    this.choiceKeys = [];
   }
 
   private pickPreCombatChoice(bossId: string, choice: BossPreCombatChoice) {
     const { player } = useGameStore.getState();
     if (!player) return;
+    this.clearChoiceKeys();
     this.choiceMenu?.destroy();
     this.choiceMenu = undefined;
 
@@ -303,6 +350,7 @@ export class LandmarkScene extends Phaser.Scene {
   }
 
   shutdown() {
+    this.clearChoiceKeys();
     this.input.removeAllListeners('pointerdown');
     this.choiceMenu?.destroy();
     this.dialog?.destroy();

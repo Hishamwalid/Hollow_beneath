@@ -3,13 +3,15 @@ import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { useGameStore } from '@store/gameStore';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { settleIn } from '@systems/motion';
-import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX, DAMAGE_TYPE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX, SURFACE_HEX, DAMAGE_TYPE_HEX, AFFINITY_RESULT_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { createTitle } from '@ui/headings';
+import { createTabs, type TabsHandle } from '@ui/controls';
+import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { ENEMIES } from '@data/enemies';
 import { BOSSES } from '@data/bosses';
-import type { AffinityKind, DamageType, EnemyAffinities } from '@data/types';
+import type { DamageType, EnemyAffinities } from '@data/types';
 import { DAMAGE_TYPES, DAMAGE_TYPE_ABBREV } from '@data/types';
 
 const PER_PAGE = 4;
@@ -26,14 +28,7 @@ interface BestiaryRow {
   kills: number;
 }
 
-const AFFINITY_HEX: Record<AffinityKind, number> = {
-  wk: 0xe9c876,
-  str: 0x7fb0c9,
-  null: 0x555555,
-  rep: 0xc0392b,
-  drn: 0x5c8a5c,
-  '-': 0x9a9488,
-};
+const cssColorOf = (hexNum: number): string => `#${hexNum.toString(16).padStart(6, '0')}`;
 
 /** Lore fragments + persistent Bestiary (Scan discoveries), browsable side by side. */
 export class LoreCodexScene extends Phaser.Scene {
@@ -42,21 +37,23 @@ export class LoreCodexScene extends Phaser.Scene {
   private pageLabel?: Phaser.GameObjects.Text;
   private headerNote?: Phaser.GameObjects.Text;
   private tab: CodexTab = 'lore';
-  private tabButtons!: { lore: ReturnType<typeof createButton>; bestiary: ReturnType<typeof createButton> };
+  private tabs?: TabsHandle;
   private allIds: string[] = [];
   private discovered: string[] = [];
   private bestiaryRows: BestiaryRow[] = [];
+  private returnTo = 'Menu';
 
   constructor() {
     super('LoreCodex');
   }
 
-  create() {
+  create(data: { returnTo?: string } = {}) {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
     settleIn(this);
     this.page = 0;
     this.tab = 'lore';
+    this.returnTo = data.returnTo ?? 'Menu';
     const cx = GAME_WIDTH / 2;
     const { player, meta } = useGameStore.getState();
     // Permanently banked + current-run finds, so the codex is accurate mid-run too.
@@ -73,18 +70,28 @@ export class LoreCodexScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    // Real tabs â€” underline + raised plate, no button-tint hacks.
+    this.tabs = createTabs(this, cx, 112, [
+      { id: 'lore', label: 'Lore Fragments' },
+      { id: 'bestiary', label: 'Bestiary' },
+    ], (id) => this.switchTab(id as CodexTab), { width: 220, depth: 5 });
+
     this.pageLabel = this.add
       .text(cx, GAME_HEIGHT - 110, '', { fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5);
 
-    this.tabButtons = {
-      lore: createButton(this, cx - 260, GAME_HEIGHT - 50, 'Lore Fragments', () => this.switchTab('lore'), { width: 190, height: 42 }),
-      bestiary: createButton(this, cx - 40, GAME_HEIGHT - 50, 'Bestiary', () => this.switchTab('bestiary'), { width: 190, height: 42 }),
-    };
-    this.tintTab(this.tab);
-    createButton(this, cx - 540, GAME_HEIGHT - 50, '< Prev', () => this.changePage(-1), { width: 150, height: 42 });
-    createButton(this, cx + 200, GAME_HEIGHT - 50, 'Next >', () => this.changePage(1), { width: 150, height: 42 });
-    createButton(this, cx + 420, GAME_HEIGHT - 50, 'Back to Menu', () => fadeToScene(this, 'Menu'), { width: 170, height: 42 });
+    const prevBtn = createButton(this, cx - 380, GAME_HEIGHT - 50, '< Prev', () => this.changePage(-1), { width: 150, height: 42 });
+    void prevBtn;
+    const nextBtn = createButton(this, cx - 180, GAME_HEIGHT - 50, 'Next >', () => this.changePage(1), { width: 150, height: 42 });
+    void nextBtn;
+    createButton(this, cx + 300, GAME_HEIGHT - 50, this.returnTo === 'Board' ? 'Back to Board' : 'Back to Menu', () => fadeToScene(this, this.returnTo), { width: 200, height: 42 });
+
+    // Keyboard: arrows page, 1/2 switch tabs, Esc goes back.
+    this.input.keyboard?.on('keydown-LEFT', () => this.changePage(-1));
+    this.input.keyboard?.on('keydown-RIGHT', () => this.changePage(1));
+    this.input.keyboard?.on('keydown-ONE', () => this.switchTab('lore'));
+    this.input.keyboard?.on('keydown-TWO', () => this.switchTab('bestiary'));
+    this.input.keyboard?.on('keydown-ESC', () => fadeToScene(this, this.returnTo));
 
     this.renderPage();
   }
@@ -95,23 +102,13 @@ export class LoreCodexScene extends Phaser.Scene {
     return `${known} / ${this.bestiaryRows.length} enemies encountered`;
   }
 
-  private tintTab(active: CodexTab) {
-    for (const key of ['lore', 'bestiary'] as const) {
-      const b = this.tabButtons[key];
-      if (!b) continue;
-      const img = b.container.list[0] as Phaser.GameObjects.Image;
-      if (key === active) img.setTint(parseInt(PALETTE_HEX.gold.replace('#', ''), 16));
-      else img.clearTint();
-    }
-  }
-
   private switchTab(tab: CodexTab) {
     if (this.tab === tab) return;
+    audio.click();
     this.tab = tab;
     this.page = 0;
-    this.bestiaryRows = this.buildBestiaryRows();
+    this.tabs?.select(tab);
     this.headerNote?.setText(this.tabLine());
-    this.tintTab(this.tab);
     this.renderPage();
   }
 
@@ -128,7 +125,6 @@ export class LoreCodexScene extends Phaser.Scene {
       });
     }
     for (const [id, boss] of Object.entries(BOSSES)) {
-      const base = boss.phases[0]?.affinities ?? {};
       rows.push({
         id,
         name: boss.name,
@@ -136,7 +132,6 @@ export class LoreCodexScene extends Phaser.Scene {
         affinities: useGameStore.getState().meta.discoveredAffinities[id] ?? {},
         kills: useGameStore.getState().meta.bestiaryKills[id] ?? 0,
       });
-      void base;
     }
     return rows.sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -145,6 +140,7 @@ export class LoreCodexScene extends Phaser.Scene {
     const maxPage = Math.ceil(this.pageSize() / PER_PAGE) - 1;
     const next = Math.max(0, Math.min(maxPage, this.page + delta));
     if (next === this.page) return;
+    audio.pageTurn();
     this.page = next;
     this.renderPage();
   }
@@ -172,8 +168,9 @@ export class LoreCodexScene extends Phaser.Scene {
         const known = this.discovered.includes(id);
         const rowY = LIST_TOP + i * ROW_H + ROW_H / 2 - 8;
 
-        const bg = this.add.rectangle(cx, rowY, 960, ROW_H - 14, 0x16191d).setStrokeStyle(1, known ? 0x3a3226 : 0x2a2e33);
-        const title = this.add.text(cx - 440, rowY - ROW_H / 2 + 18, known ? frag.title : '??? — Undiscovered', {
+        const bg = this.add.rectangle(cx, rowY, 960, ROW_H - 14, SURFACE_HEX.row)
+          .setStrokeStyle(1, known ? SURFACE_HEX.hairlineKnown : SURFACE_HEX.border);
+        const title = this.add.text(cx - 440, rowY - ROW_H / 2 + 18, known ? frag.title : '??? â€” Undiscovered', {
           fontFamily: FONT_SERIF,
           fontSize: '17px',
           color: known ? PALETTE_HEX.gold : PALETTE_HEX.boneMuted,
@@ -198,11 +195,11 @@ export class LoreCodexScene extends Phaser.Scene {
       slice.forEach((entry, i) => {
         const rowY = LIST_TOP + i * ROW_H + ROW_H / 2 - 8;
         const knownCount = Object.keys(entry.affinities).length;
-        const bg = this.add.rectangle(cx, rowY, 960, ROW_H - 14, 0x16191d)
-          .setStrokeStyle(1, knownCount >= 6 ? 0x3a3226 : 0x2a2e33);
+        const bg = this.add.rectangle(cx, rowY, 960, ROW_H - 14, SURFACE_HEX.row)
+          .setStrokeStyle(1, knownCount >= 6 ? SURFACE_HEX.hairlineKnown : SURFACE_HEX.border);
 
         const lv = entry.level != null ? `   Lv ${entry.level}` : '';
-        const kills = entry.kills > 0 ? `   — slain ×${entry.kills}` : '';
+        const kills = entry.kills > 0 ? `   Â· slain Ã—${entry.kills}` : '';
         const name = this.add.text(cx - 440, rowY - ROW_H / 2 + 16, `${entry.name}${lv}${kills}`, {
           fontFamily: FONT_SERIF,
           fontSize: '17px',
@@ -219,18 +216,18 @@ export class LoreCodexScene extends Phaser.Scene {
           const kind = entry.affinities[t as DamageType];
           const known = kind !== undefined;
 
-          const topBg = this.add.rectangle(x + chipW / 2, rowY - 18, chipW, 26, 0x21252c).setStrokeStyle(1, 0x3a3f46);
+          const topBg = this.add.rectangle(x + chipW / 2, rowY - 18, chipW, 26, SURFACE_HEX.rowHoverAlt).setStrokeStyle(1, SURFACE_HEX.hairline);
           const topLabel = this.add.text(x + chipW / 2, rowY - 18, DAMAGE_TYPE_ABBREV[t], {
             fontFamily: FONT_MONO,
             fontSize: '13px',
-            color: `#${(DAMAGE_TYPE_HEX[t] ?? '9a9488').replace('#', '')}`,
+            color: DAMAGE_TYPE_HEX[t] ?? PALETTE_HEX.boneMuted,
           }).setOrigin(0.5);
 
-          const botBg = this.add.rectangle(x + chipW / 2, rowY + 16, chipW, 22, 0x21252c).setStrokeStyle(1, 0x3a3f46);
+          const botBg = this.add.rectangle(x + chipW / 2, rowY + 16, chipW, 22, SURFACE_HEX.rowHoverAlt).setStrokeStyle(1, SURFACE_HEX.hairline);
           const botLabel = this.add.text(x + chipW / 2, rowY + 16, known ? kind! : '?', {
             fontFamily: FONT_MONO,
             fontSize: '13px',
-            color: known ? `#${AFFINITY_HEX[kind!].toString(16).padStart(6, '0')}` : PALETTE_HEX.boneMuted,
+            color: known ? cssColorOf(AFFINITY_RESULT_HEX[kind!] ?? 0x9a9488) : PALETTE_HEX.boneMuted,
           }).setOrigin(0.5);
 
           container.add([topBg, topLabel, botBg, botLabel]);

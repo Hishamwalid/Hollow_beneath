@@ -23,8 +23,8 @@ export function createDiceRoller(scene: Phaser.Scene, x: number, y: number): Dic
       let ticks = 0;
       const total = 10;
       if (!reducedMotion()) {
-        // The die tumbles while it counts.
-        scene.tweens.add({ targets: container, angle: 360, duration: total * 45 + 120, ease: 'Cubic.easeOut' });
+        // The die tumbles while it counts (relative spin so every roll tumbles).
+        scene.tweens.add({ targets: container, angle: '+=360', duration: total * 45 + 120, ease: 'Cubic.easeOut' });
       }
       const timer = scene.time.addEvent({
         delay: 45,

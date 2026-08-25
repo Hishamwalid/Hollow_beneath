@@ -94,7 +94,20 @@ export class TutorialScene extends Phaser.Scene {
       }
     });
 
+    // Keyboard: Space/Enter advance or complete the typewriter; Esc exits.
+    this.input.keyboard?.on('keydown-SPACE', () => this.keyboardStep());
+    this.input.keyboard?.on('keydown-ENTER', () => this.keyboardStep());
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (!this.busy) this.exitTutorial();
+    });
+
     this.showScreen(0);
+  }
+
+  private keyboardStep(): void {
+    if (this.busy) return;
+    if (this.charIndex < this.fullText.length) this.skipTypewriter();
+    else this.advance();
   }
 
   /** The one pre-descent moment: ornamented title, parchment sheet, one button.

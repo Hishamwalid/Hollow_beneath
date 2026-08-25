@@ -5,6 +5,7 @@ import { CHECKPOINTS, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGe
 import { PINNED_STORY_EVENTS, STORY_EVENTS, STORY_BEAT_REMINDERS } from '@data/storyEvents';
 import { FIRST_NODE_TOOLTIPS } from '@data/tutorialText';
 import { rollDie, rollMovement } from '@systems/checks';
+import { mulberry32 } from '@systems/rng';
 import { TOTAL_NODES, CHAPTERS, NODES_PER_CHAPTER, GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { pickEvent } from '@systems/EventEngine';
 import { resolveTrap } from '@systems/EventEngine';
@@ -47,7 +48,7 @@ const CHAPTER_NAMES: Record<number, string> = {
 
 /** The dramatic question each chapter asks — surfaced on transitions + title. */
 const CHAPTER_QUESTIONS: Record<number, string> = {
-  1: 'What spoke to me?',
+  1: 'What spoke to them — and why am I not afraid?',
   2: 'Who else has heard it?',
   3: 'What did the Venn know?',
   4: 'What did she find?',
@@ -63,6 +64,30 @@ function chapterForNode(index: number): number {
 
 function mapKeyForChapter(chapter: number): string {
   return `map_${Math.min(MAP_COUNT, Math.max(1, chapter))}`;
+}
+
+/**
+ * Deterministic per-roll stream derived from the run seed + landing count:
+ * same save replayed identically; dice no longer bypass the seeded rng.
+ */
+function runRng(game: { rngSeed: number; landings: number }): () => number {
+  return mulberry32((game.rngSeed ^ Math.imul(game.landings + 1, 0x9e3779b1)) >>> 0);
+}
+
+/** Guarantees a texture exists for `key`, generating a dark stone plate if art is missing. */
+function ensureMapTexture(scene: Phaser.Scene, key: string): string {
+  if (scene.textures.exists(key)) return key;
+  console.warn(`[Board] map texture '${key}' missing — using fallback plate`);
+  const g = scene.make.graphics({});
+  g.fillStyle(0x101216, 1);
+  g.fillRect(0, 0, 512, 512);
+  g.lineStyle(2, 0xc9a24b, 0.22);
+  g.strokeCircle(256, 256, 210);
+  g.lineStyle(1, 0xc9a24b, 0.12);
+  g.strokeCircle(256, 256, 150);
+  g.generateTexture(key, 512, 512);
+  g.destroy();
+  return key;
 }
 
 // ---- Board panel frame (left side) ----
@@ -332,9 +357,11 @@ export class BoardScene extends Phaser.Scene {
     maskShape.fillRect(MAP_AREA_X, MAP_AREA_Y, MAP_AREA_W, MAP_AREA_H);
     this.boardMask = maskShape.createGeometryMask();
 
-    this.mapImage = this.add.image(MAP_AREA_X + MAP_AREA_W / 2, MAP_AREA_Y + MAP_AREA_H / 2, mapKeyForChapter(chapterForNode(game.currentNodeIndex)))
+    const chapterNum = chapterForNode(game.currentNodeIndex);
+    const mapKey = ensureMapTexture(this, mapKeyForChapter(chapterNum));
+    this.mapImage = this.add.image(MAP_AREA_X + MAP_AREA_W / 2, MAP_AREA_Y + MAP_AREA_H / 2, mapKey)
       .setOrigin(0.5)
-      .setScale(mapCoverScale(this, mapKeyForChapter(chapterForNode(game.currentNodeIndex))))
+      .setScale(mapCoverScale(this, mapKey))
       .setDepth(0)
       .setMask(this.boardMask);
     this.boardNodeLayer = this.add.container(0, 0).setDepth(1);
@@ -349,7 +376,7 @@ export class BoardScene extends Phaser.Scene {
 
     this.actionGrid = createActionGrid(this, COL3_X, ACTIONGRID_Y, [
       { icon: 'icon_character', label: 'Character', onClick: () => fadeToScene(this, 'Inventory') },
-      { icon: 'icon_codex', label: 'Codex', onClick: () => fadeToScene(this, 'LoreCodex') },
+      { icon: 'icon_codex', label: 'Codex', onClick: () => fadeToScene(this, 'LoreCodex', { returnTo: 'Board' }) },
       { icon: 'icon_skills', label: 'Loadout', onClick: () => fadeToScene(this, 'Loadout'),
         badge: () => null,
       },
@@ -363,6 +390,16 @@ export class BoardScene extends Phaser.Scene {
     this.diceRoller = createDiceRoller(this, COL2_X + COL_W / 2, DICE_PANEL_Y + 70);
     this.diceRoller.container.setDepth(6);
     this.rollBtn = createButton(this, COL2_X + COL_W / 2, DICE_PANEL_Y + DICE_PANEL_H - 30, 'Roll (1d6)', () => this.handleRoll(), { width: COL_W - 24, height: 44, fontSize: '16px', depth: 6 });
+
+    // Space/Enter rolls — the board's one verb deserves the keyboard too.
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      if (this.busy || !this.rollBtn?.isEnabled()) return;
+      this.handleRoll();
+    });
+    this.input.keyboard?.on('keydown-ENTER', () => {
+      if (this.busy || !this.rollBtn?.isEnabled()) return;
+      this.handleRoll();
+    });
 
     // Fresh descent: walk into the first chamber so the prologue always plays
     // before any roll. Roll unlocks once it resolves (board re-loads at node 1).
@@ -384,7 +421,7 @@ export class BoardScene extends Phaser.Scene {
     void aheadPanel;
     this.preview = createNodePreview(this, COL2_X + COL_W / 2, TILE_PANEL_Y + 104, COL_W);
     this.preview.container.setDepth(6);
-    this.preview.show(game.nodes[Math.max(0, game.currentNodeIndex - 1)]);
+    this.refreshAheadPreview();
 
     this.factionPanel = createFactionPanel(this, COL2_X, FACTION_PANEL_Y, COL_W);
     this.factionPanel.update(player.faction);
@@ -449,7 +486,7 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private chapterFlavor(chapter: number): string {
-    if (chapter <= 0) return 'The stair down is behind you now. Ahead: five chapters of a descent that was never meant to be survived.';
+    if (chapter <= 0) return 'Keth-7 dig site, morning. The wind smells like stone and waiting.';
     return `Chapter ${chapter} / ${CHAPTERS} — ${CHAPTER_NAMES[chapter]}`;
   }
 
@@ -755,7 +792,8 @@ export class BoardScene extends Phaser.Scene {
     this.rollBtn?.setEnabled(false);
     audio.diceRoll();
 
-    const roll = rollMovement(Math.random);
+    const rng = runRng(game);
+    const roll = rollMovement(rng);
     let target = Math.min(TOTAL_NODES, game.currentNodeIndex + roll);
     for (let i = game.currentNodeIndex + 1; i <= target; i++) {
       if (LANDMARK_INDICES.includes(i) && !game.nodes[i - 1].resolved) {
@@ -792,7 +830,7 @@ export class BoardScene extends Phaser.Scene {
     const { player, game } = useGameStore.getState();
     if (!player || !game) return false;
     if (!isAnyFactionHostile(player.faction)) return false;
-    if (Math.random() >= AMBUSH_CHANCE) return false;
+    if (runRng(game)() >= AMBUSH_CHANCE) return false;
 
     const hostileKey = (Object.keys(player.faction) as (keyof FactionState)[]).find(
       (k) => influenceStatus(player.faction[k]) === 'Hostile',
@@ -814,42 +852,112 @@ export class BoardScene extends Phaser.Scene {
     return true;
   }
 
+  /** Gentle camera lean that keeps the walking token in frame without
+   *  ever revealing the void beyond the layout. */
+  private followTokenWalk(x: number, y: number): void {
+    if (reducedMotion()) return;
+    const cam = this.cameras.main;
+    const z = 1.04;
+    const halfW = GAME_WIDTH / (2 * z);
+    const halfH = GAME_HEIGHT / (2 * z);
+    const tx = Phaser.Math.Clamp(x, halfW, GAME_WIDTH - halfW);
+    const ty = Phaser.Math.Clamp(y, halfH, GAME_HEIGHT - halfH);
+    this.tweens.add({ targets: cam, scrollToX: tx - halfW, scrollToY: ty - halfH, zoom: z, duration: 180, ease: 'Sine.easeOut' });
+  }
+
+  private releaseTokenWalk(): void {
+    if (reducedMotion()) return;
+    const cam = this.cameras.main;
+    this.tweens.add({ targets: cam, scrollToX: 0, scrollToY: 0, zoom: 1, duration: 320, ease: 'Sine.easeOut' });
+  }
+
   private moveTo(target: number) {
     const { player, game } = useGameStore.getState();
     if (!player || !game) return;
 
-    const node = game.nodes[target - 1];
-    const dest = node ? positionForNode(node) : caveCenter();
+    const nodes = game.nodes;
+    const startIdx = Math.max(game.currentNodeIndex, 0);
+    // One step per crossed node — the pin follows the drawn path, not a chord.
+    const steps: Array<{ x: number; y: number }> = [];
+    for (let i = startIdx + 1; i <= target; i++) {
+      const n = nodes[i - 1];
+      steps.push(n ? positionForNode(n) : caveCenter());
+    }
+    if (steps.length === 0 || !this.playerToken) {
+      this.finishMove(target);
+      return;
+    }
+
     audio.moveStep();
-    if (this.playerToken) {
-      const token = this.playerToken;
-      const fromX = token.x;
-      const fromY = token.y;
-      const baseScale = 0.24;
+    const token = this.playerToken;
+    const baseScale = 0.24;
+    // Landmark/capture/story blockers get a slow, weighted final approach.
+    const dest = nodes[target - 1];
+    const anticipates = !!dest && !dest.resolved
+      && (LANDMARK_INDICES.includes(target) || CAPTURE_INDICES.includes(target) || PINNED_STORY_NODES.has(target));
+
+    const walkHop = (i: number, fromX: number, fromY: number) => {
+      if (!token.active) return; // scene died mid-walk
+      const isFinal = i === steps.length - 1;
+      const to = steps[i];
+      const dist = Phaser.Math.Distance.Between(fromX, fromY, to.x, to.y);
+      let dur = reducedMotion() ? 70 : Phaser.Math.Clamp(dist * 0.55, 110, 190);
+      if (isFinal && anticipates && !reducedMotion()) dur *= 1.9;
+      const arc = Phaser.Math.Clamp(dist * 0.09, 5, 12);
       const proxy = { t: 0 };
-      const dur = 300;
+      this.followTokenWalk(to.x, to.y);
       this.tweens.add({
         targets: proxy,
         t: 1,
         duration: dur,
         ease: 'Sine.easeInOut',
+        delay: isFinal && anticipates ? 200 : 0,
         onUpdate: () => {
           const t = proxy.t;
-          token.x = Phaser.Math.Linear(fromX, dest.x, t);
+          token.x = Phaser.Math.Linear(fromX, to.x, t);
           const hop = reducedMotion() ? 0 : Math.sin(t * Math.PI);
-          token.y = Phaser.Math.Linear(fromY, dest.y, t) - hop * 10;
-          const squash = 1 + hop * 0.18 - Math.max(0, t - 0.92) * 1.2;
+          token.y = Phaser.Math.Linear(fromY, to.y, t) - hop * arc;
+          const squash = 1 + hop * 0.16 - Math.max(0, t - 0.92) * 1.2;
           token.setScale(baseScale * squash, baseScale * (2 - squash));
         },
         onComplete: () => {
           token.setScale(baseScale);
-          spawnHitParticles(this, dest.x, dest.y + 6, 0x9a9488);
-          this.finishMove(target);
+          spawnHitParticles(this, to.x, to.y + 6, 0x9a9488);
+          if (i < steps.length - 1) {
+            walkHop(i + 1, to.x, to.y);
+          } else {
+            this.releaseTokenWalk();
+            this.finishMove(target);
+          }
         },
       });
-    } else {
-      this.finishMove(target);
+    };
+    walkHop(0, token.x, token.y);
+  }
+
+  /** "Ahead" card: previews the immediate next node plus everything a roll of
+   *  1–6 could reach (movement blockers included), so rolling is a decision. */
+  private refreshAheadPreview() {
+    const { game } = useGameStore.getState();
+    if (!game || !this.preview) return;
+    if (game.currentNodeIndex >= TOTAL_NODES) {
+      this.preview.container.setVisible(false);
+      return;
     }
+    const nextIdx = Math.min(TOTAL_NODES, game.currentNodeIndex + 1);
+    this.preview.show(game.nodes[nextIdx - 1]);
+    const counts: Partial<Record<BoardNode['type'], number>> = {};
+    for (let i = game.currentNodeIndex + 1; i <= Math.min(TOTAL_NODES, game.currentNodeIndex + 6); i++) {
+      const n = game.nodes[i - 1];
+      if (!n || n.resolved) continue;
+      counts[n.type] = (counts[n.type] ?? 0) + 1;
+      // Movement halts at the first unresolved blocker — nothing beyond is reachable.
+      if ((LANDMARK_INDICES.includes(i) || CAPTURE_INDICES.includes(i) || PINNED_STORY_NODES.has(i)) && !n.resolved) break;
+    }
+    const order: BoardNode['type'][] = ['landmark', 'combat', 'trap', 'event', 'rest', 'discovery'];
+    const label: Record<string, string> = { landmark: 'Boss', combat: 'Combat', trap: 'Trap', event: 'Choice', rest: 'Rest', discovery: 'Find' };
+    const parts = order.filter((t) => counts[t]).map((t) => (counts[t]! > 1 ? `${label[t]}×${counts[t]}` : label[t]));
+    this.preview.setTip(parts.length ? `Within a roll of 6: ${parts.join(' · ')}` : '');
   }
 
   private showChapterCard(chapter: number, node: BoardNode) {
@@ -884,27 +992,40 @@ export class BoardScene extends Phaser.Scene {
     container.add(questionText);
 
     const elements = [bg, chapterText, nameText, questionText];
+    // Click / Space / Enter skips the hold — the descent never stalls on a card.
+    let done = false;
+    const conclude = () => {
+      if (done || !container.active) return;
+      done = true;
+      this.input.removeListener('pointerdown', skipCard);
+      this.input.keyboard?.removeListener('keydown-SPACE', skipCard);
+      this.input.keyboard?.removeListener('keydown-ENTER', skipCard);
+      this.tweens.killTweensOf(elements);
+      this.tweens.add({
+        targets: elements,
+        alpha: 0,
+        duration: reducedMotion() ? 90 : 260,
+        ease: 'Sine.easeIn',
+        onComplete: () => {
+          container.destroy();
+          this.log(this.chapterFlavor(chapter));
+          this.resolveNode(node);
+        },
+      });
+    };
+    const skipCard = () => conclude();
     this.tweens.add({
       targets: elements,
       alpha: { from: 0, to: 1 },
       duration: 500,
       ease: 'Sine.easeOut',
       onComplete: () => {
-        this.time.delayedCall(2500, () => {
-          this.tweens.add({
-            targets: elements,
-            alpha: 0,
-            duration: 400,
-            ease: 'Sine.easeIn',
-            onComplete: () => {
-              container.destroy();
-              this.log(this.chapterFlavor(chapter));
-              this.resolveNode(node);
-            },
-          });
-        });
+        this.time.delayedCall(1600, conclude);
       },
     });
+    this.input.on('pointerdown', skipCard);
+    this.input.keyboard?.on('keydown-SPACE', skipCard);
+    this.input.keyboard?.on('keydown-ENTER', skipCard);
   }
 
   private finishMove(target: number) {
@@ -932,12 +1053,9 @@ export class BoardScene extends Phaser.Scene {
       }
     }
 
-    this.drawBoard(updatedNodes);
     this.playerPanel?.update(player);
     this.factionPanel?.update(player.faction);
     this.actionGrid?.refresh();
-    this.preview?.show(node);
-    this.updateBoardTitle(nextChapter);
 
     const showChapterOrResolve = () => {
       if (nextChapter !== prevChapter) {
@@ -949,8 +1067,19 @@ export class BoardScene extends Phaser.Scene {
     };
 
     if (nextChapter !== prevChapter) {
-      this.flipToChapter(nextChapter, showChapterOrResolve);
+      // The old chapter keeps its map AND its nodes until the page finishes
+      // turning — the new node layer lands with the new map, never before.
+      this.flipToChapter(nextChapter, () => {
+        this.drawBoard(updatedNodes);
+        this.placeTokenAt(target);
+        this.refreshAheadPreview();
+        this.updateBoardTitle(nextChapter);
+        showChapterOrResolve();
+      });
     } else {
+      this.drawBoard(updatedNodes);
+      this.refreshAheadPreview();
+      this.updateBoardTitle(nextChapter);
       showChapterOrResolve();
     }
     this.applyFactionGearBonus(player);
@@ -964,7 +1093,7 @@ export class BoardScene extends Phaser.Scene {
       return;
     }
 
-    const newMap = this.add.image(MAP_AREA_X + MAP_AREA_W / 2, MAP_AREA_Y + MAP_AREA_H / 2, mapKeyForChapter(chapter))
+    const newMap = this.add.image(MAP_AREA_X + MAP_AREA_W / 2, MAP_AREA_Y + MAP_AREA_H / 2, ensureMapTexture(this, mapKeyForChapter(chapter)))
       .setOrigin(0.5)
       .setScale(mapCoverScale(this, mapKeyForChapter(chapter)))
       .setDepth(0)
@@ -1484,34 +1613,48 @@ export class BoardScene extends Phaser.Scene {
     const cy = GAME_HEIGHT / 2;
     const d = 200;
 
-    this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(d).setInteractive();
-    this.add.text(cx, cy - 90, 'You fell. But the Loom remembers.', {
-      fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold,
-    }).setOrigin(0.5).setDepth(d);
+    // The dark takes you slowly: the veil closes in instead of snapping on.
+    const veil = this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(d).setInteractive();
+    if (!reducedMotion()) {
+      veil.setAlpha(0);
+      this.tweens.add({ targets: veil, alpha: 1, duration: 700, ease: 'Quad.easeOut' });
+      this.tweens.add({ targets: this.cameras.main, zoom: { from: 1.05, to: 1 }, duration: 900, ease: 'Sine.easeOut' });
+    }
 
-    this.add.text(cx, cy - 40, `${player?.name ?? 'The Seeker'} falls in Chapter ${chapterForNode(Math.max(1, game.currentNodeIndex))}.`, {
-      fontFamily: FONT_BODY, fontSize: '20px', color: PALETTE_HEX.bone,
-    }).setOrigin(0.5).setDepth(d);
+    const lines = [
+      { y: cy - 90, text: 'You fell. But the Loom remembers.', font: FONT_SERIF, size: '30px', color: PALETTE_HEX.gold, italic: false },
+      { y: cy - 40, text: `${player?.name ?? 'The Seeker'} falls in Chapter ${chapterForNode(Math.max(1, game.currentNodeIndex))}.`, font: FONT_BODY, size: '20px', color: PALETTE_HEX.bone, italic: false },
+      { y: cy - 8, text: `Return to checkpoint at node ${game.checkpointNodeIndex}.`, font: FONT_BODY, size: '17px', color: PALETTE_HEX.boneMuted, italic: false },
+      { y: cy + 24, text: 'HP and MP restored to 50%.', font: FONT_MONO, size: '16px', color: PALETTE_HEX.gold, italic: false },
+    ];
+    lines.forEach((l, i) => {
+      const t = this.add.text(cx, l.y, l.text, {
+        fontFamily: l.font, fontSize: l.size, color: l.color, fontStyle: l.italic ? 'italic' : undefined,
+      }).setOrigin(0.5).setDepth(d);
+      if (!reducedMotion()) {
+        const ty = t.y;
+        t.y = ty + 18;
+        t.setAlpha(0);
+        this.tweens.add({ targets: t, y: ty, alpha: 1, duration: 520, delay: 250 + i * 170, ease: 'Sine.easeOut' });
+      }
+    });
 
-    this.add.text(cx, cy - 8, `Return to checkpoint at node ${game.checkpointNodeIndex}.`, {
-      fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.boneMuted,
-    }).setOrigin(0.5).setDepth(d);
-
-    this.add.text(cx, cy + 24, 'HP and MP restored to 50%.', {
-      fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.gold,
-    }).setOrigin(0.5).setDepth(d);
-
-    createButton(this, cx - 110, cy + 84, 'Continue', () => {
+    const mkBtn = (x: number, label: string, onClick: () => void) => {
+      const btn = createButton(this, x, cy + 84, label, onClick, { width: 200, height: 46, fontSize: '17px', depth: d });
+      if (!reducedMotion()) btn.container.setAlpha(0);
+      this.tweens.add({ targets: btn.container, alpha: 1, duration: 400, delay: 950, ease: 'Sine.easeOut' });
+      return btn;
+    };
+    mkBtn(cx - 110, 'Continue', () => {
       store.handleDeath();
       fadeToScene(this, 'Board');
-    }, { width: 200, height: 46, fontSize: '17px' }).container.setDepth(d);
-
-    createButton(this, cx + 110, cy + 84, 'Return to Menu', () => {
+    });
+    mkBtn(cx + 110, 'Return to Menu', () => {
       const { meta } = useGameStore.getState();
       const newMeta = { ...meta, deathCount: meta.deathCount + 1 };
       useGameStore.setState({ meta: newMeta, player: null, game: null });
       audio.click();
       fadeToScene(this, 'Menu');
-    }, { width: 200, height: 46, fontSize: '17px' }).container.setDepth(d);
+    });
   }
 }

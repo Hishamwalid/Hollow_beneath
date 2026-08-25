@@ -5,7 +5,9 @@ export default defineConfig({
   root: '.',
   publicDir: 'public',
   build: {
-    target: 'es2020',
+    // es2022+: top-level await (debugEvent fast-boot) requires it; every
+    // browser that can run this game supports it.
+    target: 'es2022',
     outDir: 'dist',
     assetsDir: 'assets',
     chunkSizeWarningLimit: 1500,

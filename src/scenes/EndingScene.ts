@@ -5,7 +5,15 @@ import type { EndingDef } from '@data/types';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { createVignette, type VignetteKind } from '@ui/vignettes';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
+
+/** Each ending gets the backdrop its fate deserves. */
+function vignetteFor(endingId: string): VignetteKind {
+  if (endingId === 'lost_in_the_dark') return 'tunnel';
+  if (endingId === 'the_return') return 'return';
+  return 'veil'; // THE HOLLOW — and any fallback
+}
 
 /**
  * Definitive-edition ending sequences. Three endings, all tragic:
@@ -39,6 +47,8 @@ export class EndingScene extends Phaser.Scene {
 
     audio.startAmbience('loom');
     this.skipKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    // The fate staged behind its own words.
+    createVignette(this, vignetteFor(resolved.id), { depth: 3 });
 
     this.playSequence(resolved);
   }
@@ -104,12 +114,32 @@ export class EndingScene extends Phaser.Scene {
     const lines = ending.epilogue.split('\n');
     let idx = 0;
     let label: Phaser.GameObjects.Text | null = null;
+    // Optional timed auto-advance — toggle with A. Off by default.
+    let autoOn = false;
+    let autoTimer: Phaser.Time.TimerEvent | null = null;
+    const autoBadge = this.add
+      .text(30, GAME_HEIGHT - 26, 'A · auto-advance', { fontFamily: FONT_BODY, fontSize: '12px', color: PALETTE_HEX.boneMuted })
+      .setOrigin(0, 1)
+      .setDepth(11)
+      .setAlpha(0.55);
+
+    const clearAuto = () => { if (autoTimer) { autoTimer.remove(); autoTimer = null; } };
+    const scheduleAuto = () => {
+      clearAuto();
+      if (!autoOn) return;
+      const words = (label?.text ?? '').trim().split(/\s+/).filter(Boolean).length;
+      const wait = Phaser.Math.Clamp(words * 300, 2200, 5600);
+      autoTimer = this.time.delayedCall(wait, () => advance());
+    };
 
     const advance = () => {
+      clearAuto();
       if (idx >= lines.length) {
         this.input.off('pointerdown', advance);
         this.skipKey?.off('down', advance);
+        this.input.keyboard?.off('keydown-A', toggleAuto);
         prompt.destroy();
+        autoBadge.destroy();
         header.setAlpha(0.4);
         this.showFactionEpilogue(ending);
         return;
@@ -130,7 +160,18 @@ export class EndingScene extends Phaser.Scene {
         .setDepth(11)
         .setAlpha(0);
       this.tweens.add({ targets: label, alpha: 1, duration: 450, ease: 'Sine.easeOut' });
+      scheduleAuto();
     };
+
+    const toggleAuto = () => {
+      autoOn = !autoOn;
+      audio.click();
+      autoBadge.setText(autoOn ? 'AUTO ▸ on (A)' : 'A · auto-advance');
+      autoBadge.setAlpha(autoOn ? 0.95 : 0.55);
+      if (autoOn) scheduleAuto();
+      else clearAuto();
+    };
+    this.input.keyboard?.on('keydown-A', toggleAuto);
 
     this.input.on('pointerdown', advance);
     this.skipKey?.on('down', advance);

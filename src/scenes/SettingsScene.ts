@@ -1,62 +1,26 @@
 ﻿import Phaser from 'phaser';
-import { settingsManager, type GameSettings } from '@systems/SettingsManager';
+import { settingsManager } from '@systems/SettingsManager';
 import { CREDITS } from '@data/credits';
 import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
-import { createTitle } from '@ui/headings';
+import { createTitle, createSectionLabel } from '@ui/headings';
+import { createSlider, createToggle, createModal } from '@ui/controls';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
-interface SliderHandle {
-  setValue: (v: number) => void;
-  container: Phaser.GameObjects.Container;
-}
+// ============================================================================
+// Settings — everything applies LIVE. No scene restarts, no lost scroll:
+// sliders stream changes as they drag; toggles stamp in place; difficulty
+// swaps its own highlight. Credits page through instead of truncating.
+// ============================================================================
 
-function createSlider(
-  scene: Phaser.Scene,
-  x: number,
-  y: number,
-  width: number,
-  initial: number,
-  onChange: (v: number) => void,
-): SliderHandle {
-  const trackH = 10;
-  const thumbR = 8;
-  let value = Phaser.Math.Clamp(initial, 0, 100);
-
-  const track = scene.add.rectangle(x, y, width, trackH, 0x22262c).setStrokeStyle(1, 0xc9a24b, 0.4).setOrigin(0, 0.5).setDepth(1);
-  const fill = scene.add.rectangle(x + 2, y, Math.max(4, (width - 4) * (value / 100)), trackH - 4, 0xc9a24b, 0.6).setOrigin(0, 0.5).setDepth(2);
-  const thumb = scene.add.circle(x + (width - 4) * (value / 100) + 2, y, thumbR, 0xe9c876).setStrokeStyle(1, 0x9a9488).setDepth(3);
-
-  const setValue = (v: number) => {
-    value = Phaser.Math.Clamp(v, 0, 100);
-    fill.setSize(Math.max(4, (width - 4) * (value / 100)), trackH - 4);
-    thumb.setPosition(x + (width - 4) * (value / 100) + 2, y);
-    onChange(value);
-  };
-
-  const container = scene.add.container(0, 0, [track, fill, thumb]);
-
-  const hitArea = scene.add.rectangle(x, y, width + 24, Math.max(trackH + 16, thumbR * 4), 0x000000, 0).setOrigin(0, 0.5).setDepth(4).setInteractive({ useHandCursor: true });
-  container.addAt(hitArea, 0);
-
-  hitArea.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-    const relX = Phaser.Math.Clamp(pointer.x - x, 0, width);
-    setValue((relX / width) * 100);
-  });
-
-  scene.input.setDraggable(hitArea);
-  hitArea.on('drag', (_pointer: Phaser.Input.Pointer, dragX: number) => {
-    const relX = Phaser.Math.Clamp(dragX - x, 0, width);
-    setValue((relX / width) * 100);
-  });
-
-  return { setValue, container };
-}
+const CREDITS_PER_PAGE = 12;
 
 export class SettingsScene extends Phaser.Scene {
-  private content: Phaser.GameObjects.Container[] = [];
+  private creditsPage = 0;
+  private creditsContainer?: Phaser.GameObjects.Container;
+  private creditsPagerText?: Phaser.GameObjects.Text;
 
   constructor() {
     super('Settings');
@@ -70,174 +34,200 @@ export class SettingsScene extends Phaser.Scene {
 
     createTitle(this, cx, 50, 'Settings');
 
-    this.buildVolumeSlider(cx, settings);
-    this.buildTextSpeedSlider(cx, settings);
-    this.buildScreenShakeToggle(cx, settings);
-    this.buildReduceMotionToggle(cx, settings);
+    this.buildVolumeSlider(cx, settings.masterVolume);
+    this.buildTextSpeedSlider(cx, settings.textSpeed);
+    this.buildScreenShakeToggle(cx, settings.screenShake);
+    this.buildReduceMotionToggle(cx, settings.reduceMotion);
     this.buildDifficulty(cx);
     this.buildCredits(cx);
     this.buildClearData(cx);
     this.buildBackButton(cx);
+
+    // Esc always returns to the menu.
+    this.input.keyboard?.on('keydown-ESC', () => fadeToScene(this, 'Menu'));
   }
 
-  private buildVolumeSlider(cx: number, settings: GameSettings) {
+  private buildVolumeSlider(cx: number, initial: number) {
     const y = 140;
-    this.addSettingsLabel(cx - 300, y, 'Master Volume');
-    const valueLabel = this.add.text(cx + 180, y, `${settings.masterVolume}%`, {
+    createSectionLabel(this, cx - 300, y, 'Master Volume', { color: PALETTE_HEX.bone });
+    const valueLabel = this.add.text(cx + 180, y, `${Math.round(initial)}%`, {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5);
 
-    createSlider(this, cx - 80, y, 240, settings.masterVolume, (v) => {
-      settingsManager.set({ masterVolume: v });
-      audio.setMasterVolume(v);
-      valueLabel.setText(`${Math.round(v)}%`);
-      audio.click();
+    createSlider(this, cx - 80, y, 240, initial, (v) => {
+      // Store rounded like the label says — one truth, no drift.
+      const rounded = Math.round(v);
+      settingsManager.set({ masterVolume: rounded });
+      audio.setMasterVolume(rounded);
+      valueLabel.setText(`${rounded}%`);
     });
   }
 
-  private buildTextSpeedSlider(cx: number, settings: GameSettings) {
+  private buildTextSpeedSlider(cx: number, initial: number) {
     const y = 210;
-    this.addSettingsLabel(cx - 300, y, 'Text Speed');
-    const valueLabel = this.add.text(cx + 180, y, `${settings.textSpeed}%`, {
+    createSectionLabel(this, cx - 300, y, 'Text Speed', { color: PALETTE_HEX.bone });
+    const valueLabel = this.add.text(cx + 180, y, `${Math.round(initial)}%`, {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5);
 
-    this.add.text(cx - 100, y + 18, 'Slower', {
+    this.add.text(cx - 100, y + 20, 'Slower', {
       fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5);
-    this.add.text(cx + 140, y + 18, 'Faster', {
+    this.add.text(cx + 140, y + 20, 'Faster', {
       fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
-    }).setOrigin(0, 0.5);
+    }).setOrigin(1, 0.5);
 
-    createSlider(this, cx - 80, y, 240, settings.textSpeed, (v) => {
+    createSlider(this, cx - 80, y, 240, initial, (v) => {
       settingsManager.set({ textSpeed: Math.round(v) });
       valueLabel.setText(`${Math.round(v)}%`);
     });
   }
 
-  private buildScreenShakeToggle(cx: number, settings: GameSettings) {
+  private buildScreenShakeToggle(cx: number, initial: boolean) {
     const y = 300;
-
-    this.addSettingsLabel(cx - 300, y, 'Screen Shake');
-
-    const toggle = createButton(this, cx + 40, y, settings.screenShake ? 'ON' : 'OFF', () => {
-      const next = !settingsManager.get().screenShake;
-      settingsManager.set({ screenShake: next });
-      toggle.container.destroy();
-      this.scene.restart();
-    }, { width: 80, height: 36, fontSize: '14px' });
+    createSectionLabel(this, cx - 300, y, 'Screen Shake', { color: PALETTE_HEX.bone });
+    createToggle(this, cx + 60, y, '', initial, (on) => {
+      settingsManager.set({ screenShake: on });
+    }, { width: 220 });
   }
 
-  private buildReduceMotionToggle(cx: number, settings: GameSettings) {
-    const y = 340;
-    this.addSettingsLabel(cx - 300, y, 'Reduce Motion');
-    this.add.text(cx + 140, y, 'calms shakes & large movement', {
+  private buildReduceMotionToggle(cx: number, initial: boolean) {
+    const y = 345;
+    createSectionLabel(this, cx - 300, y, 'Reduce Motion', { color: PALETTE_HEX.bone });
+    this.add.text(cx - 296, y + 18, 'calms shakes & large movement', {
       fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5);
-    const toggle = createButton(this, cx + 40, y, settings.reduceMotion ? 'ON' : 'OFF', () => {
-      const next = !settingsManager.get().reduceMotion;
-      settingsManager.set({ reduceMotion: next });
-      toggle.container.destroy();
-      this.scene.restart();
-    }, { width: 80, height: 36, fontSize: '14px' });
+    createToggle(this, cx + 60, y, '', initial, (on) => {
+      settingsManager.set({ reduceMotion: on });
+    }, { width: 220 });
   }
 
+  /** Segmented difficulty control — the active mode carries a gold underline. */
   private buildDifficulty(cx: number) {
     const modes = ['easy', 'normal', 'hard', 'ironman'] as const;
-    const y = 385;
-    const current = settingsManager.get().difficulty;
+    const y = 400;
+    let current = settingsManager.get().difficulty;
 
-    this.addSettingsLabel(cx - 300, y, 'Difficulty');
-    const active = this.add.text(cx + 160, y, current.toUpperCase(), {
-      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
-    }).setOrigin(0, 0.5);
+    createSectionLabel(this, cx - 300, y, 'Difficulty', { color: PALETTE_HEX.bone });
 
-    const buttons: ReturnType<typeof createButton>[] = [];
+    const marks: Record<string, Phaser.GameObjects.Rectangle> = {};
+    const labels: Record<string, Phaser.GameObjects.Text> = {};
     let x = cx - 120;
     for (const mode of modes) {
-      const activeBtn = mode === current;
-      buttons.push(createButton(this, x, y, `${mode[0].toUpperCase()}${mode.slice(1)}`, () => {
+      const label = this.add.text(x, y, mode[0].toUpperCase() + mode.slice(1), {
+        fontFamily: FONT_MONO, fontSize: '13px',
+        color: mode === current ? PALETTE_HEX.gold : PALETTE_HEX.boneMuted,
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      const mark = this.add.rectangle(x, y + 14, label.width - 6, 2, parseInt(PALETTE_HEX.gold.replace('#', ''), 16), mode === current ? 0.95 : 0);
+      labels[mode] = label;
+      marks[mode] = mark;
+      label.on('pointerover', () => { if (mode !== current) label.setColor(PALETTE_HEX.gold); });
+      label.on('pointerout', () => { if (mode !== current) label.setColor(PALETTE_HEX.boneMuted); });
+      label.on('pointerdown', () => {
+        if (mode === current) return;
+        current = mode;
         settingsManager.set({ difficulty: mode });
         audio.click();
-        buttons.forEach((b) => b.destroy());
-        active.setText(mode.toUpperCase());
-        this.scene.restart();
-      }, { width: 74, height: 34, fontSize: '12px', disabled: activeBtn }));
+        for (const m of modes) {
+          const on = m === current;
+          labels[m].setColor(on ? PALETTE_HEX.gold : PALETTE_HEX.boneMuted);
+          if (on && !reducedMotionPulse(marks[m])) {
+            this.tweens.add({ targets: marks[m], alpha: { from: 0, to: 0.95 }, duration: 180 });
+          }
+          marks[m].setFillStyle(parseInt(PALETTE_HEX.gold.replace('#', ''), 16), on ? 0.95 : 0);
+        }
+      });
       x += 82;
     }
   }
 
   private buildCredits(cx: number) {
-    let y = 430;
-    const divider = this.add.rectangle(cx, y, 600, 1, 0xc9a24b, 0.3).setDepth(1);
-    y += 20;
+    const topY = 445;
+    this.add.rectangle(cx, topY - 8, 600, 1, parseInt(PALETTE_HEX.gold.replace('#', ''), 16), 0.3);
+    createSectionLabel(this, cx - 300, topY + 10, 'Credits');
+    this.creditsPagerText = this.add.text(cx + 300, topY + 10, '', {
+      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
+    }).setOrigin(1, 0.5);
 
-    this.add.text(cx, y, 'Credits', {
-      fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.gold,
-    }).setOrigin(0.5);
-    y += 30;
+    this.renderCreditsPage(cx, topY + 36);
 
-    const maxLines = 14;
-    const shown = CREDITS.slice(0, maxLines);
-    shown.forEach((line) => {
-      if (y > GAME_HEIGHT - 80) return;
+    const prevBtn = this.add.text(cx - 40, GAME_HEIGHT - 118, '‹', {
+      fontFamily: FONT_MONO, fontSize: '18px', color: PALETTE_HEX.gold,
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const nextBtn = this.add.text(cx + 40, GAME_HEIGHT - 118, '›', {
+      fontFamily: FONT_MONO, fontSize: '18px', color: PALETTE_HEX.gold,
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    prevBtn.on('pointerdown', () => this.flipCredits(-1));
+    nextBtn.on('pointerdown', () => this.flipCredits(1));
+  }
+
+  private flipCredits(delta: number): void {
+    const pageCount = Math.max(1, Math.ceil(CREDITS.length / CREDITS_PER_PAGE));
+    this.creditsPage = Phaser.Math.Clamp(this.creditsPage + delta, 0, pageCount - 1);
+    audio.pageTurn();
+    this.renderCreditsPage(GAME_WIDTH / 2, 481);
+  }
+
+  private renderCreditsPage(cx: number, startY: number): void {
+    this.creditsContainer?.destroy();
+    const container = this.add.container(0, 0);
+    this.creditsContainer = container;
+
+    const pageCount = Math.max(1, Math.ceil(CREDITS.length / CREDITS_PER_PAGE));
+    this.creditsPagerText?.setText(`${this.creditsPage + 1} / ${pageCount}`);
+
+    const slice = CREDITS.slice(this.creditsPage * CREDITS_PER_PAGE, (this.creditsPage + 1) * CREDITS_PER_PAGE);
+    let y = startY;
+    slice.forEach((line) => {
       const isTitle = line === 'THE HOLLOW BENEATH';
-      const isEmpty = line === '';
-      const t = this.add.text(cx, y, line, {
+      const isEmpty = line.trim() === '';
+      const t = this.add.text(cx, y, isEmpty ? '' : line, {
         fontFamily: isTitle ? FONT_SERIF : FONT_BODY,
-        fontSize: isTitle ? '16px' : '13px',
-        color: isTitle ? PALETTE_HEX.gold : (isEmpty ? 'transparent' : PALETTE_HEX.boneMuted),
-        fontStyle: isTitle ? 'normal' : 'normal',
-      }).setOrigin(0.5);
+        fontSize: isTitle ? '15px' : '13px',
+        color: isTitle ? PALETTE_HEX.gold : PALETTE_HEX.boneMuted,
+        wordWrap: { width: 640 },
+        align: 'center',
+      }).setOrigin(0.5, 0);
+      container.add(t);
       y += isEmpty ? 10 : (isTitle ? 24 : 20);
     });
-    if (CREDITS.length > maxLines) {
-      this.add.text(cx, y, `... ${CREDITS.length - maxLines} more lines`, {
-        fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
-      }).setOrigin(0.5);
-    }
   }
 
   private buildClearData(cx: number) {
     const y = 640;
-    const divider = this.add.rectangle(cx, y, 600, 1, 0xc9a24b, 0.3).setDepth(1);
-
-    createButton(this, cx, y + 40, 'Clear All Data', () => this.showClearConfirm(), {
-      width: 260, height: 44, fontSize: '16px',
+    this.add.rectangle(cx, y, 600, 1, parseInt(PALETTE_HEX.gold.replace('#', ''), 16), 0.3);
+    createButton(this, cx, y + 42, 'Clear All Data', () => this.showClearConfirm(), {
+      width: 260, height: 44, fontSize: '16px', variant: 'secondary',
     });
   }
 
-  private showClearConfirm() {
-    const depth = 100;
-    const cx = GAME_WIDTH / 2;
-    const cy = GAME_HEIGHT / 2;
-
-    const overlay = this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.8).setDepth(depth).setInteractive();
-    const box = this.add.rectangle(cx, cy, 480, 200, 0x16191d).setStrokeStyle(1, 0xc9a24b, 0.6).setDepth(depth + 1);
-
-    const text = this.add.text(cx, cy - 50, 'This will delete all Echo Shards,\nunlocks, lore, and progress.\n\nThis cannot be undone.', {
-      fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.bone,
-      align: 'center', lineSpacing: 5,
-    }).setOrigin(0.5).setDepth(depth + 2);
-
-    const confirm = createButton(this, cx - 100, cy + 65, 'Clear Everything', () => {
+  /** Kit modal — veil click and Cancel both dismiss; buttons live inside it. */
+  private showClearConfirm(): void {
+    const modal = createModal(this, 'Clear All Data', 500, 230, { variant: 'stone', depth: 100 });
+    modal.container.add(
+      this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 24,
+        'This will delete all Echo Shards,\nunlocks, lore, and progress.\n\nThis cannot be undone.',
+        { fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.bone, align: 'center', lineSpacing: 5 },
+      ).setOrigin(0.5),
+    );
+    const confirm = createButton(this, GAME_WIDTH / 2 - 105, GAME_HEIGHT / 2 + 52, 'Clear Everything', () => {
       localStorage.removeItem('hollow_beneath_save_v1');
       settingsManager.reset();
       this.scene.restart();
-    }, { width: 170, height: 36, fontSize: '12px' });
-
-    const cancel = createButton(this, cx + 100, cy + 65, 'Cancel', () => {
-      overlay.destroy(); box.destroy(); text.destroy();
-      confirm.destroy(); cancel.destroy();
-    }, { width: 120, height: 36, fontSize: '12px' });
+    }, { width: 170, height: 38, fontSize: '13px' });
+    const cancel = createButton(this, GAME_WIDTH / 2 + 105, GAME_HEIGHT / 2 + 52, 'Cancel', () => {
+      audio.click();
+      modal.close();
+    }, { width: 120, height: 38, fontSize: '13px' });
+    modal.container.add([confirm.container, cancel.container]);
   }
 
   private buildBackButton(cx: number) {
     createButton(this, cx, GAME_HEIGHT - 60, 'Back', () => fadeToScene(this, 'Menu'), { width: 200 });
   }
+}
 
-  private addSettingsLabel(x: number, y: number, label: string) {
-    const t = this.add.text(x, y, label.toUpperCase(), { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.bone }).setOrigin(0, 0.5);
-    if (typeof t.setLetterSpacing === 'function') t.setLetterSpacing(2);
-  }
+function reducedMotionPulse(_target: Phaser.GameObjects.Rectangle): boolean {
+  // Kept as a hook: pulse suppression would consult settings here.
+  return false;
 }

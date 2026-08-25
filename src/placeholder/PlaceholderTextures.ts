@@ -1,4 +1,4 @@
-﻿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { ENEMIES, SUMMON_ENEMIES } from '@data/enemies';
 import { BOSSES } from '@data/bosses';
 import { FACTIONS } from '@data/factions';
@@ -29,7 +29,7 @@ function shapeTexture(
   g.destroy();
 }
 
-/** Circle token â€” used for regular enemies and the player. */
+/** Circle token — used for regular enemies and the player. */
 function circleToken(scene: Phaser.Scene, key: string, color: number, ringColor: number, size = 64): void {
   shapeTexture(scene, key, size, (g) => {
     const r = size / 2;
@@ -40,7 +40,7 @@ function circleToken(scene: Phaser.Scene, key: string, color: number, ringColor:
   });
 }
 
-/** Hex token â€” used for bosses (larger, more imposing silhouette). */
+/** Hex token — used for bosses (larger, more imposing silhouette). */
 function hexToken(scene: Phaser.Scene, key: string, color: number, ringColor: number, size = 96): void {
   shapeTexture(scene, key, size, (g) => {
     const r = size / 2 - 4;
@@ -130,6 +130,29 @@ function crownIcon(scene: Phaser.Scene, key: string, color: number, size = 40): 
   });
 }
 
+/** Jagged ground-spike — traps read differently from combat's clean triangle. */
+function spikeIcon(scene: Phaser.Scene, key: string, color: number, size = 32): void {
+  shapeTexture(scene, key, size, (g) => {
+    g.fillStyle(color, 1);
+    const base = size * 0.82;
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(size * 0.08, base),
+        new Phaser.Math.Vector2(size * 0.26, size * 0.34),
+        new Phaser.Math.Vector2(size * 0.38, base),
+        new Phaser.Math.Vector2(size * 0.5, size * 0.12),
+        new Phaser.Math.Vector2(size * 0.62, base),
+        new Phaser.Math.Vector2(size * 0.74, size * 0.4),
+        new Phaser.Math.Vector2(size * 0.92, base),
+      ],
+      true,
+    );
+    g.lineStyle(1, 0x000000, 0.35);
+    g.lineBetween(size * 0.5, size * 0.14, size * 0.44, base - 1);
+    g.lineBetween(size * 0.28, size * 0.4, size * 0.24, base - 1);
+  });
+}
+
 /** Solid rounded panel background, used for dialog/HUD chrome. */
 function panelTexture(scene: Phaser.Scene, key: string, w: number, h: number, fill: number, stroke: number, radius = 12, strokeWidth = 2): void {
   if (scene.textures.exists(key)) return;
@@ -148,7 +171,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   // Player token
   circleToken(scene, 'tok_player', PALETTE.player, PALETTE.bone, 56);
 
-  // Enemy tokens â€” one per bestiary entry, colored by rough archetype
+  // Enemy tokens — one per bestiary entry, colored by rough archetype
   const enemyColors: Record<string, number> = {
     echo_skeleton: 0x8a8a82,
     venn_custodian: 0x6f7f8f,
@@ -167,7 +190,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     circleToken(scene, `tok_${id}`, enemyColors[id] ?? 0x77777f, PALETTE.bone, 52);
   }
 
-  // Boss tokens â€” larger hex silhouettes
+  // Boss tokens — larger hex silhouettes
   const bossColors: Record<string, number> = {
     sentinel: 0xb9c4cc,
     patriarch: 0x8c2f2f,
@@ -184,7 +207,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   triangleIcon(scene, 'node_combat', PALETTE.danger);
   crossIcon(scene, 'node_rest', PALETTE.ok);
   starIcon(scene, 'node_discovery', 0x5dade2);
-  triangleIcon(scene, 'node_trap', 0xe67e22);
+  spikeIcon(scene, 'node_trap', 0xe67e22);
   crownIcon(scene, 'node_landmark', PALETTE.goldBright, 44);
 
   // Faction emblem swatches (small squares, used in UI bars)
@@ -197,7 +220,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
 
   // ---- Expedition-journal kit -------------------------------------------------
 
-  // Aged parchment sheet â€” 9-slice friendly (deckled edges stay in the border).
+  // Aged parchment sheet — 9-slice friendly (deckled edges stay in the border).
   if (!scene.textures.exists('paper_panel')) {
     const W = 128;
     const g = scene.add.graphics();
@@ -248,7 +271,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     g.destroy();
   }
 
-  // Wax faction seals â€” round stamp with embossed sigil line.
+  // Wax faction seals — round stamp with embossed sigil line.
   for (const f of Object.values(FACTIONS)) {
     shapeTexture(scene, `seal_${f.id}`, 40, (g) => {
       g.fillStyle(f.color, 1);
@@ -267,7 +290,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     });
   }
 
-  // Echo Shard icon â€” faceted gold shard for rites/buttons.
+  // Echo Shard icon — faceted gold shard for rites/buttons.
   shapeTexture(scene, 'icon_shard', 40, (g) => {
     g.fillStyle(PALETTE.goldBright, 1);
     g.fillPoints(

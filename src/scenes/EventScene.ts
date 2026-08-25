@@ -18,6 +18,8 @@ import { influenceStatus } from '@data/factions';
 import { addResonanceEffects } from '@systems/ResonanceFX';
 import { stashDeltas } from '@systems/fxDelta';
 import { reducedMotion } from '@systems/motion';
+import { audio } from '@placeholder/PlaceholderAudio';
+import { createVignette, createFilmGrain } from '@ui/vignettes';
 
 interface EventSceneData {
   eventDef?: EventDef;
@@ -47,6 +49,8 @@ export class EventScene extends Phaser.Scene {
   private dialogCenterY = 300;
   private choiceMenu?: ChoiceMenu;
   private continueBtn?: ReturnType<typeof createButton>;
+  /** 1–N hotkey bindings for the visible choice rows (badges promise them). */
+  private choiceKeys: Array<[string, () => void]> = [];
 
   constructor() {
     super('Event');
@@ -69,7 +73,17 @@ export class EventScene extends Phaser.Scene {
 
     const cinematic = !!STORY_EVENTS[event.id];
     this.cameras.main.setBackgroundColor(cinematic ? 0x000000 : 0x0b0d10);
-    if (cinematic) this.buildLetterbox();
+    if (cinematic) {
+      this.buildLetterbox();
+      // The reveal is staged — a veiled figure that never quite resolves.
+      if (REVEAL_BEAT_IDS.has(event.id)) createVignette(this, 'veil', { depth: 3 });
+      // Film grain deepens as the descent grinds reality thinner.
+      createFilmGrain(this, 40, Math.min(1, chapter / 5));
+    }
+    // Keep the world breathing: journal events ride the descent wind, pinned
+    // beats swap to the Loom pad so the presence is felt before it speaks.
+    audio.startAmbience(cinematic ? 'loom' : 'descent');
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => audio.stopAmbience());
 
     // ---- Header -----------------------------------------------------------------
     const headerY = cinematic ? 70 : 64;
@@ -77,7 +91,7 @@ export class EventScene extends Phaser.Scene {
       fontFamily: FONT_SERIF,
       fontSize: cinematic ? '30px' : '28px',
       color: cinematic ? PALETTE_HEX.gold : PALETTE_HEX.gold,
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(6);
     if (typeof titleText.setLetterSpacing === 'function') titleText.setLetterSpacing(3);
     // Title entrance: drops in and its tracking tightens from airy to set.
     if (!reducedMotion()) {
@@ -101,7 +115,7 @@ export class EventScene extends Phaser.Scene {
       fontFamily: FONT_MONO,
       fontSize: '12px',
       color: PALETTE_HEX.boneMuted,
-    }).setOrigin(0.5);
+    }).setOrigin(0.5).setDepth(6);
 
     addResonanceEffects(this, player.resonance, GAME_WIDTH, GAME_HEIGHT, { nodePulse: false, shake: false, shimmer: false });
 
@@ -165,6 +179,7 @@ export class EventScene extends Phaser.Scene {
 
   private showChoices(choices: EventChoice[], depth = 0) {
     this.input.removeAllListeners('pointerdown');
+    this.clearChoiceKeys();
     const { player } = useGameStore.getState();
     if (!player) return;
 
@@ -208,6 +223,24 @@ export class EventScene extends Phaser.Scene {
       menuItems,
       { width: 760, spacing: 66, maxShift: 44, bottomBound: GAME_HEIGHT - 40 },
     );
+
+    // The numeral badges finally mean something: 1–N pick their row.
+    const numKeys = ['ONE', 'TWO', 'THREE', 'FOUR'];
+    visible.forEach((choice, i) => {
+      if (i >= numKeys.length) return;
+      const lockedRow = menuItems[i]?.locked === true;
+      const handler = () => {
+        if (!lockedRow) this.pickChoice(choice, depth);
+      };
+      const evt = `keydown-${numKeys[i]}`;
+      this.input.keyboard?.on(evt, handler);
+      this.choiceKeys.push([evt, handler]);
+    });
+  }
+
+  private clearChoiceKeys(): void {
+    this.choiceKeys.forEach(([evt, fn]) => this.input.keyboard?.off(evt, fn));
+    this.choiceKeys = [];
   }
 
   private hostileFlavorSuffix(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>): string | null {
@@ -221,6 +254,7 @@ export class EventScene extends Phaser.Scene {
   private pickChoice(choice: EventChoice, depth = 0) {
     const { player } = useGameStore.getState();
     if (!player) return;
+    this.clearChoiceKeys();
     this.choiceMenu?.destroy();
     this.choiceMenu = undefined;
 
@@ -282,6 +316,7 @@ export class EventScene extends Phaser.Scene {
   }
 
   shutdown() {
+    this.clearChoiceKeys();
     this.input.removeAllListeners('pointerdown');
     this.dialog?.destroy();
     this.choiceMenu?.destroy();

@@ -10,7 +10,7 @@ import { settingsManager } from '@systems/SettingsManager';
  * works identically on Canvas and WebGL). Call once per scene create(); it
  * cleans up naturally with the scene's display list.
  */
-export function applyResonanceTint(scene: Phaser.Scene, resonance: number, width: number, height: number): void {
+export function applyResonanceTint(scene: Phaser.Scene, resonance: number, width: number, height: number, depth = 2): void {
   const tier = resonanceTier(resonance);
   if (tier === 'stable') return;
 
@@ -22,7 +22,8 @@ export function applyResonanceTint(scene: Phaser.Scene, resonance: number, width
   const s = settings[tier];
   if (!s) return;
 
-  const overlay = scene.add.rectangle(width / 2, height / 2, width, height, s.color, s.alpha).setDepth(-1);
+  // Above the world/map layer so the wash actually reads, below interactive HUD.
+  const overlay = scene.add.rectangle(width / 2, height / 2, width, height, s.color, s.alpha).setDepth(depth);
   if (s.pulse) {
     scene.tweens.add({
       targets: overlay,

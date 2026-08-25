@@ -1,4 +1,4 @@
-﻿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { ENDINGS } from '@data/endings';
 import { FONT_BODY, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
@@ -11,7 +11,7 @@ import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 /**
- * Main menu â€” "the camp above the sinkhole".
+ * Main menu — "the camp above the sinkhole".
  * Dimmed deep-map artwork behind an expedition ledger and a quiet nav rail.
  */
 export class MenuScene extends Phaser.Scene {
@@ -77,7 +77,7 @@ export class MenuScene extends Phaser.Scene {
     entries.push({ label: 'How to Play', sub: 'the field manual', onClick: () => fadeToScene(this, 'Tutorial', { returnTo: 'Menu' }) });
     entries.push({ label: 'Echo Shard Shop', sub: 'permanent boons', onClick: () => fadeToScene(this, 'ShardShop') });
     entries.push({ label: 'Lore Codex', sub: 'what you have learned', onClick: () => fadeToScene(this, 'LoreCodex') });
-    entries.push({ label: 'Settings', sub: 'sound Â· text Â· difficulty', onClick: () => fadeToScene(this, 'Settings') });
+    entries.push({ label: 'Settings', sub: 'sound · text · difficulty', onClick: () => fadeToScene(this, 'Settings') });
 
     const created: Button[] = [];
     entries.forEach((e, i) => {
@@ -156,14 +156,14 @@ export class MenuScene extends Phaser.Scene {
         { fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.inkSoft, fontStyle: 'italic', wordWrap: { width: ledger.width - 60 } },
       );
       void quote;
-      this.add.text(-ledger.width / 2 + 30, ly + 130, 'â€” THE JOURNAL', {
+      this.add.text(-ledger.width / 2 + 30, ly + 130, '— THE JOURNAL', {
         fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.oxide,
       }).setLetterSpacing(2);
     }
 
     // ---- Footer -----------------------------------------------------------------
     this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT - 28, 'THE HOLLOW BENEATH Â· definitive edition Â· Team Akrasia', {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT - 28, 'THE HOLLOW BENEATH · definitive edition · Team Akrasia', {
         fontFamily: FONT_BODY,
         fontSize: '13px',
         color: '#7a746a',

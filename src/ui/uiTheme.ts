@@ -63,6 +63,42 @@ export const PALETTE_HEX = {
   resTranscendent: '#c9a24b',
 };
 
+/**
+ * Surface tokens (v2) — the numeric fills/strokes every list row, modal and
+ * focus ring actually uses, named once so scenes stop hand-rolling literals.
+ * Numeric form for Phaser APIs; CSS mirror for the one DOM element.
+ */
+export const SURFACE_HEX = {
+  /** Row resting fill (was 0x16191d everywhere). */
+  row: 0x16191d,
+  /** Equipped / selected row fill (was 0x1c2026). */
+  rowRaised: 0x1c2026,
+  /** Row hover fill (was 0x232930). */
+  rowHover: 0x232930,
+  /** Secondary hover fill (was 0x1e232a / 0x1e2228). */
+  rowHoverAlt: 0x1e232a,
+  /** Modal / picker panel fill (was 0x1a1d22). */
+  panel: 0x1a1d22,
+  /** Hairline stroke on quiet rows (was 0x3a3f46). */
+  hairline: 0x3a3f46,
+  /** Hairline on known/valued content (was 0x3a3226). */
+  hairlineKnown: 0x3a3226,
+  /** Quiet border on modal rows (was 0x2a2e33 / 0x2a3226). */
+  border: 0x2a2e33,
+  /** Focus ring stroke (was 0x3a3e44). */
+  focusRing: 0x3a3e44,
+  /** Muted grey divider (was 0x555555). */
+  muted: 0x555555,
+} as const;
+
+/** CSS-string mirrors of parchment tokens — for the styled DOM name input. */
+export const CSS_TOKENS = {
+  paper: 'rgba(230, 221, 196, 0.92)',
+  paperBorder: '#8a6a2f',
+  ink: '#33291c',
+  bodyFont: '"HollowFell", Georgia, "Times New Roman", serif',
+} as const;
+
 /** Faction status colors (Hostile → Devoted). */
 export const STATUS_HEX = {
   Hostile: PALETTE_HEX.danger,
@@ -88,6 +124,16 @@ export const DAMAGE_TYPE_HEX: Record<string, string> = {
   shock: '#9b59b6',
   sacred: '#f5f0e1',
   shadow: '#7a7a86',
+};
+
+/** Scan/Bestiary affinity results — canonical numeric source (Codex + combat share it). */
+export const AFFINITY_RESULT_HEX: Record<string, number> = {
+  wk: 0xe9c876,
+  str: 0x7fb0c9,
+  null: 0x555555,
+  rep: 0xb0453f,
+  drn: 0x5c8a5c,
+  '-': 0x9a9488,
 };
 
 // Battle UI design palette (Battle UI.svg, 1920x1080 source) — combat only.

@@ -12,7 +12,7 @@ const BRAVERY_ACTIONS: Array<{ id: string; label: string; detail?: string; apCos
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
 import { maybeVoiceLine } from '@systems/VoiceSystem';
-import { pulseOnce, dimPulse, shake, reducedMotion } from '@systems/motion';
+import { pulseOnce, dimPulse, shake, reducedMotion, countTo } from '@systems/motion';
 import { showWhisper } from '@ui/WhisperOverlay';
 import { addResonanceEffects } from '@systems/ResonanceFX';
 import { createStatPanel } from '@ui/StatPanel';
@@ -25,7 +25,7 @@ import { createCoachTip } from '@ui/CoachTip';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX, DAMAGE_TYPE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { settingsManager } from '@systems/SettingsManager';
-import { spawnHitParticles, spawnHealParticles, spawnMomentumParticles } from '@systems/particles';
+import { spawnHitParticles, spawnHealParticles, spawnMomentumParticles, spawnCelebrationParticles } from '@systems/particles';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT, NODES_PER_CHAPTER } from '@/config';
 import { computeLevelUp } from '@systems/LevelSystem';
@@ -231,6 +231,20 @@ export class CombatScene extends Phaser.Scene {
   private qtePrevPlayerHP = 0;
   private qtePrevEnemyHP = new Map<string, number>();
   private qteHpCost = 0;
+  /** Banner queue: shown one at a time so stacked announcements stay legible. */
+  private bannerQueue: string[] = [];
+  private bannerShowing = false;
+  /** Action clicked during the enemy phase — replayed once the player is back in control. */
+  private bufferedAction?: { type: string; fn: () => CombatSnapshot; hpCost: number };
+  /** SHIFT fast-forward: scales timers+tweens while held. */
+  private ffwdActive = false;
+  private ffwdBadge?: Phaser.GameObjects.Text;
+  /** Freeze-frame guard so overlapping hit-stops never stack timeScale changes. */
+  private hitStopBusy = false;
+  /** Last rendered boss phase label — drives the phase-change mini-cinematic. */
+  private lastBossPhaseLabel = '';
+  /** Persistent readout of the player's active status effects. */
+  private playerStatusText?: Phaser.GameObjects.Text;
   /** In-combat Scan modal container (cleaned up by closeOverlay). */
   private scanPanel?: Phaser.GameObjects.Container;
 
@@ -249,6 +263,12 @@ export class CombatScene extends Phaser.Scene {
     this.shownLogCount = 0;
     this.toastQueue = [];
     this.toastBusy = false;
+    this.bannerQueue = [];
+    this.bannerShowing = false;
+    this.bufferedAction = undefined;
+    this.ffwdActive = false;
+    this.hitStopBusy = false;
+    this.lastBossPhaseLabel = '';
     this.lastEnemyViews.clear();
     this.events.once('shutdown', () => {
       if (this.qteBar) { this.qteBar.destroy(); this.qteBar = undefined; }
@@ -256,6 +276,9 @@ export class CombatScene extends Phaser.Scene {
     });
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
+    // Battle is never silent: the descent wind carries through the fight.
+    audio.startAmbience('descent');
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => audio.stopAmbience());
     this.sceneData = data;
     const store = useGameStore.getState();
     const player = store.player;
@@ -329,6 +352,14 @@ export class CombatScene extends Phaser.Scene {
 
     const spAdj = layoutAdj('statPanel');
     this.statPanel = createStatPanel(this, STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy);
+    // Active status readout — the player's afflictions are never invisible.
+    this.playerStatusText = this.add
+      .text(STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy - 122, '', {
+        fontFamily: FONT_MONO, fontSize: '11px', color: '#ff8a75', fontStyle: 'bold',
+        align: 'center', wordWrap: { width: 230 },
+      })
+      .setOrigin(0.5, 1)
+      .setDepth(10);
     const prAdj = layoutAdj('playerRow');
     this.playerRowText = this.add
       .text(PLAYER_ROW_BASE.x + prAdj.dx, PLAYER_ROW_BASE.y + prAdj.dy, '', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold })
@@ -338,6 +369,10 @@ export class CombatScene extends Phaser.Scene {
     const psAdj = layoutAdj('playerSprite');
     this.playerSprite = this.add.image(PLAYER_SPRITE_BASE.x + psAdj.dx, PLAYER_SPRITE_BASE.y + psAdj.dy, 'player_idle').setDepth(6);
     this.showPlayerTexture('player_idle');
+    // Idle breathing — the explorer is alive between exchanges.
+    if (!reducedMotion()) {
+      this.tweens.add({ targets: this.playerSprite, y: '+=3', duration: 1700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
     const alAdj = layoutAdj('allySprite');
     const allyName = initialSnap.allies[0]?.name ?? '';
     this.allyDisplay = createAllyDisplay(this, ALLY_SPRITE_BASE.x + alAdj.dx, ALLY_SPRITE_BASE.y + alAdj.dy, allyName);
@@ -392,17 +427,64 @@ export class CombatScene extends Phaser.Scene {
     NAV_KEYS.forEach(([evt, dir]) => this.kbHandlers.push([evt, () => this.navMove(dir)]));
     this.kbHandlers.push(['keydown-ENTER', () => this.navConfirm()]);
     this.kbHandlers.push(['keydown-SPACE', () => this.navConfirm()]);
+    // Hold SHIFT to rush the enemy phase (respected by Reduce Motion).
+    this.kbHandlers.push(['keydown-SHIFT', () => this.setFastForward(true)]);
+    this.kbHandlers.push(['keyup-SHIFT', () => this.setFastForward(false)]);
     this.kbHandlers.forEach(([evt, fn]) => kb?.on(evt, fn));
     // Scene shutdown must drop every nav listener — stale handlers surviving a
     // restart (or Vite HMR) would double-fire actions in later fights.
     this.events.once('shutdown', () => {
       this.kbHandlers.forEach(([evt, fn]) => this.input.keyboard?.off(evt, fn));
       this.kbHandlers = [];
+      // Never leak a modified clock or a queued action into the next scene.
+      this.time.timeScale = 1;
+      this.tweens.timeScale = 1;
+      this.bufferedAction = undefined;
+      this.ffwdActive = false;
+      if (this.ffwdBadge) { this.ffwdBadge.destroy(); this.ffwdBadge = undefined; }
     });
     this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => { if (ptr.rightButtonDown()) this.cancelTargeting(); });
 
     this.refresh(initialSnap);
     if (data.mode === 'boss') this.showBossEntry();
+
+    // Fast-forward badge — visible only while SHIFT is held.
+    this.ffwdBadge = this.add.text(FRAME_RIGHT - 16, FRAME_Y + 14, '»» FFWD', {
+      fontFamily: FONT_MONO, fontSize: '12px', color: '#e9c876', fontStyle: 'bold',
+    }).setOrigin(1, 0).setDepth(40).setVisible(false);
+  }
+
+  /** Scales the scene's timer+tween clocks while SHIFT is held. */
+  private setFastForward(on: boolean): void {
+    if (!this.scene.isActive()) return;
+    if (this.hitStopBusy) return; // never fight a freeze-frame
+    if (this.ffwdActive === on) return;
+    this.ffwdActive = on;
+    const speed = on && !reducedMotion() ? 2.6 : 1;
+    this.time.timeScale = speed;
+    this.tweens.timeScale = speed;
+    this.ffwdBadge?.setVisible(on);
+  }
+
+  /**
+   * True hit-stop: dips the clock so an impact visibly freezes the world,
+   * then a small camera zoom-punch lands the weight. Wall-clock restore
+   * guarantees the fight can never stay frozen.
+   */
+  private hitStop(durationMs = 80): void {
+    if (reducedMotion() || this.hitStopBusy) return;
+    this.hitStopBusy = true;
+    this.time.timeScale = 0.08;
+    this.tweens.timeScale = 0.35;
+    const cam = this.cameras.main;
+    cam.setZoom(1.028);
+    window.setTimeout(() => {
+      if (!this.scene || !this.scene.isActive()) return;
+      this.time.timeScale = 1;
+      this.tweens.timeScale = this.ffwdActive ? 2.6 : 1;
+      this.tweens.add({ targets: cam, zoom: 1, duration: 150, ease: 'Sine.easeOut' });
+      this.hitStopBusy = false;
+    }, durationMs);
   }
 
   private showBossEntry() {
@@ -541,6 +623,7 @@ export class CombatScene extends Phaser.Scene {
         const dmg = dmgMap[key] ?? 0;
         this.updateTurnOrderPanel(snap, key);
         if (key.startsWith('ally_')) {
+          this.spotlightActor(this.allyDisplay?.container ?? null);
           this.allyDisplay?.setState('attack');
           this.turnRotationTimers.push(
             this.time.delayedCall(ENEMY_STEP_MS, () => {
@@ -549,7 +632,15 @@ export class CombatScene extends Phaser.Scene {
           );
         } else if (key !== 'player') {
           const ed = this.enemyKeyMap.get(key);
-          if (ed) this.setEnemyPose(ed, 'attack', ENEMY_POSE_MS);
+          if (ed) {
+            this.spotlightActor(ed.container);
+            // Windup tell: the foe gathers itself a beat before it strikes.
+            if (!reducedMotion()) {
+              this.tweens.add({ targets: ed.container, scale: { from: 1, to: 1.05 }, duration: 210, yoyo: true, ease: 'Sine.easeOut' });
+            }
+            pulseOnce(this, ed.container.x, ed.container.y - 12, 42, 0xb0453f, { depth: 29, duration: 300, lineWidth: 2 });
+          }
+          this.setEnemyPose(ed, 'attack', ENEMY_POSE_MS);
         }
         if (dmg > 0) {
           this.turnRotationTimers.push(this.time.delayedCall(ENEMY_DMG_AT, () => this.landPlayerDamage(dmg)));
@@ -572,6 +663,28 @@ export class CombatScene extends Phaser.Scene {
     }
   }
 
+  /** Spotlight choreography: the acting foe stands at full brightness while
+   *  everyone else recedes; the camera leans a step toward the row. */
+  private spotlightActor(activeContainer: Phaser.GameObjects.Container | null): void {
+    if (reducedMotion()) return;
+    this.enemyDisplays.forEach((d) => {
+      if (!d.container.active) return;
+      d.container.setAlpha(d.container === activeContainer ? 1 : 0.55);
+    });
+    const cam = this.cameras.main;
+    const leanX = activeContainer ? Phaser.Math.Clamp((activeContainer.x - GAME_WIDTH / 2) * 0.25, -36, 36) : 0;
+    this.tweens.add({ targets: cam, zoom: 1.035, scrollToX: leanX, duration: 200, ease: 'Sine.easeOut' });
+  }
+
+  /** Restores full brightness and the default camera after the rotation. */
+  private clearSpotlight(): void {
+    this.enemyDisplays.forEach((d) => {
+      if (d.container.active) d.container.setAlpha(1);
+    });
+    if (reducedMotion()) return;
+    this.tweens.add({ targets: this.cameras.main, zoom: 1, scrollToX: 0, scrollToY: 0, duration: 280, ease: 'Sine.easeOut' });
+  }
+
   /** Emergency recovery: clear rotation/round state and force a fresh player-phase refresh
    *  so a stray exception can never leave the fight (or the AP refill loop) locked. */
   private recoverRoundChain(): void {
@@ -581,6 +694,7 @@ export class CombatScene extends Phaser.Scene {
     this.turnRotationTimers.forEach((t) => t.remove());
     this.turnRotationTimers = [];
     this.afterEnemyPhase = undefined;
+    this.clearSpotlight();
     try {
       this.refresh(this.engine.recoverPhase());
     } catch (_) {
@@ -623,8 +737,20 @@ export class CombatScene extends Phaser.Scene {
     this.turnRotationTimers.forEach((t) => t.remove());
     this.turnRotationTimers = [];
     this.enemyPhaseActive = false;
+    this.clearSpotlight();
     this.buildActionGrid(this.engine.snapshot());
     this.updateTurnOrderPanel(snap, 'player');
+    // Replay a buffered click now that the player is back in control.
+    const buffered = this.bufferedAction;
+    this.bufferedAction = undefined;
+    this.tooltipPanel?.hide();
+    if (buffered && !snap.momentumReady && !this.resultShown) {
+      this.time.delayedCall(80, () => {
+        if (!this.enemyPhaseActive && !this.transformCutscene && !this.qteActive) {
+          this.doAction(buffered.type, buffered.fn, buffered.hpCost);
+        }
+      });
+    }
     if (Math.abs(settleDelta) >= 1) {
       this.tweenDisplayedHP(realHP, 400);
       if (settleDelta > 0) {
@@ -662,10 +788,23 @@ export class CombatScene extends Phaser.Scene {
       });
     }
     this.playerRowText?.setText(snap.playerRow ? `ROW: ${snap.playerRow.toUpperCase()}` : '');
+    // Status chips: "POISON ×2 · SLOWED" — empty string hides the row entirely.
+    const statusLabel = snap.playerStatuses
+      .map((s) => (s.turnsRemaining > 1 ? `${s.id.toUpperCase()} ×${s.turnsRemaining}` : s.id.toUpperCase()))
+      .join(' · ');
+    this.playerStatusText?.setText(statusLabel);
     if (snap.round !== this.lastRenderedRound) {
       this.lastRenderedRound = snap.round;
+      // A new round ticks the afflictions — show them burning.
+      if (!this.resultShown) this.spawnDoTWisps();
     }
     this.phaseLabelText?.setText(snap.bossPhaseLabel ?? '');
+    // Phase shifts get a beat of theatre when a boss fight is underway.
+    if (snap.bossPhaseLabel && snap.bossPhaseLabel !== this.lastBossPhaseLabel) {
+      const isFirst = this.lastBossPhaseLabel === '';
+      this.lastBossPhaseLabel = snap.bossPhaseLabel;
+      if (!isFirst && this.sceneData.mode === 'boss' && !this.resultShown) this.playPhaseCinematic(snap.bossPhaseLabel);
+    }
     if (snap.battlefieldState) {
       const label = BATTLEFIELD_STATES[snap.battlefieldState.id].label;
       this.battlefieldLabelText?.setText(`◈ BATTLEFIELD: ${label} (${snap.battlefieldState.turns})`);
@@ -709,6 +848,16 @@ export class CombatScene extends Phaser.Scene {
       this.updateTargetHighlight(snap);
     } else {
       snap.enemies.forEach((e, i) => {
+        // Barrier breaks read as shattering glass, not a silent icon swap.
+        const prevView = this.lastEnemyViews.get(e.key);
+        const ed = this.enemyKeyMap.get(e.key);
+        if (prevView && ed && e.alive
+          && prevView.statuses.some((s) => s.id === 'barrier')
+          && !e.statuses.some((s) => s.id === 'barrier')) {
+          spawnHitParticles(this, ed.container.x, ed.container.y - 20, 0xf5efdc);
+          pulseOnce(this, ed.container.x, ed.container.y - 10, 54, 0xf5efdc, { depth: 30, duration: 300 });
+          audio.statusApplied();
+        }
         this.enemyDisplays[i]?.update(e);
         this.lastEnemyViews.set(e.key, e);
       });
@@ -767,7 +916,10 @@ export class CombatScene extends Phaser.Scene {
       if (snap.phase === 'victory') {
         const line = maybeVoiceLine('victory');
         if (line) this.time.delayedCall(1400, () => showWhisper(this, GAME_WIDTH / 2, 96, line, 600));
+        // Gold burst over the fallen while their dissolve plays out.
+        spawnCelebrationParticles(this, ENEMY_ROW_CENTER, this.enemyRowY() - 40);
       }
+      this.bufferedAction = undefined;
       // Let the killing blow land, the HP bar drain, and the foe dissolve — then show the result.
       this.time.delayedCall(850, () => this.handleCombatEnd(snap.phase));
     }
@@ -863,7 +1015,7 @@ export class CombatScene extends Phaser.Scene {
     const canEndTurn = inCombat && !this.qteActive;
 
     const items: ActionGridItem[] = [
-      { id: 'attack', label: 'Attack', apCost: 0, description: 'Basic melee attack (Slash damage). QTE-timed.', disabled: !canAct, onHover: () => this.previewWindup(), onUnhover: () => this.endWindupPreview(), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
+      { id: 'attack', label: 'Attack', apCost: 0, description: 'Basic melee attack (Slash damage). Lands instantly.', disabled: !canAct, onHover: () => this.previewWindup(), onUnhover: () => this.endWindupPreview(), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
       { id: 'skill', label: 'Skill', apCost: 0, description: 'Use one of your six techniques (offensive skills are QTE-timed).', disabled: !canAct, onHover: () => this.previewWindup(), onUnhover: () => this.endWindupPreview(), onClick: () => this.openSkillMenu() },
       { id: 'guard', label: 'Guard', apCost: 0, description: 'Take 50% less damage until your next turn, block Stagger, recover +6 MP.', disabled: !canAct, onClick: () => this.doAction('guard', () => this.engine.guard()) },
       {
@@ -943,7 +1095,15 @@ export class CombatScene extends Phaser.Scene {
   }
 
   private doAction(type: string, fn: () => CombatSnapshot, hpCost = 0, skipTargeting = false) {
-    if (this.enemyPhaseActive || this.transformCutscene || this.qteActive) return;
+    if (this.enemyPhaseActive || this.transformCutscene || this.qteActive) {
+      // Input buffering: remember the latest intent and replay it when the
+      // player regains control — clicks are never eaten mid-rotation.
+      if (this.enemyPhaseActive && !this.transformCutscene) {
+        this.bufferedAction = { type, fn, hpCost };
+        this.tooltipPanel?.show('Queued — plays when the enemy turn ends');
+      }
+      return;
+    }
     try {
       audio.click();
       const before = this.engine.snapshot();
@@ -1347,8 +1507,11 @@ export class CombatScene extends Phaser.Scene {
   private animateAction(type: string, targetKey: string | undefined, snap: CombatSnapshot, prevPlayerHP: number, prevEnemyHP: Map<string, number>, hpCost = 0, qte?: QteQuality) {
     const display = targetKey ? this.enemyKeyMap.get(targetKey) : undefined;
     let dealtAny = false;
+    // Ranged elements streak from the caster to the foe; melee stays physical.
+    const RANGED_TYPES = new Set(['flame', 'frost', 'shock', 'sacred', 'shadow']);
     const showAllEnemyDamage = () => {
       let heavyLanded = false;
+      let weaknessMoment = false;
       for (const e of snap.enemies) {
         const before = prevEnemyHP.get(e.key);
         if (before === undefined || before === e.hp) continue;
@@ -1356,27 +1519,46 @@ export class CombatScene extends Phaser.Scene {
         if (!ed) continue;
         dealtAny = true;
         if (e.hp < before) {
+          const dmg = before - e.hp;
           const dmgColor = e.lastHitType ? (DAMAGE_TYPE_HEX[e.lastHitType] ?? PALETTE_HEX.danger) : PALETTE_HEX.danger;
-          this.floatingText(ed.container.x, ed.container.y - 55, `-${before - e.hp}`, dmgColor);
+          // Weakness hits are the loop's signature moment — gold, oversized, loud.
+          const isWk = !!e.lastHitType && (e.affinities[e.lastHitType] === 'wk');
+          const downed = e.statuses.some((s) => s.id === 'downed');
+          if (isWk) weaknessMoment = true;
+          const heavy = dmg >= Math.max(18, e.maxHp * 0.22);
+          if (e.lastHitType && RANGED_TYPES.has(e.lastHitType) && this.playerSprite) {
+            this.fireTracer(this.playerSprite.x, this.playerSprite.y - 30, ed.container.x, ed.container.y, DAMAGE_TYPE_HEX[e.lastHitType] ?? '#c9a24b');
+          }
+          this.floatingText(ed.container.x, ed.container.y - 55, `-${dmg}`, isWk ? '#e9c876' : dmgColor, {
+            size: isWk ? 26 : heavy ? 20 : 16,
+          });
+          if (isWk && downed) {
+            this.floatingText(ed.container.x, ed.container.y - 92, 'DOWN!', '#ff8a75', { size: 18 });
+          }
           this.setEnemyPose(ed, 'hit');
           this.shakeTarget(ed.container);
-          pulseOnce(this, ed.container.x, ed.container.y, 46, parseInt(String(dmgColor).replace('#', ''), 16) || 0xb0453f, { depth: 30, duration: 260 });
-          spawnHitParticles(this, ed.container.x, ed.container.y, 0xb0453f);
+          pulseOnce(this, ed.container.x, ed.container.y, isWk ? 64 : 46, parseInt(String(dmgColor).replace('#', ''), 16) || 0xb0453f, { depth: 30, duration: 260, lineWidth: isWk ? 5 : 3 });
+          spawnHitParticles(this, ed.container.x, ed.container.y, isWk ? 0xe9c876 : 0xb0453f);
           // A blow that took a real chunk out of the foe earns a beat of weight.
-          if (before - e.hp >= Math.max(18, e.maxHp * 0.22)) heavyLanded = true;
+          if (heavy) heavyLanded = true;
         } else {
-          this.floatingText(ed.container.x, ed.container.y - 55, `+${e.hp - before}`, PALETTE_HEX.ok);
+          this.floatingText(ed.container.x, ed.container.y - 55, `+${e.hp - before}`, PALETTE_HEX.ok, { size: 14 });
         }
       }
       // Impact audio follows actual damage — a missed window that still connects
       // gets the normal hit; only a true no-contact gets the miss cue.
-      if (dealtAny) {
+      if (weaknessMoment) {
+        audio.weaknessHit();
+        this.hitStop(120);
+        this.cameras.main.flash(110, 255, 244, 214);
+      } else if (dealtAny) {
         if (qte === 'perfect') audio.critHit();
         else audio.hit();
       } else if (qte === 'miss') {
         audio.miss();
       }
       if (heavyLanded || qte === 'perfect') {
+        this.hitStop(qte === 'perfect' ? 95 : 65);
         dimPulse(this, qte === 'perfect' ? 0.34 : 0.24, 60);
         shake(this, qte === 'perfect' ? 0.005 : 0.0035, 110);
       }
@@ -1397,17 +1579,17 @@ export class CombatScene extends Phaser.Scene {
     }
     switch (type) {
       case 'attack': {
-        this.setPlayerPose('attack');
+        this.setPlayerPose('attack', true, this.strikeLunge(display));
         showAllEnemyDamage();
         break;
       }
       case 'skill': {
-        this.setPlayerPose('attack');
+        this.setPlayerPose('attack', true, this.strikeLunge(display));
         showAllEnemyDamage();
         break;
       }
       case 'resonance': {
-        this.setPlayerPose('attack');
+        this.setPlayerPose('attack', true, this.strikeLunge(display));
         showAllEnemyDamage();
         break;
       }
@@ -1434,7 +1616,7 @@ export class CombatScene extends Phaser.Scene {
         break;
       }
       case 'sunder': {
-        this.setPlayerPose('attack');
+        this.setPlayerPose('attack', true, this.strikeLunge(display));
         if (targetKey) this.floatingText(display?.container.x ?? 640, (display?.container.y ?? ENEMY_ROW_BASE_Y) - 110, 'ARMOR BROKEN', '#e67e22');
         showAllEnemyDamage();
         break;
@@ -1519,7 +1701,7 @@ export class CombatScene extends Phaser.Scene {
     sp.setData('poseScaleY', sp.scaleY);
   }
 
-  private setPlayerPose(state: 'idle' | 'windup' | 'attack' | 'hit' | 'guard' | 'victory' | 'defeat', tween = true): void {
+  private setPlayerPose(state: 'idle' | 'windup' | 'attack' | 'hit' | 'guard' | 'victory' | 'defeat', tween = true, lungeDx = 14): void {
     const sp = this.playerSprite;
     if (!sp) return;
     if (state === 'windup') {
@@ -1529,9 +1711,10 @@ export class CombatScene extends Phaser.Scene {
       });
       return;
     }
-    if (!this.textures.exists(`player_${state}`)) return;
+    const texKey = state === 'defeat' ? 'player_defeated' : `player_${state}`;
+    if (!this.textures.exists(texKey)) return;
     if (state !== 'idle') this.poseLockUntil = this.time.now + (state === 'guard' ? 1300 : 700);
-    this.showPlayerTexture(`player_${state}`);
+    this.showPlayerTexture(texKey);
     if (state === 'attack' || state === 'hit') {
       this.time.delayedCall(320, () => {
         if (this.playerSprite === sp) this.showPlayerTexture('player_idle');
@@ -1546,14 +1729,16 @@ export class CombatScene extends Phaser.Scene {
       const baseScaleY = sp.getData('poseScaleY') ?? 1;
       const zoom = state === 'idle' ? 1 : 1.06;
       const origX = sp.x;
+      const isStrike = state === 'attack';
       this.tweens.add({
         targets: sp,
         scaleX: baseScaleX * zoom,
         scaleY: baseScaleY * zoom,
-        x: state === 'attack' ? origX + 14 : origX,
-        duration: 110,
-        yoyo: false,
-        ease: 'Sine.easeOut',
+        x: isStrike ? origX + lungeDx : origX,
+        // Strikes thrust out AND return; other poses pop once and settle.
+        yoyo: isStrike,
+        duration: isStrike ? 160 : 110,
+        ease: isStrike ? 'Cubic.easeOut' : 'Sine.easeOut',
         onComplete: () => {
           if (this.playerSprite === sp) {
             sp.setScale(baseScaleX, baseScaleY);
@@ -1702,48 +1887,201 @@ export class CombatScene extends Phaser.Scene {
   }
 
   private showBanners(snap: CombatSnapshot) {
-    for (const banner of snap.banners) {
-      const isCombo = banner.startsWith('COMBO');
-      const isWindow = banner.startsWith('WEAKNESS WINDOW');
-      const isCharge = banner.startsWith('CHARGE');
-      const isUlt = banner.startsWith('ULTIMATE');
-      const isAdapt = banner.startsWith('ADAPTATION');
-      // Phase 7 audio cues (doc Part 18).
-      if (isCombo) audio.comboDing();
-      else if (isAdapt) { audio.adaptationWarning(); this.cameras.main.flash(140, 76, 10, 10); }
-      else if (isWindow) audio.weaknessCrunch();
-      else if (isCharge || isUlt) { audio.critHit(); this.cameras.main.flash(160, 120, 0, 0); }
-      const color = isCharge ? '#c9a24b' : isUlt ? '#e1665c' : isAdapt ? '#8e5fd9' : isWindow ? '#e9c876' : isCombo ? '#9b59b6' : '#5dade2';
-      const label = banner.replace(/^(COMBO |REACTION |WEAKNESS WINDOW — |CHARGE — |ULTIMATE — |ADAPTATION — )/, '');
-      const title = isCharge ? 'CHARGE' : isUlt ? 'ULTIMATE' : isAdapt ? 'ADAPTATION' : isWindow ? 'WEAKNESS WINDOW' : isCombo ? 'COMBO' : 'REACTION';
-      const t = this.add.text(GAME_WIDTH / 2, 170, `${title}: ${label}`, {
-        fontFamily: FONT_SERIF,
-        fontSize: '24px',
-        color,
-        fontStyle: 'bold',
-        align: 'center',
-        wordWrap: { width: 700 },
-      }).setOrigin(0.5).setDepth(30).setAlpha(0);
-      this.tweens.add({
-        targets: t,
-        alpha: 1,
-        duration: 200,
-        yoyo: true,
-        hold: 1400,
-        onComplete: () => t.destroy(),
-      });
-    }
+    // Queue instead of stack — stacked same-position banners were illegible.
+    this.bannerQueue.push(...snap.banners);
     this.engine.drainBanners();
+    this.pumpBanners();
   }
 
-  private floatingText(x: number, y: number, text: string, color: string): void {
-    const t = this.add.text(x, y, text, {
-      fontFamily: FONT_MONO, fontSize: '14px', color, fontStyle: 'bold',
-    }).setOrigin(0.5);
+  private pumpBanners() {
+    if (this.bannerShowing || this.bannerQueue.length === 0) return;
+    const banner = this.bannerQueue.shift()!;
+    this.bannerShowing = true;
+    const isCombo = banner.startsWith('COMBO');
+    const isWindow = banner.startsWith('WEAKNESS WINDOW');
+    const isCharge = banner.startsWith('CHARGE');
+    const isUlt = banner.startsWith('ULTIMATE');
+    const isAdapt = banner.startsWith('ADAPTATION');
+    // Phase 7 audio cues (doc Part 18).
+    if (isCombo) audio.comboDing();
+    else if (isAdapt) { audio.adaptationWarning(); this.cameras.main.flash(140, 76, 10, 10); }
+    else if (isWindow) audio.weaknessCrunch();
+    else if (isCharge || isUlt) { audio.critHit(); this.cameras.main.flash(160, 120, 0, 0); }
+    else { audio.statusApplied(); this.playReactionFx(banner.replace(/^REACTION /, '')); }
+    const color = isCharge ? '#c9a24b' : isUlt ? '#e1665c' : isAdapt ? '#8e5fd9' : isWindow ? '#e9c876' : isCombo ? '#9b59b6' : '#5dade2';
+    const label = banner.replace(/^(COMBO |REACTION |WEAKNESS WINDOW — |CHARGE — |ULTIMATE — |ADAPTATION — )/, '');
+    const title = isCharge ? 'CHARGE' : isUlt ? 'ULTIMATE' : isAdapt ? 'ADAPTATION' : isWindow ? 'WEAKNESS WINDOW' : isCombo ? 'COMBO' : 'REACTION';
+    const t = this.add.text(GAME_WIDTH / 2, 170, `${title}: ${label}`, {
+      fontFamily: FONT_SERIF,
+      fontSize: '24px',
+      color,
+      fontStyle: 'bold',
+      align: 'center',
+      wordWrap: { width: 700 },
+    }).setOrigin(0.5).setDepth(30).setAlpha(0);
     this.tweens.add({
       targets: t,
-      y: y - 40,
+      alpha: 1,
+      duration: 180,
+      yoyo: true,
+      hold: 900,
+      onComplete: () => {
+        t.destroy();
+        this.bannerShowing = false;
+        this.pumpBanners();
+      },
+    });
+  }
+
+  /** Each elemental reaction detonates with its own signature on the enemy row. */
+  private playReactionFx(rawLabel: string): void {
+    if (reducedMotion()) return;
+    const label = rawLabel.toUpperCase();
+    const cx = ENEMY_ROW_CENTER;
+    const cy = this.enemyRowY();
+    if (label.includes('SUPERCONDUCT')) {
+      // Chain lightning rakes across the frozen row.
+      const g = this.add.graphics().setDepth(40);
+      g.lineStyle(2.5, 0x9b59b6, 0.95);
+      for (let k = 0; k < 4; k++) {
+        let x = cx - 130 + Math.random() * 40;
+        let y = cy - 60 + Math.random() * 90;
+        g.beginPath();
+        g.moveTo(x, y);
+        for (let s = 0; s < 5; s++) {
+          x += 30 + Math.random() * 26;
+          y += (Math.random() - 0.5) * 46;
+          g.lineTo(x, y);
+        }
+        g.strokePath();
+      }
+      this.tweens.add({ targets: g, alpha: 0, duration: 380, delay: 160, onComplete: () => g.destroy() });
+      this.cameras.main.flash(90, 155, 89, 182);
+    } else if (label.includes('OVERCHARGE')) {
+      // Fire splash rings bloom outward across the row.
+      for (let k = 0; k < 10; k++) {
+        const px = cx + Phaser.Math.Between(-130, 130);
+        const py = cy + Phaser.Math.Between(-50, 50);
+        const ring = this.add.circle(px, py, 6).setStrokeStyle(2.5, 0xe67e22, 0.9).setDepth(40);
+        this.tweens.add({
+          targets: ring, radius: 26 + Math.random() * 18, alpha: 0,
+          duration: 420, delay: k * 36, ease: 'Cubic.easeOut', onComplete: () => ring.destroy(),
+        });
+      }
+      shake(this, 0.004, 140);
+    } else if (label.includes('ECLIPSE')) {
+      // The light is taken away — a shadow collapses inward, then bursts.
+      const veil = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0).setDepth(39);
+      this.tweens.add({ targets: veil, alpha: { from: 0, to: 0.5 }, duration: 260, yoyo: true, hold: 120, onComplete: () => veil.destroy() });
+      const ring = this.add.circle(cx, cy, 150, 0x2a1a3a, 0.4).setStrokeStyle(4, 0x7a7a86, 1).setDepth(40);
+      this.tweens.add({
+        targets: ring, scale: { from: 1.15, to: 0.25 }, alpha: 0, duration: 480, ease: 'Quad.easeIn',
+        onComplete: () => { ring.destroy(); spawnHitParticles(this, cx, cy, 0x7a7a86); },
+      });
+    }
+  }
+
+  /** Boss phase shift mini-cinematic: letterbox snap + nameplate slam + stinger. */
+  private playPhaseCinematic(label: string): void {
+    audio.bossPhase();
+    shake(this, 0.0045, 180);
+    if (reducedMotion()) return;
+    this.cameras.main.flash(200, 42, 8, 8);
+    const depth = 60;
+    const top = this.add.rectangle(GAME_WIDTH / 2, -30, GAME_WIDTH, 54, 0x000000, 0.92).setDepth(depth);
+    const bot = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT + 30, GAME_WIDTH, 54, 0x000000, 0.92).setDepth(depth);
+    this.tweens.add({ targets: top, y: 27, duration: 260, ease: 'Sine.easeOut' });
+    this.tweens.add({ targets: bot, y: GAME_HEIGHT - 27, duration: 260, ease: 'Sine.easeOut' });
+    const t = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, label.toUpperCase(), {
+      fontFamily: FONT_SERIF, fontSize: '34px', color: '#e1665c', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0).setScale(1.35);
+    this.time.delayedCall(150, () => {
+      this.tweens.add({ targets: t, alpha: 1, scale: 1, duration: 300, ease: 'Back.easeOut' });
+    });
+    this.time.delayedCall(1250, () => {
+      this.tweens.add({ targets: [top, bot, t], alpha: 0, duration: 320, ease: 'Sine.easeIn', onComplete: () => { top.destroy(); bot.destroy(); t.destroy(); } });
+    });
+  }
+
+  /** Round-start affliction ticks: colored wisps rise off anyone with a DoT. */
+  private spawnDoTWisps(): void {
+    if (reducedMotion()) return;
+    const snap = this.lastSnap;
+    if (!snap) return;
+    const DOT_COLORS: Record<string, number> = {
+      poison: 0x5c8a5c, burn: 0xe67e22, bleed: 0xb0453f,
+      curse: 0x8e5fd9, frostbite: 0x5dade2, shock: 0xd4ac0d,
+    };
+    const emitAt = (x: number, y: number, statuses: Array<{ id: string }>) => {
+      statuses.forEach((s) => {
+        const c = DOT_COLORS[s.id];
+        if (!c) return;
+        for (let k = 0; k < 2; k++) {
+          const p = this.add.circle(
+            x + Phaser.Math.Between(-26, 26),
+            y + Phaser.Math.Between(-6, 10),
+            3.2, c, 0.85,
+          ).setDepth(28);
+          this.tweens.add({
+            targets: p, y: y - 34 - k * 8, alpha: 0,
+            duration: 650 + k * 120, ease: 'Sine.easeOut',
+            onComplete: () => p.destroy(),
+          });
+        }
+      });
+    };
+    emitAt(this.fxAnchor.x, this.fxAnchor.y - 30, snap.playerStatuses);
+    snap.enemies.forEach((e) => {
+      if (!e.alive) return;
+      const ed = this.enemyKeyMap.get(e.key);
+      if (ed) emitAt(ed.container.x, ed.container.y - 40, e.statuses);
+    });
+  }
+
+  /** How far the player should lunge to reach this target (always forward). */
+  private strikeLunge(display?: EnemyDisplay): number {
+    if (!display || !this.playerSprite) return 14;
+    return Phaser.Math.Clamp(display.container.x - this.playerSprite.x, 12, 120);
+  }
+
+  /** Elemental streak from caster to foe — a curved two-segment bolt that dissolves. */
+  private fireTracer(fromX: number, fromY: number, toX: number, toY: number, colorHex: string): void {
+    if (reducedMotion()) return;
+    const color = parseInt(String(colorHex).replace('#', ''), 16) || 0xc9a24b;
+    const g = this.add.graphics().setDepth(30);
+    g.lineStyle(3, color, 0.9);
+    const mx = (fromX + toX) / 2 + Phaser.Math.Between(-14, 14);
+    const my = Math.min(fromY, toY) - 46;
+    g.beginPath();
+    g.moveTo(fromX, fromY);
+    g.lineTo(mx, my);
+    g.lineTo(toX, toY);
+    g.strokePath();
+    g.lineStyle(1.2, 0xffffff, 0.55);
+    g.beginPath();
+    g.moveTo(fromX, fromY);
+    g.lineTo(mx, my);
+    g.lineTo(toX, toY);
+    g.strokePath();
+    this.tweens.add({ targets: g, alpha: 0, duration: 240, delay: 90, onComplete: () => g.destroy() });
+  }
+
+  private floatingText(x: number, y: number, text: string, color: string, opts: { size?: number } = {}): void {
+    const t = this.add.text(x, y, text, {
+      fontFamily: FONT_MONO, fontSize: `${opts.size ?? 14}px`, color, fontStyle: 'bold',
+      stroke: '#0b0d10', strokeThickness: (opts.size ?? 14) >= 20 ? 5 : 3,
+    }).setOrigin(0.5);
+    const rise = (opts.size ?? 14) >= 26 ? 58 : 40;
+    if ((opts.size ?? 14) >= 26 && !reducedMotion()) {
+      // Weakness numbers land with a punch: scale from big and settle.
+      t.setScale(1.6);
+      this.tweens.add({ targets: t, scale: 1, duration: 180, ease: 'Back.easeOut' });
+    }
+    this.tweens.add({
+      targets: t,
+      y: y - rise,
       alpha: 0,
+      delay: 120,
       duration: 700,
       ease: 'Power2',
       onComplete: () => t.destroy(),
@@ -2122,7 +2460,7 @@ export class CombatScene extends Phaser.Scene {
 
     const lines: Phaser.GameObjects.Text[] = [];
     ['ONE action per turn — then END TURN.',
-     'ATTACK / SKILL run a timing needle — stop it center for PERFECT (+30% dmg).',
+     'ATTACK lands instantly; offensive SKILLS run a timing needle — center it for PERFECT (+30% dmg).',
      'SCAN is free. Hit enemies with damage types to learn weaknesses: wk Downs them and grants 1-More.',
     ].forEach((line, i) => {
       lines.push(this.add.text(cx - 310, 96 + i * 34, `•  ${line}`, {
@@ -2252,7 +2590,6 @@ export class CombatScene extends Phaser.Scene {
             useGameStore.getState().awardStatPoint(stat);
             onDone();
           },
-          () => { statModal.destroy(); onDone(); },
         );
         this.kbdModal = statModal;
       },
@@ -2431,15 +2768,28 @@ export class CombatScene extends Phaser.Scene {
     this.closeOverlay();
     this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.75).setDepth(35);
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 120, 'Victory', { fontFamily: FONT_SERIF, fontSize: '30px', color: PALETTE_HEX.gold }).setOrigin(0.5).setDepth(36);
-    this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 70, `+${xp} XP${extraText ? '\n\n' + extraText : ''}`, {
+    // XP rolls up instead of appearing — the reward is felt as it lands.
+    const xpText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 70, `+0 XP`, {
         fontFamily: FONT_SERIF,
-        fontSize: '15px',
-        color: PALETTE_HEX.bone,
-        align: 'center',
-        wordWrap: { width: 640 },
+        fontSize: '22px',
+        color: '#e9c876',
       })
-      .setOrigin(0.5, 0);
+      .setOrigin(0.5, 0)
+      .setDepth(36);
+    countTo(xpText, 0, xp, 650, ' XP');
+    if (extraText) {
+      this.add
+        .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 34, extraText, {
+          fontFamily: FONT_SERIF,
+          fontSize: '15px',
+          color: PALETTE_HEX.bone,
+          align: 'center',
+          wordWrap: { width: 640 },
+        })
+        .setOrigin(0.5, 0)
+        .setDepth(36);
+    }
     createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140, 'Continue', () => fadeToScene(this, 'Board'), { width: 220, depth: 37 });
     // Enter/Space continues from the victory screen.
     this.kbdSingle = () => fadeToScene(this, 'Board');

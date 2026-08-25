@@ -22,8 +22,20 @@ export function createCoachTip(
 
   const container = scene.add.container(x, y).setDepth(depth);
 
-  const shadow = scene.add.rectangle(3, 4, width, 46, 0x000000, 0.35);
-  const card = scene.add.nineslice(0, 0, 'paper_panel', undefined, width, 46, 24, 24, 24, 24);
+  // Measure first: the card grows to fit its text instead of clipping it.
+  const probe = scene.add.text(0, 0, text, {
+    fontFamily: FONT_BODY,
+    fontSize: '15px',
+    color: PALETTE_HEX.ink,
+    fontStyle: 'italic',
+    align: 'center',
+    wordWrap: { width: width - 36 },
+  }).setOrigin(0.5);
+  const cardH = Math.max(46, probe.height + 24);
+  probe.destroy();
+
+  const shadow = scene.add.rectangle(3, 4, width, cardH, 0x000000, 0.35);
+  const card = scene.add.nineslice(0, 0, 'paper_panel', undefined, width, cardH, 24, 24, 24, 24);
   const label = scene.add.text(0, 0, text, {
     fontFamily: FONT_BODY,
     fontSize: '15px',
@@ -32,15 +44,16 @@ export function createCoachTip(
     align: 'center',
     wordWrap: { width: width - 36 },
   }).setOrigin(0.5);
-  // Small gold pin above the card.
-  const pin = scene.add.rectangle(width / 2 - 18, -26, 8, 8, Phaser.Display.Color.HexStringToColor(PALETTE_HEX.oxide).color).setAngle(45);
+  // Small gold pin above the card — a child of the container at the card's
+  // top edge, so it tracks the tip and dies with it.
+  const pin = scene.add.rectangle(-14, -cardH / 2 + 2, 8, 8, Phaser.Display.Color.HexStringToColor(PALETTE_HEX.oxide).color).setAngle(45);
 
-  container.add([shadow, card, label]);
+  container.add([shadow, card, label, pin]);
   container.setAlpha(0);
   // Spring entrance: overshoot past full size, then settle.
   container.setScale(0.82);
   scene.tweens.add({
-    targets: [container, pin],
+    targets: container,
     alpha: { from: 0, to: 1 },
     duration: 220,
     ease: 'Sine.easeOut',

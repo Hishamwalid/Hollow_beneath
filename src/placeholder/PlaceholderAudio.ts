@@ -439,6 +439,10 @@ class PlaceholderAudioEngine {
     this.noise({ durMs: 170, gain: 0.4, filter: { type: 'highpass', f0: 900, f1: 2600 }, send: 0.12 });
     this.noise({ durMs: 90, gain: 0.22, delayMs: 120, filter: { type: 'bandpass', f0: 1400, q: 1.4 } });
   }
+  /** Faint pen-on-paper tick for the typewriter — call every few chars, not each one. */
+  typeTick(): void {
+    this.noise({ durMs: 18, gain: 0.055, filter: { type: 'bandpass', f0: 2600 + Math.random() * 1400, q: 2.4 } });
+  }
   checkpoint(): void {
     this.tone({ freq: 660, durMs: 300, shape: 'sine', gain: 0.34, send: 0.6 });
     this.tone({ freq: 880, durMs: 420, shape: 'sine', delayMs: 110, gain: 0.3, send: 0.7 });

@@ -109,9 +109,11 @@ let sceneList: Phaser.Types.Scenes.SceneType[] = [
   SettingsScene,
   InventoryScene,
   LoadoutScene,
-  PathPointPickerScene,
-  NodePreviewScene,
 ];
+// Dev-only authoring tools ship out of the bundle unless explicitly summoned.
+if (new URLSearchParams(window.location.search).has('dev')) {
+  sceneList.push(PathPointPickerScene, NodePreviewScene);
+}
 if (DEBUG_EVENT) sceneList = await buildDebugScenes();
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -131,4 +133,4 @@ const config: Phaser.Types.Core.GameConfig = {
 };
 
 const game = new Phaser.Game(config);
-(window as any).game = game; // dev convenience — remove before shipping
+export { game };

@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { computeDerivedStats, STARTING_EQUIPMENT_BONUSES, STARTING_STATS } from '@data/stats';
 import { useGameStore } from '@store/gameStore';
-import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX, CSS_TOKENS } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { createPanel } from '@ui/Panel';
-import { createDivider } from '@ui/headings';
+import { createTitle } from '@ui/headings';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { settleIn, reducedMotion } from '@systems/motion';
 import { audio } from '@placeholder/PlaceholderAudio';
@@ -33,7 +33,7 @@ export class CharacterCreationScene extends Phaser.Scene {
     settleIn(this);
     const cx = GAME_WIDTH / 2;
 
-    const header = this.add.text(cx, 64, 'Before You Descend', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    const header = createTitle(this, cx, 64, 'Before You Descend', { size: '32px' });
     const intro = this.add
       .text(
         cx,
@@ -51,14 +51,16 @@ export class CharacterCreationScene extends Phaser.Scene {
     this.mountNameInput(cx - 220, 318, 440, 52);
 
     const derived = computeDerivedStats(STARTING_STATS, STARTING_EQUIPMENT_BONUSES);
+    // The "you carry" readout sits on a proper stone card, not loose text.
+    const statsPanel = createPanel(this, { x: cx, y: 452, width: 460, height: 92, variant: 'stone', title: 'You Carry' });
+    void statsPanel;
     const statsBlock = this.add
-      .text(cx, 452,
+      .text(cx, 462,
         [
-          'You carry:',
           `HP ${derived.maxHP}   MP ${derived.maxMP}   ATK ${derived.attack}   DEF ${derived.defense}`,
           `MATK ${derived.magicAttack}   MDEF ${derived.magicDefense}   SPD ${derived.speed}`,
         ].join('\n'),
-        { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted, align: 'center', lineSpacing: 6 },
+        { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.bone, align: 'center', lineSpacing: 6 },
       )
       .setOrigin(0.5);
 
@@ -73,7 +75,7 @@ export class CharacterCreationScene extends Phaser.Scene {
     }
 
     this.hint = this.add
-      .text(cx, GAME_HEIGHT - 96, '', { fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.danger })
+      .text(cx, GAME_HEIGHT - 96, '', { fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.danger })
       .setOrigin(0.5);
 
     this.beginBtn = createButton(this, cx, GAME_HEIGHT - 56, 'Begin the Descent', () => this.begin(), { width: 300 });
@@ -104,10 +106,10 @@ export class CharacterCreationScene extends Phaser.Scene {
 
     input.style.cssText = `
       position: fixed;
-      background: rgba(230,221,196,0.92);
-      border: 1px solid #8a6a2f; border-radius: 4px;
-      color: #33291c;
-      font-family: Georgia, 'Times New Roman', serif;
+      background: ${CSS_TOKENS.paper};
+      border: 1px solid ${CSS_TOKENS.paperBorder}; border-radius: 4px;
+      color: ${CSS_TOKENS.ink};
+      font-family: ${CSS_TOKENS.bodyFont};
       text-align: center;
       outline: none;
       z-index: 1000;

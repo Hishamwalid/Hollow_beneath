@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { settingsManager } from '@systems/SettingsManager';
+import { audio } from '@placeholder/PlaceholderAudio';
 
 export interface DialogBox {
   container: Phaser.GameObjects.Container;
@@ -13,7 +14,7 @@ export interface DialogBox {
   setBeats: (beats: string[], onDone?: () => void) => void;
   /** Optional speaker nameplate (e.g. "THE VOICE"). */
   setSpeaker: (name: string | null) => void;
-  /** Current sheet height (dynamic — sized to fit the text, capped at ~5 lines). */
+  /** Current sheet height (dynamic â€” sized to fit the text, capped at ~5 lines). */
   getHeight: () => number;
   skip: () => void;
   destroy: () => void;
@@ -30,7 +31,7 @@ const MIN_H = 128;
 const MAX_H = 190; // ~5 body lines at 19px + line spacing
 
 /**
- * Narration panel. Default look is an aged parchment sheet with ink text —
+ * Narration panel. Default look is an aged parchment sheet with ink text â€”
  * the page the player is writing as they descend. The sheet dynamically
  * shrinks/grows to fit its text (max ~5 lines) so buttons and choices can
  * tuck right under it.
@@ -71,31 +72,30 @@ export function createDialogBox(
   // The "more" arrow bobs gently while waiting for the player.
   let bobTween: Phaser.Tweens.Tween | null = null;
   function showPrompt(): void {
-    showPrompt();
+    prompt.setVisible(true);
     if (!bobTween && !settingsManager.get().reduceMotion) {
-      const baseY = prompt.y;
+      const baseY = curH / 2 - 18;
       bobTween = scene.tweens.add({ targets: prompt, y: baseY + 3, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-      void baseY;
     }
   }
   function hidePrompt(): void {
-    hidePrompt();
+    prompt.setVisible(false);
     if (bobTween) { bobTween.stop(); bobTween.remove(); bobTween = null; }
   }
 
-  // Beat progress ("2 / 6") — bottom-left, only during multi-beat pagination.
+  // Beat progress ("2 / 6") â€” bottom-left, only during multi-beat pagination.
   const beatLabel = scene.add
     .text(-width / 2 + 22, height / 2 - 14, '', { fontFamily: FONT_MONO, fontSize: '11px', color: promptColor })
     .setOrigin(0)
     .setAlpha(0.75)
     .setVisible(false);
 
-  // Speaker nameplate — a small tab overlapping the top edge.
+  // Speaker nameplate â€” a small tab overlapping the top edge.
   let nameplateBg: Phaser.GameObjects.Rectangle | null = null;
   let nameplate: Phaser.GameObjects.Text | null = null;
 
   const container = scene.add.container(x, y, [shadow, bg, text, prompt, beatLabel]);
-  // Render order [shadow, bg, text, prompt] is already correct — do NOT
+  // Render order [shadow, bg, text, prompt] is already correct â€” do NOT
   // bringToTop(bg) here; that moves the parchment above the text and hides it.
   container.setDepth(30);
   container.setAlpha(0);
@@ -140,6 +140,8 @@ export function createDialogBox(
   function tick() {
     charIndex += 1;
     text.setText(fullText.slice(0, charIndex));
+    // Faint pen tick every few glyphs â€” presence without chatter.
+    if (charIndex % 3 === 0) audio.typeTick();
     if (charIndex >= fullText.length) {
       timer?.remove();
       timer = null;
@@ -158,7 +160,7 @@ export function createDialogBox(
     fit(t);
     timer?.remove();
     // Guard against corrupted settings (null/string) producing NaN delays that
-    // silently kill the typewriter — the known cause of empty dialog boxes.
+    // silently kill the typewriter â€” the known cause of empty dialog boxes.
     const rawSpeed = Number(settingsManager.get().textSpeed);
     const spd = Number.isFinite(rawSpeed) && rawSpeed > 0 ? Math.max(20, rawSpeed) : 100;
     const delay = Math.round(14 * (100 / spd));
@@ -166,7 +168,7 @@ export function createDialogBox(
     // Self-diagnostic: if nothing has rendered after 900ms the timer is dead.
     scene.time.delayedCall(900, () => {
       if (timer && charIndex === 0) {
-        console.error('[DialogBox] Typewriter stalled — textSpeed:', settingsManager.get().textSpeed, 'text:', t.slice(0, 60));
+        console.error('[DialogBox] Typewriter stalled â€” textSpeed:', settingsManager.get().textSpeed, 'text:', t.slice(0, 60));
         text.setText(t); // fail visible rather than blank
         showPrompt();
       }
@@ -217,7 +219,7 @@ export function createDialogBox(
       }).setOrigin(0.5);
       if (typeof nameplate.setLetterSpacing === 'function') nameplate.setLetterSpacing(2);
       container.add([nameplateBg, nameplate]);
-      // Stamp-in: plate lands at 1.15× and settles, like a seal pressed into wax.
+      // Stamp-in: plate lands at 1.15â€” and settles, like a seal pressed into wax.
       try {
         const s = settingsManager.get();
         if (!s.reduceMotion) {
@@ -228,7 +230,7 @@ export function createDialogBox(
           scene.tweens.add({ targets: [nameplateBg, nameplate], scale: 1, alpha: 1, duration: 180, ease: 'Back.easeOut' });
         }
       } catch {
-        /* settings unavailable — plate simply appears */
+        /* settings unavailable â€” plate simply appears */
       }
     },
     skip: () => {

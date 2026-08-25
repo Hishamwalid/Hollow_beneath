@@ -8,6 +8,8 @@ export interface ResonanceFXOptions {
   vignette?: boolean;
   textGlitch?: boolean;
   shimmer?: boolean;
+  /** Depth for the full-screen tint/shimmer wash (default 2: above world, below HUD). */
+  tintDepth?: number;
 }
 
 export function addResonanceEffects(
@@ -18,7 +20,7 @@ export function addResonanceEffects(
   options: ResonanceFXOptions = {},
 ): void {
   const tier = resonanceTier(resonance);
-  applyResonanceTint(scene, resonance, width, height);
+  applyResonanceTint(scene, resonance, width, height, options.tintDepth ?? 2);
   if (tier === 'stable') return;
 
   if (tier === 'awakened') {
@@ -36,7 +38,7 @@ export function addResonanceEffects(
   if (options.shake !== false) addAmbientShake(scene, tier);
   if (options.vignette !== false) addVignette(scene, width, height);
   if (options.textGlitch !== false) addTextGlitch(scene);
-  if (options.shimmer !== false) addShimmer(scene, width, height);
+  if (options.shimmer !== false) addShimmer(scene, width, height, options.tintDepth ?? 2);
 }
 
 function addNodePulse(scene: Phaser.Scene): void {
@@ -91,8 +93,9 @@ function addVignette(scene: Phaser.Scene, width: number, height: number): void {
 function addTextGlitch(scene: Phaser.Scene): void {
   const schedule = () => {
     if (!scene.scene.isActive()) return;
+    // Only world/narration-space text jitters — HUD chrome and modals stay legible.
     const texts = scene.children.list.filter(
-      (c): c is Phaser.GameObjects.Text => c.type === 'Text' && c.active,
+      (c): c is Phaser.GameObjects.Text => c.type === 'Text' && c.active && (c as Phaser.GameObjects.Text).depth <= 20,
     ).filter((t) => t.alpha > 0);
     if (texts.length > 0) {
       const target = texts[Math.floor(Math.random() * texts.length)];
@@ -105,9 +108,9 @@ function addTextGlitch(scene: Phaser.Scene): void {
   schedule();
 }
 
-function addShimmer(scene: Phaser.Scene, width: number, height: number): void {
+function addShimmer(scene: Phaser.Scene, width: number, height: number, depth = 2): void {
   for (let i = 0; i < 3; i++) {
-    const band = scene.add.rectangle(-80, height * (0.15 + i * 0.35), 40, height * 0.2, 0xc9a24b, 0.02).setDepth(-1);
+    const band = scene.add.rectangle(-80, height * (0.15 + i * 0.35), 40, height * 0.2, 0xc9a24b, 0.02).setDepth(depth);
     scene.tweens.add({
       targets: band,
       x: width + 80,

@@ -5,6 +5,7 @@ import { createButton } from '@ui/Button';
 import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createTitle } from '@ui/headings';
 import { reducedMotion } from '@systems/motion';
+import { createVignette } from '@ui/vignettes';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 /**
@@ -22,25 +23,28 @@ export class TheOfferScene extends Phaser.Scene {
     fadeIn(this);
     const cx = GAME_WIDTH / 2;
 
+    // The chamber staged: you kneel; the Reflection stands; one gold hairline.
+    createVignette(this, 'offer', { depth: 2 });
+
     createTitle(this, cx, 120, 'THE FINAL CHAMBER', { size: '20px', color: PALETTE_HEX.boneMuted });
 
     this.add
       .text(cx, GAME_HEIGHT / 2 - 150,
         'Broken. Kneeling. The Reflection stands over you — wearing your face with an expression you have never seen in a mirror.\n\nIt does not strike the killing blow.',
         { fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.bone, align: 'center', wordWrap: { width: 860 }, lineSpacing: 6 })
-      .setOrigin(0.5);
+      .setOrigin(0.5).setDepth(6);
 
     this.add
       .text(cx, GAME_HEIGHT / 2 - 20,
         'THE FINAL REFLECTION: "You cannot win. But you do not have to become me."',
         { fontFamily: FONT_SERIF, fontSize: '21px', color: PALETTE_HEX.gold, align: 'center', wordWrap: { width: 820 } })
-      .setOrigin(0.5);
+      .setOrigin(0.5).setDepth(6);
 
     this.add
       .text(cx, GAME_HEIGHT / 2 + 44,
         'And beneath it — fainter, worn, hers:\n\nEVE: "Choose. Either way, I will not let go of you."',
         { fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.oxide, fontStyle: 'italic', align: 'center', wordWrap: { width: 820 }, lineSpacing: 6 })
-      .setOrigin(0.5);
+      .setOrigin(0.5).setDepth(6);
 
     // Choice A — accept the dark.
     const darkBtn = createButton(this, cx - 190, GAME_HEIGHT - 170, 'Accept the dark.', () => this.choose('dark'), {

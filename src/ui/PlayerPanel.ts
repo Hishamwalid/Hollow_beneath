@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import type { PlayerState } from '@data/types';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
-import { countTo, reducedMotion } from '@systems/motion';
+import { countTo, popScale, reducedMotion } from '@systems/motion';
 
 function bar(
   scene: Phaser.Scene,
@@ -75,6 +75,7 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
   let lastHP = -1;
   let lastMP = -1;
   let lastRes = -1;
+  let lastShards = -1;
 
   /** Rolls a vital number to its new value and flashes the text green/red. */
   function rollVital(
@@ -105,7 +106,23 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
       nameText.setText((player.name || 'THE PLAYER').toUpperCase());
       levelText.setText(`Level: ${player.level}`);
       skillsText.setText(`Loadout ${player.equippedSkills.length}/6`);
-      shardsText.setText(`Shards · Run: ${player.echoShards}`);
+      // Shards roll up like the vitals — the reward is counted, not stamped.
+      if (lastShards === -1 || lastShards === player.echoShards || reducedMotion()) {
+        shardsText.setText(`Shards · Run: ${player.echoShards}`);
+      } else if (shardsText.scene) {
+        const prefix = 'Shards · Run: ';
+        const state = { v: lastShards };
+        shardsText.scene.tweens.add({
+          targets: state,
+          v: player.echoShards,
+          duration: 380,
+          ease: 'Sine.easeOut',
+          onUpdate: () => shardsText.setText(`${prefix}${Math.round(state.v)}`),
+          onComplete: () => shardsText.setText(`${prefix}${player.echoShards}`),
+        });
+        popScale(shardsText.scene, shardsText, 1.12, 160);
+      }
+      lastShards = player.echoShards;
       hpBar.setPct(player.currentHP / Math.max(1, player.derived.maxHP));
       lastHP = rollVital(hpText, lastHP, player.currentHP, `/${player.derived.maxHP}`);
       mpBar.setPct(player.currentMP / Math.max(1, player.derived.maxMP));

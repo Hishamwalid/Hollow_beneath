@@ -28,7 +28,7 @@ export const TUTORIAL_SCREENS: TutorialScreen[] = [
     id: 'combat_basics',
     title: 'Combat Basics',
     icons: ['tok_player'],
-    body: 'One action per turn — ATTACK, SKILL, GUARD, ITEM — then END TURN. Enemies answer in speed order.\n\nOffensive moves run a timing needle: stop it in the gold center for PERFECT (+30% damage). GUARD halves incoming damage, prevents Stagger — and banks +6 MP.\n\nBelow 35% HP you may get one desperate gamble. Checkpoints at nodes 40 / 80 / 120 / 160 catch your falls.',
+    body: 'One action per turn — ATTACK, SKILL, GUARD, ITEM — then END TURN. Enemies answer in speed order.\n\nATTACK lands instantly. Offensive SKILLS run a timing needle: stop it in the gold center for PERFECT (+30% damage). GUARD halves incoming damage, prevents Stagger — and banks +6 MP.\n\nBelow 35% HP you may get one desperate gamble. Checkpoints at nodes 40 / 80 / 120 / 160 catch your falls.',
   },
   {
     id: 'scan_and_reactions',
@@ -46,7 +46,7 @@ export const TUTORIAL_SCREENS: TutorialScreen[] = [
 
 /** First-encounter tooltips surfaced by the board's AHEAD panel. */
 export const FIRST_NODE_TOOLTIPS: Record<string, string> = {
-  combat: 'Combat node — defeat the enemy to proceed. Timing needle: center = PERFECT.',
+  combat: 'Combat node — defeat the enemy to proceed. Offensive skills: center the needle = PERFECT.',
   event: 'Event node — choices shift factions & Resonance.',
   discovery: 'Discovery node — search for items and lore.',
   rest: 'Rest node — restore HP and MP.',

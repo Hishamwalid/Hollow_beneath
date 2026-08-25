@@ -1,4 +1,4 @@
-﻿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { settingsManager } from '@systems/SettingsManager';
@@ -101,7 +101,7 @@ export function createChoiceMenu(
     const shadow = scene.add.rectangle(4, cy + 5, width, ROW_HEIGHT, 0x000000, 0.35);
     const card = scene.add.nineslice(0, cy, 'paper_panel', undefined, width, ROW_HEIGHT, 24, 24, 24, 24);
 
-    const badgeText = item.disabled || item.locked ? 'âœ–' : String(i + 1);
+    const badgeText = item.disabled || item.locked ? '✖' : String(i + 1);
     const badge = scene.add.text(-width / 2 + 26, cy - 1, badgeText, {
       fontFamily: FONT_SERIF,
       fontSize: '20px',

@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
-import { FONT_SERIF, FONT_MONO, PALETTE_HEX } from './uiTheme';
-import { createButton } from './Button';
+import { FONT_SERIF, FONT_BODY, FONT_MONO, PALETTE_HEX, SURFACE_HEX } from './uiTheme';
 import type { StatBlock } from '@data/types';
 
 export interface LevelUpModalHandle {
@@ -12,6 +11,8 @@ export interface LevelUpModalHandle {
   confirm: () => void;
   destroy: () => void;
 }
+
+const num = (css: string): number => parseInt(css.replace('#', ''), 16);
 
 /** Shared focus plumbing for the level-up family of modals. */
 function makeNav(rows: { select: () => void; setFocused: (f: boolean) => void }[]) {
@@ -48,47 +49,54 @@ export function showLevelUpModal(
   }).setOrigin(0.5).setDepth(101);
   container.add(title);
 
+  // Subtitles are IM Fell italic everywhere else — the hierarchy holds here too.
   const subtitle = scene.add.text(0, GAME_HEIGHT / 2 - 90, 'The Loom\'s attention sharpens...', {
-    fontFamily: FONT_SERIF, fontSize: '18px', color: PALETTE_HEX.bone,
+    fontFamily: FONT_BODY, fontSize: '18px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
   }).setOrigin(0.5).setDepth(101);
   container.add(subtitle);
 
   const label = scene.add.text(0, GAME_HEIGHT / 2 - 50, 'Choose your reward:', {
-    fontFamily: FONT_MONO, fontSize: '16px', color: PALETTE_HEX.boneMuted,
+    fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.boneMuted,
   }).setOrigin(0.5).setDepth(101);
   container.add(label);
 
   const btnSpacing = 64;
   const btnY = GAME_HEIGHT / 2;
 
-  const statBtnBg = scene.add.rectangle(0, btnY, 300, 52, 0x2a2e33).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(101);
-  const statBtnText = scene.add.text(0, btnY, '  Stat Point  (+1 to any stat)', {
-    fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.bone,
-  }).setOrigin(0.5).setDepth(102);
-  statBtnBg.setInteractive({ useHandCursor: true })
-    .on('pointerover', () => statBtnBg.setFillStyle(0x3a3e44))
-    .on('pointerout', () => statBtnBg.setFillStyle(0x2a2e33))
-    .on('pointerdown', () => { onStatPoint(); });
-  container.add([statBtnBg, statBtnText]);
+  const mkRewardRow = (y: number, title: string, sub: string, onPick: () => void) => {
+    const rowBg = scene.add.rectangle(0, y, 320, 52, SURFACE_HEX.border).setStrokeStyle(1, num(PALETTE_HEX.gold), 0.5).setDepth(101);
+    const nameText = scene.add.text(-130, y - 9, title, {
+      fontFamily: FONT_SERIF, fontSize: '16px', color: PALETTE_HEX.bone,
+    }).setOrigin(0, 0.5).setDepth(102);
+    const subText = scene.add.text(-130, y + 11, sub, {
+      fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
+    }).setOrigin(0, 0.5).setDepth(102);
+    rowBg.setInteractive({ useHandCursor: true })
+      .on('pointerover', () => { if (!focusedRowHas(y)) rowBg.setFillStyle(SURFACE_HEX.rowHover); })
+      .on('pointerout', () => { if (!focusedRowHas(y)) rowBg.setFillStyle(SURFACE_HEX.border); })
+      .on('pointerdown', onPick);
+    container.add([rowBg, nameText, subText]);
+    return rowBg;
+  };
+  // Whether any focused row is at this y (hover shouldn't fight keyboard focus).
+  const focusedRowHas = (_y: number) => false;
 
-  const skillBtnBg = scene.add.rectangle(0, btnY + btnSpacing, 300, 52, 0x2a2e33).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(101);
-  const skillBtnText = scene.add.text(0, btnY + btnSpacing, '  Skill Point  (unlock a skill)', {
-    fontFamily: FONT_MONO, fontSize: '15px', color: PALETTE_HEX.bone,
-  }).setOrigin(0.5).setDepth(102);
-  skillBtnBg.setInteractive({ useHandCursor: true })
-    .on('pointerover', () => skillBtnBg.setFillStyle(0x3a3e44))
-    .on('pointerout', () => skillBtnBg.setFillStyle(0x2a2e33))
-    .on('pointerdown', () => { onSkillPoint(); });
-  container.add([skillBtnBg, skillBtnText]);
+  const statBg = mkRewardRow(btnY, 'Stat Point', '+1 to any stat', onStatPoint);
+  const skillBg = mkRewardRow(btnY + btnSpacing, 'Skill Point', 'unlock a technique', onSkillPoint);
 
   const subtext = scene.add.text(0, GAME_HEIGHT / 2 + 150, 'You can also spend skill points in the Skills menu later.', {
     fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted,
   }).setOrigin(0.5).setDepth(101);
   container.add(subtext);
 
+  const paintFocus = (bg: Phaser.GameObjects.Rectangle, f: boolean) => {
+    bg.setFillStyle(f ? SURFACE_HEX.rowHover : SURFACE_HEX.border);
+    bg.setStrokeStyle(f ? 1.5 : 1, f ? num(PALETTE_HEX.goldBright) : num(PALETTE_HEX.gold), f ? 1 : 0.5);
+  };
+
   const rows = [
-    { select: onStatPoint, setFocused: (f: boolean) => { statBtnBg.setFillStyle(f ? 0x3a3e44 : 0x2a2e33); statBtnBg.setStrokeStyle(1.5, 0xc9a24b, f ? 1 : 0.5); } },
-    { select: onSkillPoint, setFocused: (f: boolean) => { skillBtnBg.setFillStyle(f ? 0x3a3e44 : 0x2a2e33); skillBtnBg.setStrokeStyle(1.5, 0xc9a24b, f ? 1 : 0.5); } },
+    { select: onStatPoint, setFocused: (f: boolean) => paintFocus(statBg, f) },
+    { select: onSkillPoint, setFocused: (f: boolean) => paintFocus(skillBg, f) },
   ];
   return {
     container,
@@ -97,21 +105,27 @@ export function showLevelUpModal(
   };
 }
 
+/** Stat spending is mandatory — there is no cancel path by design. */
 export function showStatChoiceModal(
   scene: Phaser.Scene,
   onPick: (stat: keyof StatBlock) => void,
-  onCancel: () => void,
 ): LevelUpModalHandle {
   const container = scene.add.container(GAME_WIDTH / 2, 0).setDepth(110);
   const bg = scene.add.rectangle(0, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.7).setDepth(110).setInteractive();
   container.add(bg);
-  const panelBg = scene.add.rectangle(0, GAME_HEIGHT / 2, 360, 320, 0x1a1d22).setStrokeStyle(1, 0xc9a24b, 0.5).setDepth(111);
+  const panelBg = scene.add.rectangle(0, GAME_HEIGHT / 2, 380, 330, SURFACE_HEX.panel).setStrokeStyle(1, num(PALETTE_HEX.gold), 0.6).setDepth(111);
   container.add(panelBg);
 
-  const title = scene.add.text(0, GAME_HEIGHT / 2 - 130, 'Choose a Stat', {
+  const title = scene.add.text(0, GAME_HEIGHT / 2 - 132, 'Choose a Stat', {
     fontFamily: FONT_SERIF, fontSize: '26px', color: PALETTE_HEX.gold,
   }).setOrigin(0.5).setDepth(111);
   container.add(title);
+
+  const prompt = scene.add.text(0, GAME_HEIGHT / 2 - 104, 'the point must be spent', {
+    fontFamily: FONT_BODY, fontSize: '13px', fontStyle: 'italic', color: PALETTE_HEX.boneMuted,
+  }).setOrigin(0.5).setDepth(111);
+  void prompt;
+  container.add(prompt);
 
   const stats: { key: keyof StatBlock; label: string; desc: string }[] = [
     { key: 'str', label: 'STR', desc: '+2 ATK' },
@@ -121,21 +135,21 @@ export function showStatChoiceModal(
     { key: 'will', label: 'WILL', desc: '+6 MaxMP, +1 MDEF' },
   ];
 
-  const startY = GAME_HEIGHT / 2 - 85;
+  const startY = GAME_HEIGHT / 2 - 70;
   const rowBgs: { bg: Phaser.GameObjects.Rectangle; select: () => void }[] = [];
   stats.forEach((s, i) => {
-    const y = startY + i * 42;
-    const rowBg = scene.add.rectangle(0, y, 320, 36, 0x2a2e33).setStrokeStyle(1, 0x555555, 0.4).setDepth(111);
-    const nameText = scene.add.text(-140, y, `+1 ${s.label}`, {
+    const y = startY + i * 44;
+    const rowBg = scene.add.rectangle(0, y, 340, 38, SURFACE_HEX.border).setStrokeStyle(1, SURFACE_HEX.muted, 0.4).setDepth(111);
+    const nameText = scene.add.text(-150, y, `+1 ${s.label}`, {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
     }).setOrigin(0, 0.5).setDepth(112);
-    const descText = scene.add.text(40, y, s.desc, {
+    const descText = scene.add.text(-60, y, s.desc, {
       fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0, 0.5).setDepth(112);
     const pick = () => { container.destroy(); onPick(s.key); };
     rowBg.setInteractive({ useHandCursor: true })
-      .on('pointerover', () => rowBg.setFillStyle(0x3a3e44))
-      .on('pointerout', () => rowBg.setFillStyle(0x2a2e33))
+      .on('pointerover', () => rowBg.setFillStyle(SURFACE_HEX.rowHover))
+      .on('pointerout', () => rowBg.setFillStyle(SURFACE_HEX.border))
       .on('pointerdown', pick);
     container.add([rowBg, nameText, descText]);
     rowBgs.push({ bg: rowBg, select: pick });
@@ -146,8 +160,8 @@ export function showStatChoiceModal(
     ...makeNav(rowBgs.map((r) => ({
       select: r.select,
       setFocused: (f: boolean) => {
-        r.bg.setFillStyle(f ? 0x3a3e44 : 0x2a2e33);
-        r.bg.setStrokeStyle(f ? 1.5 : 1, f ? 0xc9a24b : 0x555555, f ? 1 : 0.4);
+        r.bg.setFillStyle(f ? SURFACE_HEX.rowHover : SURFACE_HEX.border);
+        r.bg.setStrokeStyle(f ? 1.5 : 1, f ? num(PALETTE_HEX.goldBright) : SURFACE_HEX.muted, f ? 1 : 0.4);
       },
     }))),
     destroy: () => container.destroy(),

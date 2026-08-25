@@ -31,7 +31,7 @@ export const SENTINEL: BossDef = {
   theme: 'The danger of curiosity.',
   baseStats: { hp: 150, mp: 50, atk: 15, matk: 12, def: 12, mdef: 11, spd: 14 },
   approachText:
-    'The Archive Threshold. A gold-lit doorway stands at the end of a hall. Before it stands THE ARGENT SENTINEL — a silver guardian engraved edge-to-edge with a language that almost resolves into words you know. It does not attack. It studies.\n\nTHE ARGENT SENTINEL: "Why do you seek the Door?"',
+    'The First Door. Every survey line at Keth-7 converges here — on the sinkhole at the dig\'s heart. Gold light climbs out of the shaft, steady as a held note, and the expedition\'s rope hangs cut where they went down. Before the mouth stands THE ARGENT SENTINEL — a silver guardian engraved edge-to-edge with a language that almost resolves into words you know. It does not attack. It studies.\n\nTHE ARGENT SENTINEL: "Why do you seek the Door?"',
   preCombatChoices: [
     {
       id: 'want_answers',
@@ -45,7 +45,7 @@ export const SENTINEL: BossDef = {
       label: '"I want to know what the one before me saw."',
       apply: (player) => {
         player.history.push('sentinel_mother_recognized');
-        return 'The Sentinel tilts its head. A gesture almost like recognition.\n\nTHE ARGENT SENTINEL: "...Then you are not here for the Door. You are here for the threshold."';
+        return 'The Sentinel tilts its head. A gesture almost like recognition.\n\nTHE ARGENT SENTINEL: "...Then you are not here for the Door. You are here for what it opens into."';
       },
     },
     {
@@ -98,7 +98,7 @@ export const SENTINEL: BossDef = {
     },
   ],
   aftermathText: () =>
-    'The silver light fades from its engravings all at once, like a held breath finally let go. It collapses — silver flaking away like ash.\n\nTHE ARGENT SENTINEL: "You are not the one I remember."\n\n"Who do you remember?"\n\nTHE ARGENT SENTINEL: "The woman."\n\nA pause. The last of the gold light goes out of it.\n\nTHE ARGENT SENTINEL: "She asked the same question."\n\nThe Sentinel dissolves. The First Door opens. The map turns like a page.',
+    'The silver light fades from its engravings all at once, like a held breath finally let go. It collapses — silver flaking away like ash on the desert wind.\n\nTHE ARGENT SENTINEL: "You are not the one I remember."\n\n"Who do you remember?"\n\nTHE ARGENT SENTINEL: "The woman."\n\nA pause. The last of the gold light goes out of it.\n\nTHE ARGENT SENTINEL: "She asked the same question."\n\nThe Sentinel dissolves, and the way down stands open at last. You take the rope. Daylight narrows to a coin above you - then a needle - then nothing. The map turns like a page.',
   getRewards: () => ({
     factionDelta: { archive: 20 },
     resonanceDelta: 5,

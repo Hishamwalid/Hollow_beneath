@@ -28,7 +28,7 @@ export const PINNED_STORY_EVENTS: Record<number, string> = {
  * of the descent survives the long stretches between story nodes.
  */
 export const STORY_BEAT_REMINDERS: Record<string, string> = {
-  prologue_descent: 'The Hollow reads like a question.',
+  prologue_descent: 'The whole dig site points down.',
   eves_first_voice: '"Keep walking."',
   first_blood: 'A name in the sand, almost legible.',
   the_hollowed_man: '"She said the next one would come."',
@@ -43,29 +43,31 @@ export const STORY_BEAT_REMINDERS: Record<string, string> = {
 
 export const STORY_EVENTS: Record<string, EventDef> = {
   // ---- SCENE 1.1 — THE DESCENT (Node 1) ------------------------------------
+  // Canon: the journey begins ABOVE GROUND, at the abandoned dig site.
+  // The Beneath stays sealed until the Sentinel falls at node 40.
   prologue_descent: {
     id: 'prologue_descent',
     title: 'The Descent',
     chapterRange: [1, 1],
     flavorText: [
-      'Rope creaks. Three days down a collapsed sinkhole, past rusted pitons, into corridors ribbed with bone-white masonry.',
+      'The Keth-7 dig site. Survey flags snap in a dry wind that nobody else is left to feel. Tents stand open. Meals half-eaten. Radios hiss static at an empty sky.',
       '',
-      'The Keth-7 survey went silent here. Leader, geologist, supplies — gone into the gold light at the far end of this hallway.',
+      'At the heart of it all: the cave-in. A sinkhole punched clean through the desert floor. Rusted pitons still hold a rope where the expedition went down — and did not come back.',
       '',
-      'The walls are carved edge to edge in a script that almost resolves into words. The deeper you go, the more it reads like a question.',
+      'Gold light climbs slowly out of the shaft, steady as a held note. Nine days since the leader\'s last radio crackle. Seven centuries of dreams about whatever is making that light.',
     ].join('\n'),
     choices: [
       {
         id: 'walk_to_light',
-        label: 'Walk toward the gold light.',
-        onSuccess: () => 'You walk. Behind you, the corridor reads you back.',
+        label: 'Walk the survey lines toward the light.',
+        onSuccess: () => 'You follow the flags inward. The closer you come to the shaft, the more the ground under your boots reads like the first word of a very long sentence.',
       },
       {
         id: 'speak_to_dark',
-        label: 'Say something to the dark.',
+        label: 'Lean over the edge. Say something to the dark.',
         onSuccess: (player) => {
           player.resonance = Math.min(100, player.resonance + 2);
-          return '"Hello?"\n\nNothing answers. But the echo comes back a half-second late. (+2 Resonance)';
+          return '"Hello?"\n\nNothing answers. But the echo comes back a half-second late — from somewhere far, far below. (+2 Resonance)';
         },
       },
     ],

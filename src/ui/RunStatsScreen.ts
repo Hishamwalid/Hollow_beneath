@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
-import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from './uiTheme';
+import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX, SURFACE_HEX } from './uiTheme';
 import { createButton } from './Button';
 import type { RunStats } from '@data/types';
 
@@ -54,9 +54,10 @@ export function showRunStatsScreen(
 
   const statStartY = 120;
   const rowH = 22;
-  const col1X = cx - 220;
-  const col2X = cx - 30;
-  const col3X = cx + 120;
+  // Three columns with real breathing room — long values can't hit "Best".
+  const col1X = cx - 260;
+  const col2X = cx - 90;
+  const col3X = cx + 150;
 
   const headerLabel = scene.add.text(col1X, statStartY, 'STAT', {
     fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold,
@@ -114,7 +115,7 @@ export function showRunStatsScreen(
   }
 
   const dividerY = statStartY + 10 + 9 * rowH + 28;
-  const divider = scene.add.rectangle(cx, dividerY, 500, 1, 0x555555, 0.5).setDepth(depth + 1);
+  const divider = scene.add.rectangle(cx, dividerY, 520, 1, SURFACE_HEX.muted, 0.5).setDepth(depth + 1);
   container.add(divider);
 
   let currentY = dividerY + 8;
@@ -125,13 +126,23 @@ export function showRunStatsScreen(
     }).setOrigin(0, 0.5).setDepth(depth + 1);
     container.add(loreHeader);
     currentY += 18;
-    stats.newLoreTitles.forEach((title) => {
+    // Cap at five titles so the list can never march into the buttons.
+    const MAX_LORE_ROWS = 5;
+    const shown = stats.newLoreTitles.slice(0, MAX_LORE_ROWS);
+    shown.forEach((title) => {
       const t = scene.add.text(cx - 180, currentY, `"${title}"`, {
         fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.bone, fontStyle: 'italic',
       }).setOrigin(0, 0.5).setDepth(depth + 1);
       container.add(t);
       currentY += 16;
     });
+    if (stats.newLoreTitles.length > MAX_LORE_ROWS) {
+      const more = scene.add.text(cx - 180, currentY, `… and ${stats.newLoreTitles.length - MAX_LORE_ROWS} more — full list in the Codex`, {
+        fontFamily: FONT_BODY, fontSize: '12px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
+      }).setOrigin(0, 0.5).setDepth(depth + 1);
+      container.add(more);
+      currentY += 16;
+    }
     currentY += 4;
   }
 
