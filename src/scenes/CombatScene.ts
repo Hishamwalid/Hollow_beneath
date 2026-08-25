@@ -5,6 +5,9 @@ import { ITEMS } from '@data/items';
 import { NAMED_SKILLS } from '@data/skills';
 import type { AffinityKind, EventApplyCtx, PlayerState } from '@data/types';
 import { DAMAGE_TYPES, DAMAGE_TYPE_ABBREV } from '@data/types';
+// `DAMAGE_TYPES` (array) above vs. the meta record below — aliased to avoid a
+// name clash so the type label/color used by skill-row chips is unambiguous.
+import { DAMAGE_TYPES as DAMAGE_TYPE_META } from '@data/damageTypes';
 import { CombatEngine, type CombatSnapshot, type EnemyView, type MomentumChoice } from '@systems/CombatEngine';
 // Revamp compat: battlefield states & fear/bravery systems removed — UI still renders their labels via no-op data.
 const BATTLEFIELD_STATES: Record<string, { label: string; turns?: number }> = {};
@@ -259,6 +262,12 @@ export class CombatScene extends Phaser.Scene {
     this.qteActive = false;
     this.qteBar = undefined;
     this.qteTargetKey = undefined;
+    // Flow flags are instance fields and the scene is a singleton: whatever state
+    // the previous fight ended in must never leak into this one.
+    this.targetingMode = false;
+    this.pendingTargeted = undefined;
+    this.enemyPhaseActive = false;
+    this.turnRotationActive = false;
     this.scanPanel = undefined;
     this.shownLogCount = 0;
     this.toastQueue = [];
@@ -418,12 +427,17 @@ export class CombatScene extends Phaser.Scene {
       ['keydown-LEFT', 'left'], ['keydown-A', 'left'],
       ['keydown-RIGHT', 'right'], ['keydown-D', 'right'],
     ];
-    this.kbHandlers = [['keydown-ESC', () => {
+    this.kbHandlers = [];
+    const cancelContext = () => {
+      // Scan modal → ESC/C dismisses it like any other overlay.
       if (this.scanPanel) { this.closeOverlay(); return; }
       if (this.momentumMenu) return; // a momentum choice is mandatory
+      // An open skill/item menu closes; otherwise cancel active targeting.
       if (this.inlineMenu) { this.closeInlineMenu(); return; }
       this.cancelTargeting();
-    }]];
+    };
+    this.kbHandlers.push(['keydown-ESC', cancelContext]);
+    this.kbHandlers.push(['keydown-C', cancelContext]);
     NAV_KEYS.forEach(([evt, dir]) => this.kbHandlers.push([evt, () => this.navMove(dir)]));
     this.kbHandlers.push(['keydown-ENTER', () => this.navConfirm()]);
     this.kbHandlers.push(['keydown-SPACE', () => this.navConfirm()]);
@@ -865,6 +879,13 @@ export class CombatScene extends Phaser.Scene {
     }
     this.updateBossBar(snap);
     this.checkSentinelTransform(snap);
+    // Self-heal (must run BEFORE buildActionGrid): a QTE whose bar was destroyed
+    // without resolving leaves qteActive stuck true - and since every nav/doAction
+    // guard keys off it, each refresh would rebuild the grid disabled forever with
+    // nothing left to trigger the next refresh (a full input deadlock). A destroyed
+    // Phaser container keeps its JS reference truthy, so liveness checks .scene.
+    if (this.qteBar && !this.qteBar.container.scene) this.qteBar = undefined;
+    if (this.qteActive && !this.qteBar) this.qteActive = false;
     this.buildActionGrid(snap);
     if (this.transformCutscene) return;
     this.allyDisplay?.container.setVisible(snap.allies.length > 0);
@@ -1011,8 +1032,10 @@ export class CombatScene extends Phaser.Scene {
     const inCombat = snap.phase === 'player' && !this.enemyPhaseActive && !this.transformCutscene;
     // One action per turn: the 4 verbs are usable while acting; End Turn stays
     // available afterwards to pass to the enemy phase (and is blocked mid-QTE).
-    const canAct = inCombat && !this.qteActive && (!snap.actionUsed || snap.oneMore);
-    const canEndTurn = inCombat && !this.qteActive;
+    // While a targeted action waits for an enemy click, every verb greys out —
+    // otherwise they look clickable but silently no-op inside doAction.
+    const canAct = inCombat && !this.qteActive && !this.targetingMode && (!snap.actionUsed || snap.oneMore);
+    const canEndTurn = inCombat && !this.qteActive && !this.targetingMode;
 
     const items: ActionGridItem[] = [
       { id: 'attack', label: 'Attack', apCost: 0, description: 'Basic melee attack (Slash damage). Lands instantly.', disabled: !canAct, onHover: () => this.previewWindup(), onUnhover: () => this.endWindupPreview(), onClick: () => this.doAction('attack', () => this.engine.attack(this.selectedTarget ?? undefined)) },
@@ -1058,7 +1081,7 @@ export class CombatScene extends Phaser.Scene {
     const { player } = useGameStore.getState();
     if (!player) return;
     const snap = this.engine.snapshot();
-    if (snap.phase !== 'player' || this.enemyPhaseActive || this.transformCutscene || this.qteActive) return;
+    if (snap.phase !== 'player' || this.enemyPhaseActive || this.transformCutscene || this.qteActive || this.targetingMode) return;
     const canAct = !snap.actionUsed || snap.oneMore;
     const activeSkills = player.skillsKnown.filter((id) => NAMED_SKILLS[id] && !NAMED_SKILLS[id].passive);
 
@@ -1074,10 +1097,11 @@ export class CombatScene extends Phaser.Scene {
       return {
         label: sk.name,
         subtitle: `${sk.description}${sk.damageType ? ` (${sk.damageType})` : ''}${costs.length ? ` · ${costs.join(' ')}` : ''}`,
-        // The element icon chip already communicates the damage type, so the
-        // abbrev text is omitted when an icon is shown — icon chip + cost chip
-        // stay clearly separated instead of reading as one blob.
-        rightLabel: [!sk.damageType ? '' : (this.textures.exists(`el_${sk.damageType}`) ? '' : DAMAGE_TYPE_ABBREV[sk.damageType]), costs.join(' ')].filter(Boolean).join(' · '),
+        // Element identity travels as `[icon Type Name]` (chip) beside the cost
+        // chip so the two groups read clearly instead of as one blob. The type
+        // name is shown even when no icon texture is available.
+        rightLabel: costs.join(' · ') || undefined,
+        elementLabel: sk.damageType ? DAMAGE_TYPE_META[sk.damageType].label : undefined,
         elementIcon: sk.damageType ? `el_${sk.damageType}` : undefined,
         elementTint: sk.damageType ? Phaser.Display.Color.HexStringToColor(DAMAGE_TYPE_HEX[sk.damageType] ?? '#ffffff').color : undefined,
         disabled: !canAct || !mpOk || !hpOk,
@@ -1095,10 +1119,12 @@ export class CombatScene extends Phaser.Scene {
   }
 
   private doAction(type: string, fn: () => CombatSnapshot, hpCost = 0, skipTargeting = false) {
-    if (this.enemyPhaseActive || this.transformCutscene || this.qteActive) {
+    if (this.enemyPhaseActive || this.transformCutscene || this.qteActive || this.targetingMode) {
       // Input buffering: remember the latest intent and replay it when the
       // player regains control — clicks are never eaten mid-rotation.
-      if (this.enemyPhaseActive && !this.transformCutscene) {
+      // Targeting never buffers: an unconfirmed target must not silently queue,
+      // it is cancelled explicitly (ESC/C) instead.
+      if (this.enemyPhaseActive && !this.transformCutscene && !this.targetingMode) {
         this.bufferedAction = { type, fn, hpCost };
         this.tooltipPanel?.show('Queued — plays when the enemy turn ends');
       }
@@ -1124,12 +1150,14 @@ export class CombatScene extends Phaser.Scene {
         this.qtePrevPlayerHP = prevHP;
         this.qtePrevEnemyHP = prevEnemyHP;
         this.qteHpCost = hpCost;
-        this.refresh(snap);
         this.setPlayerPose('windup', false);
+        // Create the bar BEFORE refresh so the invariant "qteActive implies live bar"
+        // holds on every snapshot rebuild - refresh's self-heal relies on it.
         this.qteBar = createQteBar(this, QTE_BASE.x, QTE_BASE.y, {
           slowed: snap.qte.slowed,
           resolve: (quality) => this.resolvePendingQte(quality, snap.qte!.targetKey),
         });
+        this.refresh(snap);
         return;
       }
       this.refresh(snap);
@@ -1151,6 +1179,9 @@ export class CombatScene extends Phaser.Scene {
     this.gridFocus = -1;
     this.tooltipPanel?.show('Choose a target — click an enemy to execute (←/→ cycle · ENTER confirm · ESC cancel)');
     this.updateTargetHighlight(this.engine.snapshot());
+    // Rebuild immediately so the battle-menu verbs visibly grey out while a
+    // target is pending (the grid otherwise only rebuilds inside refresh()).
+    this.buildActionGrid(this.engine.snapshot());
   }
 
   private confirmTargetedAction(key: string) {
@@ -1170,6 +1201,9 @@ export class CombatScene extends Phaser.Scene {
     this.targetingMode = false;
     this.tooltipPanel?.hide();
     this.updateTargetHighlight(this.engine.snapshot());
+    // Bring the battle-menu verbs back after an aborted target selection
+    // (doAction only re-enables them via refresh() once an action executes).
+    this.buildActionGrid(this.engine.snapshot());
   }
 
   /** Global keyboard navigation, routed by the topmost open UI layer. */
@@ -1419,11 +1453,12 @@ export class CombatScene extends Phaser.Scene {
       c.add(t);
       let right: Phaser.GameObjects.Text | undefined;
       const rightChips: Phaser.GameObjects.Rectangle[] = [];
+      // Running leftward cursor: cost chips (right-aligned) first, then the
+      // element chip lands just left of them with a clear gap.
+      let cursor = btnW / 2 - 14;
       if (item.rightLabel) {
-        // Cost chip(s) laid out from the right edge; the element icon chip sits
-        // further left with a clear gap so type and cost never crowd each other.
+        // Cost chip(s) laid out from the right edge so type and cost stay separated.
         const parts = item.rightLabel.split(' · ').filter(Boolean);
-        let cursor = btnW / 2 - 14;
         for (let p = parts.length - 1; p >= 0; p--) {
           const txt = this.add.text(0, 0, parts[p], { fontFamily: FONT_MONO, fontSize: '13px', fontStyle: 'bold', color: PALETTE_HEX.goldBright });
           const chipW = txt.width + 14;
@@ -1436,16 +1471,34 @@ export class CombatScene extends Phaser.Scene {
           if (!right) right = txt;
           cursor = chipX - 16;
         }
-        if (item.elementIcon && this.textures.exists(item.elementIcon)) {
-          const iconW = 26;
-          const iconX = cursor - iconW / 2 - 14; // extra gap before the type icon
-          const chip = this.add.rectangle(iconX, 0, iconW, 22, 0x0b0d10, 0.9).setStrokeStyle(1, 0xc9a24b, 0.8);
-          const icon = this.add.image(iconX, 0, item.elementIcon).setDisplaySize(16, 16);
+      }
+
+      // Element identity chip: [icon Type Name]. Sits left of the cost chips
+      // (or at the right edge when there are none) with a 14px gap so type and
+      // cost read as two distinct groups. Falls back to a label-only chip when
+      // no element icon texture is available.
+      if (item.elementLabel) {
+        const iconSize = 16;
+        const name = item.elementLabel;
+        const hasIcon = !!(item.elementIcon && this.textures.exists(item.elementIcon));
+        const nameText = this.add.text(0, 0, name, { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.goldBright }).setOrigin(0, 0.5);
+        const contentW = (hasIcon ? iconSize + 6 : 0) + nameText.width + 12;
+        const chipW = Math.max(32, contentW);
+        const chipCenter = cursor - chipW / 2 - 14;
+        const chip = this.add.rectangle(chipCenter, 0, chipW, 22, 0x0b0d10, 0.9).setStrokeStyle(1, 0xc9a24b, 0.8);
+        if (hasIcon) {
+          const icon = this.add.image(chipCenter - chipW / 2 + 1 + iconSize / 2, 0, item.elementIcon!).setDisplaySize(iconSize, iconSize);
           if (item.elementTint !== undefined) icon.setTint(item.elementTint);
-          rightChips.push(chip);
-          c.add(chip);
+          nameText.setPosition(chipCenter - chipW / 2 + 1 + iconSize + 6, 0);
           c.add(icon);
+        } else {
+          nameText.setPosition(chipCenter, 0);
+          nameText.setOrigin(0.5, 0.5);
         }
+        rightChips.push(chip);
+        c.add(chip);
+        c.add(nameText);
+        if (!right) right = nameText;
       }
       const entry = {
         row: c,
@@ -1472,6 +1525,33 @@ export class CombatScene extends Phaser.Scene {
       menu.add(c);
     };
     items.forEach((item, i) => mkRow(-h / 2 + headerH + i * (btnH + gap) + btnH / 2, item));
+
+    // Header row reading "TITLE — QTY/COST" above the item list, so the layout
+    // reads header-first like the rest of the UI. Only shown when rows actually
+    // carry right-aligned metadata.
+    if (items.some((i) => i.rightLabel)) {
+      const header = this.add
+        .text(-w / 2 + 14, -h / 2 + headerH - 14, title, {
+          fontFamily: FONT_SERIF,
+          fontSize: '11px',
+          color: PALETTE_HEX.boneMuted,
+          align: 'left',
+        })
+        .setOrigin(0, 0.5);
+      const rightLabel = items.every((i) => i.rightLabel) ? 'QTY' : 'COST';
+      if (rightLabel && items.length > 0) {
+        const rightHeader = this.add
+          .text(w / 2 - 14, header.y, rightLabel, {
+            fontFamily: FONT_SERIF,
+            fontSize: '11px',
+            color: PALETTE_HEX.boneMuted,
+            align: 'right',
+          })
+          .setOrigin(1, 0.5);
+        menu.add(rightHeader);
+      }
+      menu.add(header);
+    }
     this.inlineMenu = menu;
   }
 
@@ -2091,8 +2171,14 @@ export class CombatScene extends Phaser.Scene {
   private openItemMenu() {
     const { player } = useGameStore.getState();
     if (!player) return;
+    // Locked while a targeted skill awaits its victim — same rule as Scan;
+    // opening it mid-targeting would let entries queue a silent no-op doAction.
+    if (this.enemyPhaseActive || this.transformCutscene || this.qteActive || this.targetingMode) return;
     const items: ChoiceMenuItem[] = player.inventory.map((entry) => ({
-      label: (ITEMS[entry.id]?.name ?? entry.id) + ' x' + entry.qty,
+      // Header-style layout: the label is the item name; quantity lives in the
+      // right-aligned cost slot so the column lines up across rows.
+      label: ITEMS[entry.id]?.name ?? entry.id,
+      rightLabel: `×${entry.qty}`,
       subtitle: ITEMS[entry.id]?.description,
       onSelect: () => {
         this.doAction('item', () => this.engine.useItem(entry.id));
@@ -2120,7 +2206,7 @@ export class CombatScene extends Phaser.Scene {
 
   private openScanModal(targetKey?: string) {
     const snap = this.engine.snapshot();
-    if (snap.phase !== 'player' || this.enemyPhaseActive || this.transformCutscene) return;
+    if (snap.phase !== 'player' || this.enemyPhaseActive || this.transformCutscene || this.targetingMode) return;
     const aliveKeys = snap.enemies.filter((e) => e.alive).map((e) => e.key);
     if (aliveKeys.length === 0) return;
     const key = targetKey && aliveKeys.includes(targetKey)
@@ -2362,7 +2448,7 @@ export class CombatScene extends Phaser.Scene {
   }
 
   private onEndTurn() {
-    if (this.enemyPhaseActive || this.transformCutscene) return;
+    if (this.enemyPhaseActive || this.transformCutscene || this.targetingMode) return;
     // Drain a deferred round start (e.g. left pending behind a closed modal) before ending this turn.
     if (this.pendingBeginRound) this.maybeBeginRound();
     try {
@@ -2778,19 +2864,24 @@ export class CombatScene extends Phaser.Scene {
       .setOrigin(0.5, 0)
       .setDepth(36);
     countTo(xpText, 0, xp, 650, ' XP');
+    // Loot text can run tall on boss kills; constrain it, shrink gently when the
+    // wrapped block is huge, and park Continue firmly below it (never overlapping).
+    let continueY = GAME_HEIGHT / 2 + 140;
     if (extraText) {
-      this.add
+      const extra = this.add
         .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 34, extraText, {
           fontFamily: FONT_SERIF,
           fontSize: '15px',
           color: PALETTE_HEX.bone,
           align: 'center',
-          wordWrap: { width: 640 },
+          wordWrap: { width: 640, useAdvancedWrap: true },
         })
         .setOrigin(0.5, 0)
         .setDepth(36);
+      if (extra.height > 300) extra.setFontSize('13px');
+      continueY = Math.max(continueY, extra.y + extra.height + 28);
     }
-    createButton(this, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 140, 'Continue', () => fadeToScene(this, 'Board'), { width: 220, depth: 37 });
+    createButton(this, GAME_WIDTH / 2, continueY, 'Continue', () => fadeToScene(this, 'Board'), { width: 220, depth: 37 });
     // Enter/Space continues from the victory screen.
     this.kbdSingle = () => fadeToScene(this, 'Board');
   }

@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { settingsManager } from '@systems/SettingsManager';
-import { audio } from '@placeholder/PlaceholderAudio';
 
 export interface DialogBox {
   container: Phaser.GameObjects.Container;
@@ -15,6 +14,7 @@ export interface DialogBox {
   /** Optional speaker nameplate (e.g. "THE VOICE"). */
   setSpeaker: (name: string | null) => void;
   /** Current sheet height (dynamic — sized to fit the text, capped at ~5 lines). */
+
   getHeight: () => number;
   skip: () => void;
   destroy: () => void;
@@ -32,6 +32,7 @@ const MAX_H = 190; // ~5 body lines at 19px + line spacing
 
 /**
  * Narration panel. Default look is an aged parchment sheet with ink text —
+
  * the page the player is writing as they descend. The sheet dynamically
  * shrinks/grows to fit its text (max ~5 lines) so buttons and choices can
  * tuck right under it.
@@ -74,8 +75,9 @@ export function createDialogBox(
   function showPrompt(): void {
     prompt.setVisible(true);
     if (!bobTween && !settingsManager.get().reduceMotion) {
-      const baseY = curH / 2 - 18;
+      const baseY = prompt.y;
       bobTween = scene.tweens.add({ targets: prompt, y: baseY + 3, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      void baseY;
     }
   }
   function hidePrompt(): void {
@@ -84,6 +86,7 @@ export function createDialogBox(
   }
 
   // Beat progress ("2 / 6") — bottom-left, only during multi-beat pagination.
+
   const beatLabel = scene.add
     .text(-width / 2 + 22, height / 2 - 14, '', { fontFamily: FONT_MONO, fontSize: '11px', color: promptColor })
     .setOrigin(0)
@@ -91,11 +94,13 @@ export function createDialogBox(
     .setVisible(false);
 
   // Speaker nameplate — a small tab overlapping the top edge.
+
   let nameplateBg: Phaser.GameObjects.Rectangle | null = null;
   let nameplate: Phaser.GameObjects.Text | null = null;
 
   const container = scene.add.container(x, y, [shadow, bg, text, prompt, beatLabel]);
   // Render order [shadow, bg, text, prompt] is already correct — do NOT
+
   // bringToTop(bg) here; that moves the parchment above the text and hides it.
   container.setDepth(30);
   container.setAlpha(0);
@@ -140,8 +145,6 @@ export function createDialogBox(
   function tick() {
     charIndex += 1;
     text.setText(fullText.slice(0, charIndex));
-    // Faint pen tick every few glyphs — presence without chatter.
-    if (charIndex % 3 === 0) audio.typeTick();
     if (charIndex >= fullText.length) {
       timer?.remove();
       timer = null;
@@ -161,6 +164,7 @@ export function createDialogBox(
     timer?.remove();
     // Guard against corrupted settings (null/string) producing NaN delays that
     // silently kill the typewriter — the known cause of empty dialog boxes.
+
     const rawSpeed = Number(settingsManager.get().textSpeed);
     const spd = Number.isFinite(rawSpeed) && rawSpeed > 0 ? Math.max(20, rawSpeed) : 100;
     const delay = Math.round(14 * (100 / spd));
@@ -169,6 +173,7 @@ export function createDialogBox(
     scene.time.delayedCall(900, () => {
       if (timer && charIndex === 0) {
         console.error('[DialogBox] Typewriter stalled — textSpeed:', settingsManager.get().textSpeed, 'text:', t.slice(0, 60));
+
         text.setText(t); // fail visible rather than blank
         showPrompt();
       }
@@ -220,6 +225,7 @@ export function createDialogBox(
       if (typeof nameplate.setLetterSpacing === 'function') nameplate.setLetterSpacing(2);
       container.add([nameplateBg, nameplate]);
       // Stamp-in: plate lands at 1.15— and settles, like a seal pressed into wax.
+
       try {
         const s = settingsManager.get();
         if (!s.reduceMotion) {
@@ -231,6 +237,7 @@ export function createDialogBox(
         }
       } catch {
         /* settings unavailable — plate simply appears */
+
       }
     },
     skip: () => {

@@ -45,7 +45,22 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
   const portraitSize = width - 48;
   const portraitY = 40;
   container.add(scene.add.rectangle(width / 2, portraitY + portraitSize / 2, portraitSize, portraitSize, 0x22262c).setStrokeStyle(1, 0x3a3f46));
-  container.add(scene.add.image(width / 2, portraitY + portraitSize / 2, 'icon_character').setDisplaySize(portraitSize * 0.55, portraitSize * 0.55).setTint(0x7fb0c9));
+  // Character portrait: profile image preferred, combat sprites as fallback — aspect-fit in the slot.
+  const portraitKey = scene.textures.exists('profile_player')
+    ? 'profile_player'
+    : scene.textures.exists('player_face')
+      ? 'player_face'
+      : scene.textures.exists('player_idle')
+        ? 'player_idle'
+        : 'icon_character';
+  const pSrc = scene.textures.get(portraitKey).getSourceImage() as { width?: number; height?: number };
+  const pW = pSrc.width || 1;
+  const pH = pSrc.height || 1;
+  const pFit = Math.min(portraitSize / pW, portraitSize / pH) * (portraitKey === 'icon_character' ? 0.55 : 0.92);
+  const portrait = scene.add.image(width / 2, portraitY + portraitSize / 2, portraitKey)
+    .setDisplaySize(pW * pFit, pH * pFit);
+  if (portraitKey === 'icon_character') portrait.setTint(0x7fb0c9);
+  container.add(portrait);
 
   const infoY = portraitY + portraitSize + 12;
   const levelText = scene.add.text(16, infoY, 'Level 1', { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold });

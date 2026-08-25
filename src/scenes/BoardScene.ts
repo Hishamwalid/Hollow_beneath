@@ -385,7 +385,7 @@ export class BoardScene extends Phaser.Scene {
       { icon: 'icon_settings', label: 'Settings', onClick: () => fadeToScene(this, 'Settings') },
     ], COL_W);
 
-    const dicePanel = createPanel(this, { x: COL2_X + COL_W / 2, y: DICE_PANEL_Y + DICE_PANEL_H / 2, width: COL_W, height: DICE_PANEL_H, variant: 'stone', title: 'The Walk', depth: 1 });
+    const dicePanel = createPanel(this, { x: COL2_X + COL_W / 2, y: DICE_PANEL_Y + DICE_PANEL_H / 2, width: COL_W, height: DICE_PANEL_H, variant: 'stone', title: 'The Walk', titleRule: false, depth: 1 });
     void dicePanel;
     this.diceRoller = createDiceRoller(this, COL2_X + COL_W / 2, DICE_PANEL_Y + 70);
     this.diceRoller.container.setDepth(6);
@@ -417,7 +417,7 @@ export class BoardScene extends Phaser.Scene {
       this.showCoach('hint_roll', 'Roll the die — you will walk that many nodes.', COL2_X + COL_W / 2, DICE_PANEL_Y + DICE_PANEL_H + 18);
     }
 
-    const aheadPanel = createPanel(this, { x: COL2_X + COL_W / 2, y: TILE_PANEL_Y + TILE_PANEL_H / 2, width: COL_W, height: TILE_PANEL_H, variant: 'stone', title: 'Ahead', depth: 1 });
+    const aheadPanel = createPanel(this, { x: COL2_X + COL_W / 2, y: TILE_PANEL_Y + TILE_PANEL_H / 2, width: COL_W, height: TILE_PANEL_H, variant: 'stone', title: 'Ahead', titleRule: false, depth: 1 });
     void aheadPanel;
     this.preview = createNodePreview(this, COL2_X + COL_W / 2, TILE_PANEL_Y + 104, COL_W);
     this.preview.container.setDepth(6);
@@ -813,8 +813,13 @@ export class BoardScene extends Phaser.Scene {
 
     this.diceRoller?.roll(roll, () => {
       // Result slam: gold ring + micro-shake sell the throw before the walk.
+      // Shake only when the landed node is a pure battle (combat) node — not on
+      // landmark/boss, event, rest, or capture nodes, which have their own beats.
       pulseOnce(this, COL2_X + COL_W / 2, DICE_PANEL_Y + 70, 46, 0xe9c876, { depth: 50, duration: 320 });
-      shake(this, 0.0025, 90);
+      const landed = game.nodes[target - 1];
+      if (landed?.type === 'combat') {
+        shake(this, 0.0025, 90);
+      }
       try {
         if (this.tryAmbush(target)) return;
         this.moveTo(target);

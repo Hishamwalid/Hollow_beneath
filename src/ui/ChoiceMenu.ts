@@ -7,10 +7,12 @@ import { GAME_HEIGHT } from '@/config';
 export interface ChoiceMenuItem {
   label: string;
   subtitle?: string;
-  /** Optional right-aligned secondary text (e.g. element abbrev + MP cost). */  /** Optional right-aligned secondary text (e.g. element abbrev + MP cost). */
+    /** Optional right-aligned secondary text (e.g. MP/HP cost). */
   rightLabel?: string;
   /** Optional element icon texture shown in a chip left of the rightLabel. */
   elementIcon?: string;
+  /** Optional element type name rendered beside the icon (e.g. "Flame"). */
+  elementLabel?: string;
   /** Tint applied to the element icon (usually the damage-type color). */
   elementTint?: number;
   /** Requirement chip rendered under the label (e.g. "WILL DC 12", "-30 gold"). */

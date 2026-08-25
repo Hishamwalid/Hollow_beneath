@@ -88,6 +88,7 @@ export class PreloadScene extends Phaser.Scene {
       this.load.image(`player_${state}`, `assets/image_assets/player/${state}.png`);
     }
     this.load.image('player_face', 'assets/image_assets/player/face.png');
+    this.load.image('profile_player', 'assets/image_assets/player/profile_player.png');
     for (const enemyId of ['echo_skeleton', 'dust_wight']) {
       for (const state of ['idle', 'attack', 'hit']) {
         this.load.image(`enemy_${enemyId}_${state}`, `assets/image_assets/enemy/${enemyId}/${state}.png`);

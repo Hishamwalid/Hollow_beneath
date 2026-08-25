@@ -18,10 +18,14 @@ export interface ActionGridHandle {
 /** A 3-column grid of square icon buttons, e.g. Character / Codex / Skills / Shop / Menu / Settings. */
 export function createActionGrid(scene: Phaser.Scene, x: number, y: number, items: ActionGridItem[], width = 214): ActionGridHandle {
   const cols = 3;
-  const cell = Math.floor((width - 16) / cols);
+  const pad = 10;
   const gap = 8;
   const rows = Math.ceil(items.length / cols);
-  const height = rows * cell + (rows - 1) * gap + 16;
+  const cell = Math.floor((width - pad * 2 - (cols - 1) * gap) / cols);
+  // Background sized from the real grid extents so buttons can never spill outside it.
+  const gridW = cols * cell + (cols - 1) * gap;
+  const height = pad * 2 + rows * cell + (rows - 1) * gap;
+  const left = pad + (width - pad * 2 - gridW) / 2;
 
   const container = scene.add.container(x, y).setDepth(10);
   const bg = scene.add.rectangle(width / 2, height / 2, width, height, 0x16191d, 0.94).setStrokeStyle(1, 0xc9a24b, 0.6);
@@ -32,8 +36,8 @@ export function createActionGrid(scene: Phaser.Scene, x: number, y: number, item
   items.forEach((item, i) => {
     const col = i % cols;
     const row = Math.floor(i / cols);
-    const cx = 8 + col * (cell + gap) + cell / 2;
-    const cy = 8 + row * (cell + gap) + cell / 2;
+    const cx = left + col * (cell + gap) + cell / 2;
+    const cy = pad + row * (cell + gap) + cell / 2;
 
     const box = scene.add.rectangle(cx, cy, cell - 4, cell - 4, 0x22262c).setStrokeStyle(1, 0x3a3f46);
     const icon = scene.add.image(cx, cy, item.icon).setDisplaySize(cell * 0.5, cell * 0.5);
