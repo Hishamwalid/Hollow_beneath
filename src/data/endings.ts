@@ -1,19 +1,51 @@
 // ============================================================================
 // THE HOLLOW BENEATH — Definitive Edition endings
-// Exactly three. All tragic. No escape.
+// Three witnessed fates — and one that is only offered to those who already
+// know what the Loom sounds like when it stops.
 //
-// The cycle is unbreakable:
+// The cycle:
 //   • Defeat the Final Reflection → you become the next Hollow (THE HOLLOW)
 //   • Lose and accept the dark    → you become a lost thing in the walls
 //   • Lose and climb              → you make it home, and forget how to breathe
+//   • New Game+, having silenced the Loom twice and reached Transcendent
+//     resonance → you unask the question (THE SILENCE — hidden ending)
 //
-// Faction influence no longer gates endings — it only colors the epilogue
-// overlay shown during the credits (see FACTION_EPILOGUES).
+// Faction influence does not gate endings — it colors the epilogue overlay
+// (see FACTION_EPILOGUES).
 // ============================================================================
 
 import type { EndingDef, FactionState, PlayerState } from './types';
 
 export const ENDINGS: EndingDef[] = [
+  {
+    id: 'the_silence',
+    name: 'THE SILENCE',
+    tone: 'You answered the question by unasking it.',
+    unlock: 'True New Game+ · Loom-silenced · Transcendent',
+    condition: (p) =>
+      !!p.flags.ng_plus && !!p.flags.silence_path_unlocked && !!p.flags.loom_silenced && p.resonance >= 75,
+    epilogue: [
+      'The Final Reflection opens its mouth — and you speak first.',
+      '',
+      'Not an answer. A refusal of the grammar. You say the sentence the Venn never finished, backward, in the old cadence, and the chamber listens the way a held breath listens.',
+      '',
+      'THE LOOM (not a voice, but a harmony): "...oh."',
+      '',
+      'One note. Almost human. Almost disappointed. Then the gold drains out of the walls like light leaving water, and for the first time in five thousand years, nothing down here is singing.',
+      '',
+      'You climb. It takes weeks. The tunnels do not breathe — they have stopped pretending to be alive, and the honesty suits them.',
+      '',
+      'The surface believes you when you tell them it is over. Seekers stop dreaming. The factions scatter, purposeless, arguing over ruins that no longer argue back.',
+      '',
+      'You grow old in a small room with dust on every surface except one desk, wiped clean, out of habit rather than hope.',
+      '',
+      'Sometimes, at the very edge of sleep, you listen for her.',
+      '',
+      'The silence says nothing back. That was the price. That was always the price: not power, not escape — just room. Room where a voice used to be.',
+      '',
+      'You live inside the room for a long time.',
+    ].join('\n'),
+  },
   {
     id: 'the_hollow',
     name: 'THE HOLLOW',
@@ -27,7 +59,7 @@ export const ENDINGS: EndingDef[] = [
       '',
       'You look at your hands. They are translucent. Changing. You feel the entire Beneath breathing through you. You feel every Seeker who has ever walked these halls. You feel Eve.',
       '',
-      'And then you hear it one last time — the voice from the empty camp, from the room of scratched photographs, from the tunnels that breathe. You know it anywhere now. It was never the Loom. It was never the stone. It was always her.',
+      'And then you hear it one last time — the voice from the empty camp, from the room of scratched portraits, from the tunnels that breathe. You know it anywhere now. It was never the Loom. It was never the stone. It was always her.',
       '',
       'EVE, fading: "I\'m sorry."',
       '',
@@ -57,7 +89,7 @@ export const ENDINGS: EndingDef[] = [
       '',
       'Time passes. Or doesn\'t.',
       '',
-      'Later — much later — a new expedition finds a figure in the Warrens. Dust-caked. Wrapped in funerary linen. It does not attack until looked at too long.',
+      'Later — much later — a new delving party finds a figure in the Warrens. Dust-caked. Wrapped in funerary linen. It does not attack until looked at too long.',
       '',
       'It is a Dust Wight now. Or an Echo-bleached skeleton. It doesn\'t remember its name. It doesn\'t remember Eve. It only remembers to wait, and to watch, and to guard the corridors that form sentences leading to the question.',
       '',
@@ -103,7 +135,8 @@ export function evaluateEnding(player: PlayerState): EndingDef {
   for (const ending of ENDINGS) {
     if (ending.condition(player)) return ending;
   }
-  return ENDINGS[0];
+  // The default fate is the cycle's front door — never the hidden one above it.
+  return ENDINGS.find((e) => e.id === 'the_hollow') ?? ENDINGS[0];
 }
 
 export function getEnding(id: string): EndingDef | undefined {
@@ -119,7 +152,7 @@ export function getEnding(id: string): EndingDef | undefined {
  */
 export const FACTION_EPILOGUES: Record<string, string> = {
   sable: 'The Sable Order sealed the sinkhole. No one descends. But the Hollow does not need an entrance. It only needs a dream.',
-  archive: 'The Archive published the Keth-7 findings. Your name is a footnote. In a thousand years, someone will read it and descend anyway.',
+  archive: 'The Archive set down its annals of the Delving of Keth. Your name is a footnote. In a thousand years, someone will read it and descend anyway.',
   covenant: 'The Ash Covenant still sings in the deep. They believe you were translated, not lost. They are not wrong.',
   caravan: 'The Caravan sells maps to the sealed place. In their version, you simply walked home. The Caravan prefers endings you can pack in a satchel.',
 };

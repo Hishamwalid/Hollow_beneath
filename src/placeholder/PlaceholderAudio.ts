@@ -8,9 +8,38 @@
 // Public API (cue method names) is unchanged from the placeholder engine, so
 // no call sites had to move. Adds ambient beds:
 //   startAmbience('menu' | 'descent' | 'loom') / stopAmbience()
+// and procedural music beds (slow minor-chord pads + combat pulse):
+//   startMusic('menu' | 'descent' | 'combat' | 'loom') / stopMusic()
 // ============================================================================
 
+import { settingsManager } from '@systems/SettingsManager';
+
 type ToneShape = 'sine' | 'square' | 'triangle' | 'sawtooth';
+
+type MusicKind = 'menu' | 'descent' | 'combat' | 'loom';
+
+interface MusicProg {
+  /** MIDI note numbers per bar (chords cycle in order). */
+  chords: number[][];
+  barMs: number;
+  padGain: number;
+  lpHz: number;
+  /** Combat-style root pulse on eighth-notes. */
+  pulse?: boolean;
+}
+
+const midiHz = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
+
+const MUSIC_PROGS: Record<MusicKind, MusicProg> = {
+  // Dm — Bb — Gm — Am: the descent's own sad nursery-rhyme.
+  menu: { chords: [[50, 57, 65, 69], [46, 53, 62, 65], [43, 50, 58, 62], [45, 52, 60, 64]], barMs: 4200, padGain: 0.05, lpHz: 900 },
+  // Am — F — G — Dm: a step darker, for walking.
+  descent: { chords: [[45, 52, 60, 64], [41, 48, 57, 60], [43, 50, 59, 62], [38, 45, 53, 57]], barMs: 5200, padGain: 0.045, lpHz: 760 },
+  // Dm — C — Bb — A: low pulse, tight harmony, no comfort.
+  combat: { chords: [[38, 50, 57, 65], [36, 48, 55, 64], [34, 46, 53, 62], [33, 45, 52, 61]], barMs: 1600, padGain: 0.05, lpHz: 1100, pulse: true },
+  // Ebm shapes with a slow tritone drift — the Loom thinking out loud.
+  loom: { chords: [[39, 46, 58], [37, 44, 56], [35, 42, 54], [38, 45, 57]], barMs: 6400, padGain: 0.042, lpHz: 640 },
+};
 
 interface ToneOpts {
   freq: number;
@@ -56,6 +85,14 @@ class PlaceholderAudioEngine {
   private ambienceNodes: Array<AudioScheduledSourceNode | AudioNode> = [];
   private ambienceTimers: number[] = [];
   private ambienceMode: 'menu' | 'descent' | 'loom' | null = null;
+
+  // ---- Procedural music beds -------------------------------------------------
+  private musicGain: GainNode | null = null;
+  private musicVolume = 0.45;
+  private musicMode: MusicKind | null = null;
+  private musicNodes: Array<AudioScheduledSourceNode | AudioNode> = [];
+  private musicTimer: number | null = null;
+  private barIndex = 0;
 
   get muted(): boolean {
     return this.masterVolume < 0.01;
@@ -112,6 +149,22 @@ class PlaceholderAudioEngine {
         const w = Math.random() * 2 - 1;
         last = (last + 0.02 * w) / 1.02;
         bd[i] = last * 3.2;
+      }
+
+      // Music bus (under the same compressor as everything else).
+      this.musicGain = ctx.createGain();
+      this.musicGain.gain.value = this.musicVolume;
+      this.musicGain.connect(this.compNode);
+
+      // Sync volumes from saved settings on first audio use.
+      try {
+        const s = settingsManager.get();
+        this.masterVolume = Math.min(1, Math.max(0, s.masterVolume / 100));
+        this.musicVolume = Math.min(1, Math.max(0, s.musicVolume / 100));
+        if (this.masterGain) this.masterGain.gain.value = 0.32 * this.masterVolume;
+        this.musicGain.gain.value = this.musicVolume;
+      } catch {
+        /* defaults already set */
       }
     }
     if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
@@ -251,6 +304,8 @@ class PlaceholderAudioEngine {
     if (this.ambienceMode === mode) return;
     this.stopAmbience();
     this.ambienceMode = mode;
+    // Every ambience context carries its music bed with it.
+    this.startMusic(mode === 'menu' ? 'menu' : mode === 'loom' ? 'loom' : 'descent');
 
     const keep = (n: AudioScheduledSourceNode | AudioNode) => this.ambienceNodes.push(n);
 
@@ -350,6 +405,119 @@ class PlaceholderAudioEngine {
     }
     this.ambienceNodes = [];
     this.ambienceMode = null;
+    this.stopMusic();
+  }
+
+  // ---- Procedural music beds ---------------------------------------------------
+
+  /** Cross-fades the looping chord-pad bed for a context. Idempotent per kind. */
+  startMusic(kind: MusicKind): void {
+    if (this.masterVolume < 0.01 || this.musicVolume < 0.01) return;
+    if (kind === this.musicMode) return;
+    const ctx = this.ensureCtx();
+    if (!ctx || !this.musicGain || !this.compNode) return;
+    this.stopMusic();
+    this.musicMode = kind;
+    this.barIndex = 0;
+    this.scheduleBar(kind);
+  }
+
+  stopMusic(): void {
+    if (this.musicTimer !== null) {
+      window.clearTimeout(this.musicTimer);
+      this.musicTimer = null;
+    }
+    for (const n of this.musicNodes) {
+      try {
+        if ('stop' in n && typeof (n as AudioScheduledSourceNode).stop === 'function') {
+          (n as AudioScheduledSourceNode).stop();
+        }
+        n.disconnect();
+      } catch {
+        /* already stopped */
+      }
+    }
+    this.musicNodes = [];
+    this.musicMode = null;
+  }
+
+  setMusicVolume(v: number): void {
+    this.musicVolume = Math.min(1, Math.max(0, v / 100));
+    if (this.musicGain) this.musicGain.gain.value = this.musicVolume;
+  }
+
+  /** Schedules one bar of the current bed, then queues the next. */
+  private scheduleBar(kind: MusicKind): void {
+    if (this.musicMode !== kind) return;
+    const ctx = this.ctx;
+    if (!ctx || !this.musicGain) return;
+    const prog = MUSIC_PROGS[kind];
+    const t0 = ctx.currentTime + 0.06;
+    const barS = prog.barMs / 1000;
+    const keep = (n: AudioScheduledSourceNode | AudioNode) => this.musicNodes.push(n);
+
+    const chord = prog.chords[this.barIndex % prog.chords.length];
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = prog.lpHz;
+    lp.connect(this.musicGain);
+    // A little reverb so the pads sit inside the Beneath instead of on top of it.
+    if (this.reverbNode) {
+      const send = ctx.createGain();
+      send.gain.value = 0.35;
+      lp.connect(send);
+      send.connect(this.reverbNode);
+      keep(send);
+    }
+    keep(lp);
+
+    for (const midi of chord) {
+      for (const detune of [-4, 5]) {
+        const osc = ctx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.value = midiHz(midi);
+        osc.detune.value = detune;
+        const env = ctx.createGain();
+        env.gain.setValueAtTime(0.0001, t0);
+        env.gain.linearRampToValueAtTime(prog.padGain / chord.length, t0 + Math.min(1.4, barS * 0.4));
+        env.gain.setValueAtTime(prog.padGain / chord.length, t0 + barS - 0.25);
+        env.gain.linearRampToValueAtTime(0.0001, t0 + barS + 0.55);
+        osc.connect(env);
+        env.connect(lp);
+        osc.start(t0);
+        osc.stop(t0 + barS + 0.7);
+        keep(osc);
+        keep(env);
+      }
+    }
+
+    // Combat pulse: a low root heartbeat on eighths keeps the fight moving.
+    if (prog.pulse) {
+      const root = chord[0] - 12;
+      const eighth = barS / 4;
+      for (let i = 0; i < 4; i++) {
+        const o = ctx.createOscillator();
+        o.type = 'square';
+        o.frequency.value = midiHz(root);
+        const g = ctx.createGain();
+        const ts = t0 + i * eighth;
+        g.gain.setValueAtTime(0.0001, ts);
+        g.gain.linearRampToValueAtTime(0.05, ts + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, ts + eighth * 0.85);
+        const plp = ctx.createBiquadFilter();
+        plp.type = 'lowpass';
+        plp.frequency.value = 320;
+        o.connect(plp);
+        plp.connect(g);
+        g.connect(this.musicGain);
+        o.start(ts);
+        o.stop(ts + eighth);
+        keep(o); keep(g); keep(plp);
+      }
+    }
+
+    this.barIndex++;
+    this.musicTimer = window.setTimeout(() => this.scheduleBar(kind), prog.barMs - 60);
   }
 
   // ---- Cues -------------------------------------------------------------------
