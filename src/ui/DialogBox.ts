@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
+import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX, proseScale } from './uiTheme';
 import { settingsManager } from '@systems/SettingsManager';
 import { audio } from '@placeholder/PlaceholderAudio';
 
@@ -28,7 +28,8 @@ export interface DialogOptions {
 }
 
 const MIN_H = 128;
-const MAX_H = 190; // ~5 body lines at 19px + line spacing
+// ~5 body lines at 19px + line spacing; Large Text needs a taller ceiling.
+const MAX_H = Math.round(190 * proseScale());
 
 /**
  * Narration panel. Default look is an aged parchment sheet with ink text —
@@ -58,7 +59,7 @@ export function createDialogBox(
 
   const text = scene.add.text(-width / 2 + 30, -height / 2 + 22, '', {
     fontFamily: FONT_BODY,
-    fontSize: '19px',
+    fontSize: `${Math.round(19 * proseScale())}px`,
     color: inkColor,
     wordWrap: { width: width - 60 },
     lineSpacing: 8,

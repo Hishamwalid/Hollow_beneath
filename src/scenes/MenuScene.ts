@@ -12,7 +12,7 @@ import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 /**
  * Main menu — "the camp above the sinkhole".
- * Dimmed deep-map artwork behind an expedition ledger and a quiet nav rail.
+ * Dimmed deep-map artwork behind a delver's ledger and a quiet nav rail.
  */
 export class MenuScene extends Phaser.Scene {
   constructor() {
@@ -52,7 +52,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     // ---- Nav rail ---------------------------------------------------------------
-    const navPanel = createPanel(this, { x: 330, y: 470, width: 480, height: 520, variant: 'stone', title: 'Expedition Camp' });
+    const navPanel = createPanel(this, { x: 330, y: 470, width: 480, height: 520, variant: 'stone', title: 'Delvers\u2019 Camp' });
     if (!reducedMotion()) {
       navPanel.container.setAlpha(0).setY(470 + 18);
       this.tweens.add({ targets: navPanel.container, y: 470, alpha: 1, duration: 380, ease: 'Sine.easeOut' });
@@ -74,7 +74,7 @@ export class MenuScene extends Phaser.Scene {
         }
       },
     });
-    entries.push({ label: 'How to Play', sub: 'the field manual', onClick: () => fadeToScene(this, 'Tutorial', { returnTo: 'Menu' }) });
+    entries.push({ label: 'How to Play', sub: 'the delver\u2019s primer', onClick: () => fadeToScene(this, 'Tutorial', { returnTo: 'Menu' }) });
     entries.push({ label: 'Echo Shard Shop', sub: 'permanent boons', onClick: () => fadeToScene(this, 'ShardShop') });
     entries.push({ label: 'Lore Codex', sub: 'what you have learned', onClick: () => fadeToScene(this, 'LoreCodex') });
     entries.push({ label: 'Settings', sub: 'sound · text · difficulty', onClick: () => fadeToScene(this, 'Settings') });
@@ -102,8 +102,8 @@ export class MenuScene extends Phaser.Scene {
     });
     void created;
 
-    // ---- Expedition ledger ------------------------------------------------------
-    const ledger = createPanel(this, { x: 900, y: 470, width: 400, height: 520, variant: 'parchment', title: 'Expedition Ledger' });
+    // ---- Delver's ledger --------------------------------------------------------
+    const ledger = createPanel(this, { x: 900, y: 470, width: 400, height: 520, variant: 'parchment', title: 'Delver\u2019s Ledger' });
     // The journal opens like a cover: horizontal unfurl.
     if (!reducedMotion()) {
       ledger.container.setScale(0.04, 1).setAlpha(0);

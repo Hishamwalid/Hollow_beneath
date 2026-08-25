@@ -35,9 +35,11 @@ export class SettingsScene extends Phaser.Scene {
     createTitle(this, cx, 50, 'Settings');
 
     this.buildVolumeSlider(cx, settings.masterVolume);
+    this.buildMusicSlider(cx, settings.musicVolume);
     this.buildTextSpeedSlider(cx, settings.textSpeed);
     this.buildScreenShakeToggle(cx, settings.screenShake);
     this.buildReduceMotionToggle(cx, settings.reduceMotion);
+    this.buildLargeTextToggle(cx, settings.largeText);
     this.buildDifficulty(cx);
     this.buildCredits(cx);
     this.buildClearData(cx);
@@ -63,8 +65,26 @@ export class SettingsScene extends Phaser.Scene {
     });
   }
 
+  private buildMusicSlider(cx: number, initial: number) {
+    const y = 190;
+    createSectionLabel(this, cx - 300, y, 'Music', { color: PALETTE_HEX.bone });
+    this.add.text(cx - 296, y + 18, 'procedural descent beds — 0 for silence', {
+      fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
+    }).setOrigin(0, 0.5);
+    const valueLabel = this.add.text(cx + 180, y, `${Math.round(initial)}%`, {
+      fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
+    }).setOrigin(0, 0.5);
+
+    createSlider(this, cx - 80, y, 240, initial, (v) => {
+      const rounded = Math.round(v);
+      settingsManager.set({ musicVolume: rounded });
+      audio.setMusicVolume(rounded);
+      valueLabel.setText(`${rounded}%`);
+    });
+  }
+
   private buildTextSpeedSlider(cx: number, initial: number) {
-    const y = 210;
+    const y = 245;
     createSectionLabel(this, cx - 300, y, 'Text Speed', { color: PALETTE_HEX.bone });
     const valueLabel = this.add.text(cx + 180, y, `${Math.round(initial)}%`, {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold,
@@ -102,10 +122,21 @@ export class SettingsScene extends Phaser.Scene {
     }, { width: 220 });
   }
 
+  private buildLargeTextToggle(cx: number, initial: boolean) {
+    const y = 382;
+    createSectionLabel(this, cx - 300, y, 'Large Text', { color: PALETTE_HEX.bone });
+    this.add.text(cx - 296, y + 18, 'scales dialog & ending prose ~15%', {
+      fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
+    }).setOrigin(0, 0.5);
+    createToggle(this, cx + 60, y, '', initial, (on) => {
+      settingsManager.set({ largeText: on });
+    }, { width: 220 });
+  }
+
   /** Segmented difficulty control — the active mode carries a gold underline. */
   private buildDifficulty(cx: number) {
     const modes = ['easy', 'normal', 'hard', 'ironman'] as const;
-    const y = 400;
+    const y = 420;
     let current = settingsManager.get().difficulty;
 
     createSectionLabel(this, cx - 300, y, 'Difficulty', { color: PALETTE_HEX.bone });

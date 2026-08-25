@@ -54,7 +54,7 @@ export class TutorialScene extends Phaser.Scene {
     }
 
     if (!data?.introOnly) {
-      createSectionLabel(this, cx, 44, 'Field Manual', { origin: [0.5, 0.5] });
+      createSectionLabel(this, cx, 44, 'Delver\u2019s Primer', { origin: [0.5, 0.5] });
     }
 
     this.titleText = this.add.text(cx, 80, '', {
@@ -73,7 +73,7 @@ export class TutorialScene extends Phaser.Scene {
       fontFamily: FONT_BODY, fontSize: '16px', color: PALETTE_HEX.oxide,
     }).setOrigin(1, 0).setDepth(12).setAlpha(0);
 
-    this.skipText = this.add.text(GAME_WIDTH - 20, 20, data?.introOnly ? '[Skip]' : '[Close Manual]', {
+    this.skipText = this.add.text(GAME_WIDTH - 20, 20, data?.introOnly ? '[Skip]' : '[Close Primer]', {
       fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(1, 0).setDepth(20).setInteractive({ useHandCursor: true });
     this.skipText.on('pointerdown', (pointer: Phaser.Input.Pointer) => {

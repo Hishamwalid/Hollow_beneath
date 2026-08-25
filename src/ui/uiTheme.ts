@@ -9,6 +9,8 @@
 // Fonts: Cinzel tracked caps → IM Fell body → Courier Prime numbers.
 // ============================================================================
 
+import { settingsManager } from '@systems/SettingsManager';
+
 // Fantasy display font (Cinzel) - titles, headers
 export const FONT_SERIF = '"HollowCinzel", Georgia, "Times New Roman", serif';
 // Parchment / ancient-book body font (IM Fell English)
@@ -146,3 +148,12 @@ export const DESIGN = {
   shadow: '#291c00',
   shadowAlpha: 0.76,
 } as const;
+
+/** Accessibility multiplier for long-form prose (Settings → Large Text). */
+export function proseScale(): number {
+  try {
+    return settingsManager.get().largeText ? 1.15 : 1;
+  } catch {
+    return 1;
+  }
+}

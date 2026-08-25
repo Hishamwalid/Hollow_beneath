@@ -144,14 +144,14 @@ export class LandmarkScene extends Phaser.Scene {
     this.input.on('pointerdown', () => dialog.skip());
   }
 
-  /** Canon staging: the Sentinel guards the sinkhole mouth at the dig site —
-   *  a coin of gold light climbing from below and the expedition's cut rope. */
+  /** Canon staging: the Sentinel guards the sinkhole mouth at the delving —
+   *  a coin of gold light climbing from below and the company's cut rope. */
   private stageSinkholeMouth(): void {
     const cx = GAME_WIDTH / 2;
     // The shaft: a wide, faint column of daylight-and-Loom-light.
     const shaft = this.add.triangle(cx + 20, -60, -100, -280, 100, -280, 260, 430, 0xf5efdc, 0.06).setDepth(-1);
     const glow = this.add.ellipse(cx + 10, 92, 320, 64, 0xe9c876, 0.09).setDepth(-1);
-    // The expedition's rope, cut clean where they went down.
+    // The company's rope, cut clean where they went down.
     const rope = this.add.graphics().setDepth(-1);
     rope.lineStyle(2.5, 0x8f6a27, 0.8);
     rope.beginPath();
@@ -216,6 +216,7 @@ export class LandmarkScene extends Phaser.Scene {
     if (bossId === 'reflection' && player.story) {
       combatFlags.motherJournalFound = player.story.motherJournalFound ? 1 : 0;
       combatFlags.eveVoiceHeard = player.story.eveVoiceHeard;
+      if (player.flags.met_hollowed_man) combatFlags.met_hollowed_man = 1;
     }
     const text = choice.apply(player, combatFlags, Math.random);
     useGameStore.getState().persist();
@@ -301,7 +302,7 @@ export class LandmarkScene extends Phaser.Scene {
     this.dialog = dialog;
     dialog.setText(boss.aftermathText(flags), () => {
       // The presence reacts to a guardian falling — once, briefly.
-      const voiceLine = bossId === 'reflection' ? null : maybeVoiceLine('boss_fall');
+      const voiceLine = bossId === 'reflection' ? null : maybeVoiceLine('boss_fall', Math.random, undefined, player.story.eveVoiceHeard ?? 0);
       if (voiceLine) showWhisper(this, GAME_WIDTH / 2, 130, voiceLine, 640);
       this.showRewardNotes(notes, () => {
         this.continueBtn?.destroy();

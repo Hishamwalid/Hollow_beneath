@@ -1,10 +1,10 @@
 ﻿import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { evaluateEnding, getEnding, factionEpilogue } from '@data/endings';
-import type { EndingDef } from '@data/types';
+import type { EndingDef, PlayerState } from '@data/types';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
-import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, PALETTE_HEX, proseScale } from '@ui/uiTheme';
 import { createVignette, type VignetteKind } from '@ui/vignettes';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
@@ -94,8 +94,39 @@ export class EndingScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Conditional epilogue lines — the run's specific kindnesses and cruelties
+   * braided into the ending's spine, so no two witnessed fates read alike.
+   */
+  private personalize(ending: EndingDef, player: PlayerState): string {
+    const extras: string[] = [];
+    const push = (s: string) => extras.push('', s);
+    if (ending.id === 'the_return') {
+      if (player.story.motherJournalFound) {
+        push('In your pack: her first journal, still warm from the Archive Depths. You will never open it again. Some doors are kinder left as walls.');
+      }
+      if (player.flags.read_nineteenth_marker) {
+        push('Somewhere on the nineteenth waystone, a carved postscript is already going soft with age: "For my child." It was never addressed to anyone else.');
+      }
+    }
+    if (ending.id === 'the_hollow') {
+      if (player.flags.wrote_own_page) {
+        push('Among the throne-room dust lies one loose page in your own handwriting. Three words at the top — "For the next one." You leave it where the next one will find it.');
+      }
+      if ((player.story.eveVoiceHeard ?? 0) >= 3) {
+        push('You can still hear her. That is the part no one warns you about. Guardians are not supposed to keep the voices they replace.');
+      }
+    }
+    if (ending.id === 'lost_in_the_dark' && player.flags.mercy_to_dominion_soldier) {
+      push('The stone accepts you the way you once accepted a broken soldier\'s gratitude: gently, and without needing to understand it.');
+    }
+    return ending.epilogue + (extras.length ? '\n' + extras.join('\n') : '');
+  }
+
   /** The ending's full narrative text, advanced by click/space. */
   private showEpilogueBeats(ending: EndingDef) {
+    const store = useGameStore.getState();
+    const player = store.player;
     const dialogBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0).setDepth(5);
     const header = this.add
       .text(GAME_WIDTH / 2, 60, ending.name, { fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.boneMuted })
@@ -111,7 +142,7 @@ export class EndingScene extends Phaser.Scene {
       .setDepth(11)
       .setAlpha(0.7);
 
-    const lines = ending.epilogue.split('\n');
+    const lines = (player ? this.personalize(ending, player) : ending.epilogue).split('\n');
     let idx = 0;
     let label: Phaser.GameObjects.Text | null = null;
     // Optional timed auto-advance — toggle with A. Off by default.
@@ -150,7 +181,7 @@ export class EndingScene extends Phaser.Scene {
       label = this.add
         .text(GAME_WIDTH / 2, isBeatBreak ? GAME_HEIGHT / 2 : GAME_HEIGHT / 2, line || '. . .', {
           fontFamily: line.startsWith('EVE') || line.startsWith('THE LOOM') ? FONT_SERIF : FONT_BODY,
-          fontSize: line.startsWith('EVE') || line.startsWith('THE LOOM') ? '20px' : '18px',
+          fontSize: `${Math.round((line.startsWith('EVE') || line.startsWith('THE LOOM') ? 20 : 18) * proseScale())}px`,
           color: line.startsWith('EVE') || line.startsWith('THE LOOM') ? PALETTE_HEX.gold : PALETTE_HEX.bone,
           wordWrap: { width: 900 },
           align: 'center',
@@ -208,6 +239,12 @@ export class EndingScene extends Phaser.Scene {
   /** Locks the run in (autosave — no going back), then credits. */
   private finishRun(ending: EndingDef) {
     const store = useGameStore.getState();
+    // The Mirror Unfinished can only be read at the very end — grant it here so
+    // codex completion stays possible on every route to every ending.
+    const player = store.player;
+    if (player && ending.id !== 'the_silence' && !player.loreFragments.includes('final_reflection')) {
+      player.loreFragments.push('final_reflection');
+    }
     store.finalizeRun(ending.id);
     audio.stopAmbience();
     fadeToScene(this, 'Credits', { endingId: ending.id });

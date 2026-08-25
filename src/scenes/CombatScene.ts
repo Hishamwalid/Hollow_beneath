@@ -3,11 +3,15 @@ import { useGameStore } from '@store/gameStore';
 import { BOSSES } from '@data/bosses';
 import { ITEMS } from '@data/items';
 import { NAMED_SKILLS } from '@data/skills';
+import { evaluateEnding } from '@data/endings';
 import type { AffinityKind, EventApplyCtx, PlayerState } from '@data/types';
 import { DAMAGE_TYPES, DAMAGE_TYPE_ABBREV } from '@data/types';
 import { CombatEngine, type CombatSnapshot, type EnemyView, type MomentumChoice } from '@systems/CombatEngine';
 // Revamp compat: battlefield states & fear/bravery systems removed — UI still renders their labels via no-op data.
-const BATTLEFIELD_STATES: Record<string, { label: string; turns?: number }> = {};
+const BATTLEFIELD_STATES: Record<string, { label: string; turns?: number }> = {
+  dust_storm: { label: 'Dust Storm' },
+  sacred_ground: { label: 'Sacred Ground' },
+};
 const BRAVERY_ACTIONS: Array<{ id: string; label: string; detail?: string; apCost?: number }> = [];
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
@@ -16,6 +20,7 @@ import { pulseOnce, dimPulse, shake, reducedMotion, countTo } from '@systems/mot
 import { showWhisper } from '@ui/WhisperOverlay';
 import { addResonanceEffects } from '@systems/ResonanceFX';
 import { createStatPanel } from '@ui/StatPanel';
+import { rebuildStatusChips } from '@ui/statusChips';
 import { createEnemyDisplay, createActionGrid, createTurnOrderPanel, createTooltipPanel, createAllyDisplay, createBossBar, type EnemyDisplay, type ActionGridItem, type ActionGridHandle, type TooltipPanelHandle, type AllyDisplay } from '@ui/CombatHUD';
 import { createQteBar, type QteBarHandle, type QteQuality } from '@ui/QteBar';
 import { createChoiceMenu, type ChoiceMenu, type ChoiceMenuItem } from '@ui/ChoiceMenu';
@@ -160,6 +165,9 @@ export class CombatScene extends Phaser.Scene {
   private tooltipPanel?: TooltipPanelHandle;
   private phaseLabelText?: Phaser.GameObjects.Text;
   private battlefieldLabelText?: Phaser.GameObjects.Text;
+  private lowHpVeil?: Phaser.GameObjects.Rectangle;
+  private lowHpPulse?: Phaser.Tweens.Tween;
+  private logModalMask?: Phaser.GameObjects.Graphics;
   private playerRowText?: Phaser.GameObjects.Text;
   private overlayMenu?: ChoiceMenu;
   private overlayBg?: Phaser.GameObjects.Rectangle;
@@ -244,7 +252,7 @@ export class CombatScene extends Phaser.Scene {
   /** Last rendered boss phase label — drives the phase-change mini-cinematic. */
   private lastBossPhaseLabel = '';
   /** Persistent readout of the player's active status effects. */
-  private playerStatusText?: Phaser.GameObjects.Text;
+  private playerStatusChips?: Phaser.GameObjects.Container;
   /** In-combat Scan modal container (cleaned up by closeOverlay). */
   private scanPanel?: Phaser.GameObjects.Container;
 
@@ -278,6 +286,7 @@ export class CombatScene extends Phaser.Scene {
     fadeIn(this);
     // Battle is never silent: the descent wind carries through the fight.
     audio.startAmbience('descent');
+    audio.startMusic('combat');
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => audio.stopAmbience());
     this.sceneData = data;
     const store = useGameStore.getState();
@@ -352,13 +361,9 @@ export class CombatScene extends Phaser.Scene {
 
     const spAdj = layoutAdj('statPanel');
     this.statPanel = createStatPanel(this, STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy);
-    // Active status readout — the player's afflictions are never invisible.
-    this.playerStatusText = this.add
-      .text(STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy - 122, '', {
-        fontFamily: FONT_MONO, fontSize: '11px', color: '#ff8a75', fontStyle: 'bold',
-        align: 'center', wordWrap: { width: 230 },
-      })
-      .setOrigin(0.5, 1)
+    // Active status readout — tinted chip row, the player's afflictions never invisible.
+    this.playerStatusChips = this.add
+      .container(STAT_PANEL_BASE.x + spAdj.dx, STAT_PANEL_BASE.y + spAdj.dy - 128)
       .setDepth(10);
     const prAdj = layoutAdj('playerRow');
     this.playerRowText = this.add
@@ -788,11 +793,36 @@ export class CombatScene extends Phaser.Scene {
       });
     }
     this.playerRowText?.setText(snap.playerRow ? `ROW: ${snap.playerRow.toUpperCase()}` : '');
-    // Status chips: "POISON ×2 · SLOWED" — empty string hides the row entirely.
-    const statusLabel = snap.playerStatuses
-      .map((s) => (s.turnsRemaining > 1 ? `${s.id.toUpperCase()} ×${s.turnsRemaining}` : s.id.toUpperCase()))
-      .join(' · ');
-    this.playerStatusText?.setText(statusLabel);
+
+    // Low-health heartbeat veil — the frame itself starts pulse-breathing red.
+    const hpRatio = snap.playerMaxHP > 0 ? snap.playerHP / snap.playerMaxHP : 1;
+    if (!this.lowHpVeil) {
+      this.lowHpVeil = this.add
+        .rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH - 20, GAME_HEIGHT - 20)
+        .setStrokeStyle(6, 0xc23b22, 1)
+        .setDepth(58)
+        .setAlpha(0);
+    }
+    if (hpRatio <= 0.25 && !this.resultShown && !this.lowHpPulse) {
+      this.lowHpVeil.setAlpha(0.1);
+      this.lowHpPulse = this.tweens.add({
+        targets: this.lowHpVeil,
+        alpha: { from: 0.08, to: 0.42 },
+        duration: 640,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut',
+      });
+    } else if ((hpRatio > 0.25 || this.resultShown) && this.lowHpPulse) {
+      this.lowHpPulse.stop();
+      this.lowHpPulse = undefined;
+      this.lowHpVeil.setAlpha(0);
+    }
+
+    // Status chips — tinted, with turn/stack pips.
+    if (this.playerStatusChips) {
+      rebuildStatusChips(this, this.playerStatusChips, snap.playerStatuses, { scale: 1.05 });
+    }
     if (snap.round !== this.lastRenderedRound) {
       this.lastRenderedRound = snap.round;
       // A new round ticks the afflictions — show them burning.
@@ -806,7 +836,7 @@ export class CombatScene extends Phaser.Scene {
       if (!isFirst && this.sceneData.mode === 'boss' && !this.resultShown) this.playPhaseCinematic(snap.bossPhaseLabel);
     }
     if (snap.battlefieldState) {
-      const label = BATTLEFIELD_STATES[snap.battlefieldState.id].label;
+      const label = BATTLEFIELD_STATES[snap.battlefieldState.id]?.label ?? snap.battlefieldState.id;
       this.battlefieldLabelText?.setText(`◈ BATTLEFIELD: ${label} (${snap.battlefieldState.turns})`);
     } else {
       this.battlefieldLabelText?.setText('');
@@ -914,7 +944,7 @@ export class CombatScene extends Phaser.Scene {
       this.resultShown = true;
       // The presence reacts to a won fight — once, briefly, after the kill lands.
       if (snap.phase === 'victory') {
-        const line = maybeVoiceLine('victory');
+        const line = maybeVoiceLine('victory', Math.random, undefined, player?.story.eveVoiceHeard ?? 0);
         if (line) this.time.delayedCall(1400, () => showWhisper(this, GAME_WIDTH / 2, 96, line, 600));
         // Gold burst over the fallen while their dissolve plays out.
         spawnCelebrationParticles(this, ENEMY_ROW_CENTER, this.enemyRowY() - 40);
@@ -927,7 +957,7 @@ export class CombatScene extends Phaser.Scene {
     if (player && !this.lowHpVoiced && snap.phase === 'player' && snap.playerHP > 0
         && snap.playerHP / Math.max(1, player.derived.maxHP) < 0.25) {
       this.lowHpVoiced = true;
-      const line = maybeVoiceLine('low_hp');
+      const line = maybeVoiceLine('low_hp', Math.random, undefined, player.story.eveVoiceHeard ?? 0);
       if (line) showWhisper(this, GAME_WIDTH / 2, 96, line, 600);
     }
   }
@@ -990,17 +1020,48 @@ export class CombatScene extends Phaser.Scene {
     const panel = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(39);
     panel.add(this.add.rectangle(0, 0, 760, 520, 0x14171b, 0.96).setStrokeStyle(2, 0xc9a24b).setOrigin(0.5));
     panel.add(this.add.text(0, -232, 'COMBAT LOG', { fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.gold }).setOrigin(0.5));
+
+    // Scrollable viewport (wheel) so long fights never clip their history.
+    const VIEW_W = 700;
+    const VIEW_H = 400;
+    const TOP = -196;
     const body = lines.length > 0 ? lines.join('\n') : 'Nothing has happened yet.';
-    panel.add(this.add
-      .text(-350, -206, body, {
-        fontFamily: FONT_MONO,
-        fontSize: '13px',
-        color: PALETTE_HEX.bone,
-        lineSpacing: 4,
-        wordWrap: { width: 700 },
-      })
-      .setOrigin(0, 0));
-    panel.add(this.add.text(0, 238, 'Click anywhere to close', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold }).setOrigin(0.5));
+    const bodyText = this.add.text(-350, TOP, body, {
+      fontFamily: FONT_MONO,
+      fontSize: '13px',
+      color: PALETTE_HEX.bone,
+      lineSpacing: 4,
+      wordWrap: { width: VIEW_W - 24 },
+    }).setOrigin(0, 0);
+    const bodyContainer = this.add.container(0, 0, [bodyText]);
+    const maskG = this.make.graphics({ x: 0, y: 0 }, false);
+    maskG.fillStyle(0xffffff);
+    maskG.fillRect(GAME_WIDTH / 2 - 350, GAME_HEIGHT / 2 + TOP, VIEW_W, VIEW_H);
+    bodyContainer.mask = maskG.createGeometryMask();
+    this.logModalMask = maskG;
+    panel.add(bodyContainer);
+
+    const maxScroll = Math.max(0, bodyText.height - VIEW_H);
+    let scroll = maxScroll; // start pinned to the most recent lines
+    // Scrollbar rail + thumb
+    panel.add(this.add.rectangle(366, TOP + VIEW_H / 2, 2, VIEW_H, 0x2a2f36).setOrigin(0.5));
+    const thumbH = Math.max(28, VIEW_H * (VIEW_H / Math.max(VIEW_H, bodyText.height)));
+    const thumb = this.add.rectangle(366, 0, 4, thumbH, 0xc9a24b, 0.8).setOrigin(0.5);
+    panel.add(thumb);
+    const applyScroll = () => {
+      bodyContainer.y = TOP - scroll;
+      const t = maxScroll > 0 ? scroll / maxScroll : 0;
+      thumb.y = TOP + thumbH / 2 + t * (VIEW_H - thumbH);
+    };
+    applyScroll();
+    const zone = this.add.rectangle(0, TOP + VIEW_H / 2, VIEW_W + 20, VIEW_H, 0x000000, 0.001).setInteractive();
+    zone.on('wheel', (_p: unknown, _dx: number, dy: number) => {
+      scroll = Phaser.Math.Clamp(scroll + dy * 0.5, 0, maxScroll);
+      applyScroll();
+    });
+    panel.add(zone);
+
+    panel.add(this.add.text(0, 238, 'Wheel to scroll · click anywhere to close', { fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.gold }).setOrigin(0.5));
     this.scanPanel = panel; // reuse the modal-panel cleanup path in closeOverlay
   }
 
@@ -1060,7 +1121,8 @@ export class CombatScene extends Phaser.Scene {
     const snap = this.engine.snapshot();
     if (snap.phase !== 'player' || this.enemyPhaseActive || this.transformCutscene || this.qteActive) return;
     const canAct = !snap.actionUsed || snap.oneMore;
-    const activeSkills = player.skillsKnown.filter((id) => NAMED_SKILLS[id] && !NAMED_SKILLS[id].passive);
+    // Only equipped skills are listed — everything here is guaranteed usable.
+    const activeSkills = player.equippedSkills.filter((id) => NAMED_SKILLS[id] && !NAMED_SKILLS[id].passive);
 
     const menuItems: ChoiceMenuItem[] = activeSkills.map((id): ChoiceMenuItem => {
       const sk = NAMED_SKILLS[id];
@@ -1529,8 +1591,13 @@ export class CombatScene extends Phaser.Scene {
           if (e.lastHitType && RANGED_TYPES.has(e.lastHitType) && this.playerSprite) {
             this.fireTracer(this.playerSprite.x, this.playerSprite.y - 30, ed.container.x, ed.container.y, DAMAGE_TYPE_HEX[e.lastHitType] ?? '#c9a24b');
           }
+          // Colorblind aid: the damage element rides the number as a glyph,
+          // so hue is never the only channel carrying type information.
+          const glyph = e.lastHitType ? `${DAMAGE_TYPE_ABBREV[e.lastHitType]} ` : '';
           this.floatingText(ed.container.x, ed.container.y - 55, `-${dmg}`, isWk ? '#e9c876' : dmgColor, {
             size: isWk ? 26 : heavy ? 20 : 16,
+            prefix: glyph,
+            prefixColor: e.lastHitType ? (DAMAGE_TYPE_HEX[e.lastHitType] ?? PALETTE_HEX.bone) : undefined,
           });
           if (isWk && downed) {
             this.floatingText(ed.container.x, ed.container.y - 92, 'DOWN!', '#ff8a75', { size: 18 });
@@ -1939,7 +2006,7 @@ export class CombatScene extends Phaser.Scene {
     const label = rawLabel.toUpperCase();
     const cx = ENEMY_ROW_CENTER;
     const cy = this.enemyRowY();
-    if (label.includes('SUPERCONDUCT')) {
+    if (label.includes('BRITTLE FROST')) {
       // Chain lightning rakes across the frozen row.
       const g = this.add.graphics().setDepth(40);
       g.lineStyle(2.5, 0x9b59b6, 0.95);
@@ -2066,13 +2133,27 @@ export class CombatScene extends Phaser.Scene {
     this.tweens.add({ targets: g, alpha: 0, duration: 240, delay: 90, onComplete: () => g.destroy() });
   }
 
-  private floatingText(x: number, y: number, text: string, color: string, opts: { size?: number } = {}): void {
-    const t = this.add.text(x, y, text, {
-      fontFamily: FONT_MONO, fontSize: `${opts.size ?? 14}px`, color, fontStyle: 'bold',
-      stroke: '#0b0d10', strokeThickness: (opts.size ?? 14) >= 20 ? 5 : 3,
+  private floatingText(
+    x: number,
+    y: number,
+    text: string,
+    color: string,
+    opts: { size?: number; prefix?: string; prefixColor?: string } = {},
+  ): void {
+    const size = opts.size ?? 14;
+    const t = this.add.text(x, y, opts.prefix ? `${opts.prefix}${text}` : text, {
+      fontFamily: FONT_MONO, fontSize: `${size}px`, color, fontStyle: 'bold',
+      stroke: '#0b0d10', strokeThickness: size >= 20 ? 5 : 3,
     }).setOrigin(0.5);
-    const rise = (opts.size ?? 14) >= 26 ? 58 : 40;
-    if ((opts.size ?? 14) >= 26 && !reducedMotion()) {
+    const rise = size >= 26 ? 58 : 40;
+    // Colorblind aid: an element-tinted pip rides beside the number so hue
+    // is doubled by position + abbreviation, never color alone.
+    if (opts.prefix && opts.prefixColor) {
+      const px = x - t.width / 2 - size * 0.35;
+      const pip = this.add.circle(px, y, Math.max(3, size * 0.18), parseInt(String(opts.prefixColor).replace('#', ''), 16) || 0xffffff).setDepth(30);
+      this.tweens.add({ targets: pip, y: y - rise, alpha: 0, delay: 120, duration: 700, ease: 'Power2', onComplete: () => pip.destroy() });
+    }
+    if (size >= 26 && !reducedMotion()) {
       // Weakness numbers land with a punch: scale from big and settle.
       t.setScale(1.6);
       this.tweens.add({ targets: t, scale: 1, duration: 180, ease: 'Back.easeOut' });
@@ -2111,6 +2192,8 @@ export class CombatScene extends Phaser.Scene {
     this.overlayTexts = [];
     this.scanPanel?.destroy();
     this.scanPanel = undefined;
+    this.logModalMask?.destroy();
+    this.logModalMask = undefined;
     this.scanCycle = undefined;
     this.overlayFocus = -1;
     this.kbdModal = undefined;
@@ -2517,13 +2600,14 @@ export class CombatScene extends Phaser.Scene {
     this.setPlayerPose('victory');
 
     // Definitive edition: defeating the Final Reflection has no victory screen
-    // and no rewards. The power floods in — and you become the next Hollow.
+    // and no rewards — only the fate you have earned, whichever it is.
     if (isFinalFight) {
       player.flags.final_reflection_defeated = true;
       player.bossesDefeated.push('reflection');
       store.commitDiscoveries(this.engine.getDiscoveryGains() as Record<string, import('@data/types').EnemyAffinities>);
       store.persist();
-      this.time.delayedCall(1600, () => fadeToScene(this, 'Ending', { endingId: 'the_hollow' }));
+      const resolvedId = evaluateEnding(player).id;
+      this.time.delayedCall(1600, () => fadeToScene(this, 'Ending', { endingId: resolvedId }));
       return;
     }
 
@@ -2531,6 +2615,8 @@ export class CombatScene extends Phaser.Scene {
     player.enemiesKilled += this.engine.getEnemiesKilled();
     store.commitDiscoveries(this.engine.getDiscoveryGains() as Record<string, import('@data/types').EnemyAffinities>);
     store.commitBestiaryKills(this.engine.getKillsByDef());
+    // The gauge banks between fights — momentum carries down the corridor.
+    player.momentum = this.engine.getPlayerRewards().momentum;
     const xp = this.engine.getXpEarned();
     const levelsGained = store.addXp(xp);
 
@@ -2579,6 +2665,7 @@ export class CombatScene extends Phaser.Scene {
 
   private showLevelUp(newLevel: number, onDone: () => void) {
     this.closeOverlay();
+    audio.levelUp();
     this.overlayBg = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(35);
     const modal = showLevelUpModal(this, newLevel,
       () => {

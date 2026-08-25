@@ -3,6 +3,7 @@ import type { EnemyView } from '@systems/CombatEngine';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { spawnHitParticles } from '@/systems/particles';
 import { reducedMotion } from '@systems/motion';
+import { rebuildStatusChips } from './statusChips';
 
 export interface EnemyDisplay {
   container: Phaser.GameObjects.Container;
@@ -66,21 +67,8 @@ export function createEnemyDisplay(
     .setOrigin(0.5);
   chargePill.add([chargeBg, chargeText]);
   let chargeTween: Phaser.Tweens.Tween | undefined;
-  // Compact status chip row under the HP bar (DOWNED keeps its own pill).
-  const STATUS_ABBR: Record<string, string> = {
-    poison: 'PSN', burn: 'BRN', bleed: 'BLD', curse: 'CRS', frostbite: 'FRB', shock: 'SHK',
-    sleep: 'SLP', fear: 'FEAR', silence: 'SLNT', blind: 'BLND', confuse: 'CNF', stun: 'STN',
-    root: 'ROOT', slowed: 'SLOW', vulnerable: 'VULN', cursed: 'CRSD', pacified: 'PAC',
-    atk_up: 'ATK+', def_up: 'DEF+', spd_up: 'SPD+', regen: 'REG', barrier: 'BAR',
-    veil_step: 'VEIL', momentum_gain: 'MOM', atk_down: 'ATK-', def_down: 'DEF-', spd_down: 'SPD-',
-  };
-  const statusText = scene.add
-    .text(0, -79, '', {
-      fontFamily: FONT_MONO, fontSize: '9px', color: '#ff8a75', fontStyle: 'bold',
-      align: 'center', wordWrap: { width: 180 },
-    })
-    .setOrigin(0.5)
-    .setVisible(false);
+  // Tinted status chip row under the HP bar (DOWNED keeps its own pill).
+  const statusChipsRow = scene.add.container(0, -76).setVisible(false);
   const hpBg = scene.add.rectangle(-BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0x0b0d10, 0.45).setOrigin(0, 0.5);
   const hpFg = scene.add.rectangle(-BAR_W / 2, BAR_Y, BAR_W, BAR_H, 0xb10000).setOrigin(0, 0.5).setStrokeStyle(1, 0x0b0d10);
   // Persona-style target reticle: a gold ring centered on the enemy's body.
@@ -96,7 +84,7 @@ export function createEnemyDisplay(
     ticks.strokePath();
   }
   reticle.add([ringOuter, ringInner, ticks]);
-  container.add([shadow, token, hpBg, hpFg, downedPill, chargePill, statusText, reticle]);
+  container.add([shadow, token, hpBg, hpFg, downedPill, chargePill, statusChipsRow, reticle]);
   token.on('pointerdown', onClick);
   token.on('pointerover', () => { if (!selected) token.setScale(baseScaleX * 1.06, baseScaleY * 1.06); });
   token.on('pointerout', () => { if (!selected) token.setScale(baseScaleX, baseScaleY); });
@@ -225,14 +213,7 @@ export function createEnemyDisplay(
       container.setVisible(view.alive);
       downedPill.setVisible(view.alive && view.statuses.some((s) => s.id === 'downed'));
       // Status chips under the HP bar — afflictions and buffs always readable.
-      const chips = view.statuses
-        .filter((s) => s.id !== 'downed')
-        .map((s) => {
-          const abbr = STATUS_ABBR[s.id] ?? s.id.toUpperCase();
-          return s.turnsRemaining > 1 ? `${abbr}·${s.turnsRemaining}` : abbr;
-        });
-      statusText.setText(chips.join(' · '));
-      statusText.setVisible(view.alive && chips.length > 0);
+      rebuildStatusChips(scene, statusChipsRow, view.alive ? view.statuses : [], { scale: 0.9 });
       // Persistent charge telegraph: label + pulse while a charged move brews.
       const charging = view.alive && !!view.pendingChargeLabel;
       if (charging) {

@@ -174,6 +174,9 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
   // Enemy tokens — one per bestiary entry, colored by rough archetype
   const enemyColors: Record<string, number> = {
     echo_skeleton: 0x8a8a82,
+    keth_deserter: 0x8a6f52,
+    rust_picker: 0xa88a3e,
+    sable_scout: 0x70282a,
     venn_custodian: 0x6f7f8f,
     sable_zealot: 0x8c2f2f,
     ash_seer: 0x7b4b9e,
@@ -218,7 +221,7 @@ export function generatePlaceholderTextures(scene: Phaser.Scene): void {
     });
   }
 
-  // ---- Expedition-journal kit -------------------------------------------------
+  // ---- Delver's-journal kit ---------------------------------------------------
 
   // Aged parchment sheet — 9-slice friendly (deckled edges stay in the border).
   if (!scene.textures.exists('paper_panel')) {

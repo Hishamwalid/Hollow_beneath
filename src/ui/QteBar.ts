@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
+import { spawnHitParticles } from '@/systems/particles';
+import { reducedMotion } from '@systems/motion';
 
 /**
  * QTE (quick-time-event) timing bar for revamped timed offense.
@@ -61,9 +63,16 @@ export function createQteBar(
   const frame = scene.add.rectangle(0, 0, TRACK_W + 8, ZONE_W + 18, 0x000000).setOrigin(0.5).setStrokeStyle(2, 0xc9a24b);
   const good = scene.add.rectangle(0, 0, GOOD_W, ZONE_W, 0xc9a24b, 0.22).setOrigin(0.5);
   const perfect = scene.add.rectangle(0, 0, PERFECT_W, ZONE_W, 0xffd700, 0.45).setOrigin(0.5);
+  // Needle dressing: soft glow halo + motion streak trailing the sweep.
+  const streak = scene.add.rectangle(-24, 0, 46, NEEDLE_H - 8, 0xffffff, 0.14).setOrigin(0.5);
+  const glow = scene.add.circle(0, 0, 11, 0xffffff, 0.28).setOrigin(0.5);
   const needle = scene.add.rectangle(0, 0, NEEDLE_W, NEEDLE_H, 0xffffff).setOrigin(0.5);
 
-  container.add([bg, title, hint, frame, good, perfect, needle]);
+  container.add([bg, title, hint, frame, good, perfect, streak, glow, needle]);
+  if (!reducedMotion()) {
+    // Perfect zone breathes — the eye goes where the reward is.
+    scene.tweens.add({ targets: perfect, alpha: { from: 0.45, to: 0.7 }, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+  }
 
   const half = TRACK_W / 2;
   const pace = opts.slowed ? TRANSIT_MS / 2 : TRANSIT_MS;
@@ -94,6 +103,11 @@ export function createQteBar(
     const quality: QteQuality = err <= PERFECT_W / 2 ? 'perfect' : err <= GOOD_W / 2 ? 'good' : 'miss';
     resolved = true;
     cleanup(); // freeze the needle + drop inputs
+
+    // Verdict spark at the contact point — gold for perfect, green for good.
+    if (quality !== 'miss') {
+      spawnHitParticles(scene, cx + needle.x, cy, quality === 'perfect' ? 0xffd700 : 0x9be29b);
+    }
 
     // Make the result unmistakable: freeze the needle in its color and label it.
     needle.setFillStyle(quality === 'perfect' ? 0xffd700 : quality === 'good' ? 0x9be29b : 0xe1665c);
@@ -134,8 +148,9 @@ export function createQteBar(
   };
   window.addEventListener('keydown', keyHandler);
 
-  // Sweep needle left → right, yoyo forever.
+  // Sweep needle left → right, yoyo forever; glow/streak ride along.
   needle.x = -half;
+  let lastX = -half;
   tween = scene.tweens.add({
     targets: needle,
     x: half,
@@ -143,6 +158,12 @@ export function createQteBar(
     ease: 'Quad.easeInOut',
     yoyo: true,
     repeat: -1,
+    onUpdate: () => {
+      glow.x = needle.x;
+      streak.x = needle.x - Math.sign(needle.x - lastX || 1) * 26;
+      streak.alpha = 0.16;
+      lastX = needle.x;
+    },
   });
 
   // Never trap the player: auto-miss if they ignore the prompt.

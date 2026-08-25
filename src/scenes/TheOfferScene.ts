@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { createButton } from '@ui/Button';
-import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
+import { FONT_BODY, FONT_SERIF, PALETTE_HEX, proseScale } from '@ui/uiTheme';
 import { createTitle } from '@ui/headings';
 import { reducedMotion } from '@systems/motion';
 import { createVignette } from '@ui/vignettes';
@@ -31,19 +31,19 @@ export class TheOfferScene extends Phaser.Scene {
     this.add
       .text(cx, GAME_HEIGHT / 2 - 150,
         'Broken. Kneeling. The Reflection stands over you — wearing your face with an expression you have never seen in a mirror.\n\nIt does not strike the killing blow.',
-        { fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.bone, align: 'center', wordWrap: { width: 860 }, lineSpacing: 6 })
+        { fontFamily: FONT_BODY, fontSize: `${Math.round(17 * proseScale())}px`, color: PALETTE_HEX.bone, align: 'center', wordWrap: { width: 860 }, lineSpacing: 6 })
       .setOrigin(0.5).setDepth(6);
 
     this.add
       .text(cx, GAME_HEIGHT / 2 - 20,
         'THE FINAL REFLECTION: "You cannot win. But you do not have to become me."',
-        { fontFamily: FONT_SERIF, fontSize: '21px', color: PALETTE_HEX.gold, align: 'center', wordWrap: { width: 820 } })
+        { fontFamily: FONT_SERIF, fontSize: `${Math.round(21 * proseScale())}px`, color: PALETTE_HEX.gold, align: 'center', wordWrap: { width: 820 } })
       .setOrigin(0.5).setDepth(6);
 
     this.add
       .text(cx, GAME_HEIGHT / 2 + 44,
         'And beneath it — fainter, worn, hers:\n\nEVE: "Choose. Either way, I will not let go of you."',
-        { fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.oxide, fontStyle: 'italic', align: 'center', wordWrap: { width: 820 }, lineSpacing: 6 })
+        { fontFamily: FONT_BODY, fontSize: `${Math.round(15 * proseScale())}px`, color: PALETTE_HEX.oxide, fontStyle: 'italic', align: 'center', wordWrap: { width: 820 }, lineSpacing: 6 })
       .setOrigin(0.5).setDepth(6);
 
     // Choice A — accept the dark.
@@ -71,6 +71,20 @@ export class TheOfferScene extends Phaser.Scene {
       this.tweens.add({ targets: darkBtn.container, scale: { from: 1, to: 1.03 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       this.tweens.add({ targets: climbBtn.container, scale: { from: 1.03, to: 1 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
+
+    // Keyboard: ←/→ to shift weight between the two answers, Enter/Space to commit.
+    let focusDark = true;
+    const setFocus = () => {
+      darkBtn.setFocused(focusDark);
+      climbBtn.setFocused(!focusDark);
+    };
+    setFocus();
+    this.input.keyboard?.on('keydown-LEFT', () => { focusDark = true; setFocus(); });
+    this.input.keyboard?.on('keydown-A', () => { focusDark = true; setFocus(); });
+    this.input.keyboard?.on('keydown-RIGHT', () => { focusDark = false; setFocus(); });
+    this.input.keyboard?.on('keydown-D', () => { focusDark = false; setFocus(); });
+    this.input.keyboard?.on('keydown-ENTER', () => this.choose(focusDark ? 'dark' : 'climb'));
+    this.input.keyboard?.on('keydown-SPACE', () => this.choose(focusDark ? 'dark' : 'climb'));
 
     this.add
       .text(cx, GAME_HEIGHT - 60,

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import type { BoardNode, FactionState } from '@data/types';
+import { MAX_EQUIPPED_SKILLS } from '@data/types';
 import { CHECKPOINTS, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
 import { PINNED_STORY_EVENTS, STORY_EVENTS, STORY_BEAT_REMINDERS } from '@data/storyEvents';
 import { FIRST_NODE_TOOLTIPS } from '@data/tutorialText';
@@ -10,7 +11,7 @@ import { TOTAL_NODES, CHAPTERS, NODES_PER_CHAPTER, GAME_WIDTH, GAME_HEIGHT } fro
 import { pickEvent } from '@systems/EventEngine';
 import { resolveTrap } from '@systems/EventEngine';
 import { TRAPS } from '@data/events';
-import { sanitizeFightEnemies } from '@data/enemies';
+import { sanitizeFightEnemies, enemiesForChapter } from '@data/enemies';
 import { MINOR_LANDMARKS } from '@data/minorLandmarks';
 import { DISCOVERABLE_SKILLS, NAMED_SKILLS } from '@data/skills';
 import { shardsForNodeVisit, applyShardBonus } from '@systems/EchoShardSystem';
@@ -33,6 +34,8 @@ import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX } from '@ui/uiTheme';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { influenceStatus } from '@data/factions';
+import { ITEMS } from '@data/items';
+import { getLoreFragment } from '@data/loreFragments';
 import { STAGE1_NODES } from '@data/paths/stage1Nodes';
 import stage1AdjustData from '@data/paths/stage1_adjust.json';
 
@@ -144,7 +147,7 @@ const AMBUSH_TABLE: Record<string, string[]> = {
   sable: ['sable_zealot', 'sable_zealot'],
   archive: ['venn_custodian', 'archive_cipher_wraith'],
   covenant: ['ash_seer', 'ash_seer'],
-  caravan: ['dust_road_raider', 'dust_wight'],
+  caravan: ['dust_road_raider', 'dust_road_raider'],
 };
 
 function isAnyFactionHostile(faction: FactionState): boolean {
@@ -268,6 +271,12 @@ export class BoardScene extends Phaser.Scene {
   private playerToken?: Phaser.GameObjects.Image;
   private rollBtn?: ReturnType<typeof createButton>;
   private logLines: Phaser.GameObjects.Text[] = [];
+  private journalEntries: string[] = [];
+  private journalText?: Phaser.GameObjects.Text;
+  private journalMaskG?: Phaser.GameObjects.Graphics;
+  private journalScroll = 0;
+  /** Floating "you found something" cards — one at a time, newest wins. */
+  private rewardCard?: Phaser.GameObjects.Container;
   private chapterPips: Phaser.GameObjects.Rectangle[] = [];
   private playerPanel?: ReturnType<typeof createPlayerPanel>;
   private factionPanel?: ReturnType<typeof createFactionPanel>;
@@ -316,6 +325,7 @@ export class BoardScene extends Phaser.Scene {
     }
 
     loadStageAdjustments();
+    this.grantResonanceAbilities();
     if (EDIT_PATH_ENABLED) {
       this.setupPathEditOverlay();
       this.input.on('drag', (_p: unknown, gameObject: Phaser.GameObjects.GameObject, dragX: number, dragY: number) => {
@@ -430,6 +440,7 @@ export class BoardScene extends Phaser.Scene {
     const journal = createPanel(this, { x: COL2_X + COL_W / 2, y: LOG_PANEL_Y + LOG_PANEL_H / 2, width: COL_W, height: LOG_PANEL_H, variant: 'stone', title: 'Journal', depth: 1 });
     void journal;
     this.logLines = [];
+    this.buildJournalScroller();
     const startChapter = chapterForNode(Math.max(1, game.currentNodeIndex));
     this.pushLog(startChapter, game.currentNodeIndex, this.chapterFlavor(startChapter));
     this.updateLastBeatChip(player);
@@ -486,7 +497,7 @@ export class BoardScene extends Phaser.Scene {
   }
 
   private chapterFlavor(chapter: number): string {
-    if (chapter <= 0) return 'Keth-7 dig site, morning. The wind smells like stone and waiting.';
+    if (chapter <= 0) return 'The Delving of Keth, morning. The wind smells like stone and waiting.';
     return `Chapter ${chapter} / ${CHAPTERS} — ${CHAPTER_NAMES[chapter]}`;
   }
 
@@ -736,27 +747,53 @@ export class BoardScene extends Phaser.Scene {
   }
 
   /** Journal feed — newest entry on top with a node marker; older lines glide down. */
+  /** The Journal keeps the whole run's history — masked viewport + wheel scroll. */
+  private buildJournalScroller(): void {
+    const viewY = LOG_PANEL_Y + 30;
+    const viewH = Math.max(60, LOG_PANEL_H - 42);
+    this.journalText = this.add
+      .text(COL2_X + 14, viewY, '', {
+        fontFamily: FONT_BODY,
+        fontSize: '13px',
+        color: PALETTE_HEX.bone,
+        wordWrap: { width: COL_W - 34 },
+      })
+      .setDepth(6);
+    this.journalMaskG = this.make.graphics({ x: 0, y: 0 }, false);
+    this.journalMaskG.fillStyle(0xffffff);
+    this.journalMaskG.fillRect(COL2_X + 8, viewY - 4, COL_W - 16, viewH + 8);
+    this.journalText.mask = this.journalMaskG.createGeometryMask();
+    const zone = this.add
+      .rectangle(COL2_X + COL_W / 2, viewY + viewH / 2, COL_W - 12, viewH, 0x000000, 0.001)
+      .setInteractive()
+      .setDepth(5);
+    zone.on('wheel', (_p: unknown, _dx: number, dy: number) => {
+      const maxScroll = Math.max(0, (this.journalText?.height ?? 0) - viewH);
+      this.journalScroll = Phaser.Math.Clamp(this.journalScroll + dy * 0.55, 0, maxScroll);
+      this.applyJournalScroll(viewY);
+    });
+    // Fade rails hint at more history above/below.
+    this.add.rectangle(COL2_X + COL_W / 2, viewY - 2, COL_W - 20, 10, 0x0b0d10, 0.85).setDepth(6);
+    this.add.rectangle(COL2_X + COL_W / 2, viewY + viewH + 2, COL_W - 20, 10, 0x0b0d10, 0.85).setDepth(6);
+  }
+
+  private applyJournalScroll(viewY: number): void {
+    if (this.journalText) this.journalText.y = viewY - this.journalScroll;
+  }
+
   private pushLog(_chapter: number, nodeIndex: number, msg: string) {
     const entry = `N${nodeIndex} · ${msg}`;
-    // Move existing lines down (animated).
-    for (let i = this.logLines.length - 1; i >= 0; i--) {
-      const line = this.logLines[i];
-      const slot = i + 1;
-      if (slot >= 3) { line.destroy(); continue; }
-      this.tweens.add({ targets: line, y: line.y + (LOG_PANEL_H - 28) / 3, alpha: slot === 2 ? 0.65 : 0.4, duration: 180, ease: 'Sine.easeOut' });
-    }
-    const line = this.add.text(COL2_X + 14, LOG_PANEL_Y + 26, entry, {
-      fontFamily: FONT_BODY,
-      fontSize: '13px',
-      color: PALETTE_HEX.bone,
-      wordWrap: { width: COL_W - 28 },
-    }).setDepth(6).setAlpha(0);
-    this.tweens.add({ targets: line, alpha: 1, x: { from: COL2_X - 8 }, duration: 200, ease: 'Sine.easeOut' });
-    this.logLines.unshift(line);
-    if (this.logLines.length > 3) {
-      const dropped = this.logLines.pop();
-      dropped?.destroy();
-    }
+    this.journalEntries.unshift(entry);
+    if (this.journalEntries.length > 40) this.journalEntries.pop();
+    if (!this.journalText) return;
+    const viewY = LOG_PANEL_Y + 30;
+    const viewH = Math.max(60, LOG_PANEL_H - 42);
+    this.journalText.setText(this.journalEntries.join('\n'));
+    // Newest entry slides in at the top; history waits under the wheel.
+    const maxScroll = Math.max(0, this.journalText.height - viewH);
+    this.journalScroll = Phaser.Math.Clamp(this.journalScroll, 0, maxScroll);
+    this.applyJournalScroll(viewY);
+    this.tweens.add({ targets: this.journalText, alpha: { from: 0.4, to: 1 }, duration: 220 });
   }
 
   /**
@@ -1132,11 +1169,28 @@ export class BoardScene extends Phaser.Scene {
     }
 
     if (node.type === 'landmark') {
-      fadeToScene(this, 'Landmark', { bossId: node.subtype });
+      fadeToScene(this, 'Landmark', { bossId: node.subtype }, 'boss');
       return;
     }
     if (node.type === 'combat') {
-      fadeToScene(this, 'Combat', { mode: 'wild', enemyIds: [node.subtype], nodeIndex: node.index });
+      // Re-roll baked subtypes against live Resonance: resonance-gated enemies
+      // (Memory Wraith, The Unread) become reachable in normal play, and stale
+      // generation-time picks can never linger into a pool they left.
+      const legalPool = enemiesForChapter(node.chapter, player.resonance);
+      if (!legalPool.includes(node.subtype)) {
+        node.subtype = legalPool[Math.floor(Math.random() * legalPool.length)];
+      }
+      const enemyIds = [node.subtype];
+      // Deep strata travel in company: ch3+ fights sometimes bring a second body,
+      // which gives the AoE techniques and heavy-move caps their purpose.
+      if (node.chapter >= 3 && Math.random() < 0.35 && !PINNED_STORY_NODES.has(node.index)) {
+        const others = legalPool.filter((id) => id !== node.subtype);
+        if (others.length > 0) {
+          enemyIds.push(others[Math.floor(Math.random() * others.length)]);
+          this.log('Movement at the edge of the light — it is not alone.');
+        }
+      }
+      fadeToScene(this, 'Combat', { mode: 'wild', enemyIds, nodeIndex: node.index }, 'descend');
       return;
     }
     if (node.type === 'event') {
@@ -1232,6 +1286,29 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
+  /** Small parchment pop-card celebrating a find — rises, holds, fades. */
+  private showRewardCard(title: string, rows: string[]): void {
+    this.rewardCard?.destroy();
+    const cx = GAME_WIDTH / 2;
+    const w = 320;
+    const h = 44 + rows.length * 20 + 14;
+    const c = this.add.container(cx, 170).setDepth(90).setAlpha(0);
+    c.add(this.add.rectangle(0, 0, w, h, 0x14171b, 0.95).setStrokeStyle(1.5, 0xc9a24b));
+    c.add(this.add.text(0, -h / 2 + 18, title, {
+      fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold, fontStyle: 'bold',
+    }).setOrigin(0.5));
+    const body = rows.filter(Boolean).join('\n');
+    c.add(this.add.text(-w / 2 + 18, -h / 2 + 36, body, {
+      fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.bone, lineSpacing: 5,
+    }).setOrigin(0, 0));
+    this.tweens.add({ targets: c, y: 158, alpha: 1, duration: 260, ease: 'Sine.easeOut' });
+    this.time.delayedCall(1900, () => {
+      if (!c.active) return;
+      this.tweens.add({ targets: c, y: 146, alpha: 0, duration: 320, ease: 'Sine.easeIn', onComplete: () => c.destroy() });
+    });
+    this.rewardCard = c;
+  }
+
   private resolveDiscovery(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>, node: BoardNode) {
     // Capture points are handled separately in resolveNode (routed to a minor-landmark vignette).
     const LORE_POOL = [
@@ -1277,16 +1354,29 @@ export class BoardScene extends Phaser.Scene {
         player.inventory.push({ id: itemId, qty: 1 });
         xpStore.addXp(8);
         this.log(`Supplies, left behind in a hurry. +${gold} gold, an item, +8 XP.`);
+        this.showRewardCard('SUPPLIES, LEFT BEHIND', [
+          `+${gold} gold`,
+          ITEMS[itemId]?.name ?? 'Something useful',
+          '+8 XP',
+        ]);
         break;
       }
       case 'forgotten_relic': {
-        const pool = player.resonance >= 50 ? [...RELIC_POOL, 'unread_echo'] : RELIC_POOL;
+        // The Unread's shed echo belongs to the deep stacks — no surface finds.
+        const g = useGameStore.getState().game;
+        const relicChapter = g ? chapterForNode(Math.max(1, g.currentNodeIndex)) : 5;
+        const pool = player.resonance >= 50 && relicChapter >= 4 ? [...RELIC_POOL, 'unread_echo'] : RELIC_POOL;
         const gold = 3 + rollDie(6, Math.random);
         const itemId = pool[Math.floor(Math.random() * pool.length)];
         player.gold += gold;
         player.inventory.push({ id: itemId, qty: 1 });
         xpStore.addXp(10);
         this.log(`Something worth carrying, worked in by someone who isn't here anymore. +${gold} gold, an item, +10 XP.`);
+        this.showRewardCard('RELIC UNEARTHED', [
+          ITEMS[itemId]?.name ?? 'A thing out of time',
+          ITEMS[itemId]?.description ?? '',
+          `+${gold} gold · +10 XP`,
+        ]);
         break;
       }
       case 'lore_cache': {
@@ -1297,11 +1387,15 @@ export class BoardScene extends Phaser.Scene {
           player.loreFragments.push(id);
           player.echoShards += applyShardBonus(player, influenceStatus(player.faction.archive) === 'Devoted' ? 2 : 1);
           // The presence has opinions about what you carry.
-          const voiceLine = maybeVoiceLine('lore_found');
+          const voiceLine = maybeVoiceLine('lore_found', Math.random, undefined, player.story.eveVoiceHeard ?? 0);
           if (voiceLine) showWhisper(this, GAME_WIDTH / 2, 178, voiceLine, 460);
         }
         xpStore.addXp(8);
         this.log(`Something written, worth reading twice. +${gold} gold, a lore fragment, +8 XP.`);
+        this.showRewardCard('LORE RECOVERED', [
+          getLoreFragment(id)?.title ?? 'A fragment of the truth',
+          `+${gold} gold · +1 Echo Shard · +8 XP`,
+        ]);
         break;
       }
       case 'training_notes': {
@@ -1309,6 +1403,7 @@ export class BoardScene extends Phaser.Scene {
         player.skillsKnown.push(skillId);
         xpStore.addXp(12);
         this.log(`Training notes, thorough and half-legible. You learn something from them. +12 XP.`);
+        this.showRewardCard('TRAINING NOTES', [NAMED_SKILLS[skillId]?.name ?? skillId, '+12 XP']);
         break;
       }
       case 'hidden_stash': {
@@ -1316,6 +1411,7 @@ export class BoardScene extends Phaser.Scene {
         player.gold += gold;
         xpStore.addXp(10);
         this.log(`A stash, properly hidden this time. +${gold} gold, +10 XP.`);
+        this.showRewardCard('HIDDEN STASH', [`+${gold} gold`, '+10 XP']);
         break;
       }
       case 'quiet_moment': {
@@ -1449,10 +1545,34 @@ export class BoardScene extends Phaser.Scene {
     spawnHitParticles(this, pos.x, pos.y, 0xc9a24b);
   }
 
+  /** At Transcendent resonance, the Loom starts teaching instead of watching. */
+  private grantResonanceAbilities() {
+    const { player } = useGameStore.getState();
+    if (!player || player.resonance < 75) return;
+    const granted: string[] = [];
+    for (const id of ['loom_lance', 'echo_ward']) {
+      if (NAMED_SKILLS[id] && !player.skillsKnown.includes(id)) {
+        player.skillsKnown.push(id);
+        if (!player.equippedSkills.includes(id) && player.equippedSkills.length < MAX_EQUIPPED_SKILLS) {
+          player.equippedSkills.push(id);
+        }
+        granted.push(NAMED_SKILLS[id].name);
+      }
+    }
+    if (granted.length > 0) {
+      useGameStore.setState({ player: { ...player } });
+      useGameStore.getState().persist();
+      this.log(`TRANSCENDENT — the Loom stops watching and starts teaching: ${granted.join(', ')}.`);
+      audio.resonanceChime();
+      this.playerPanel?.update(player);
+    }
+  }
+
   private afterInlineResolution() {
     const store = useGameStore.getState();
     const { player, game } = store;
     if (!player || !game) return;
+    this.grantResonanceAbilities();
     store.persist();
     if (CHECKPOINTS.includes(game.currentNodeIndex)) {
       audio.checkpoint();
