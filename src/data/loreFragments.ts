@@ -48,7 +48,7 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     id: 'chorus_the_choirs_tragedy_scholarly',
     title: "The Choir's Tragedy (Annotated)",
     category: 'faction',
-    text: "Archive marginalia, cross-referenced three times: 'Subjects 1-40 entered the Singing Library seeking translation of Venn liturgical harmonics. Merge event occurred at hour 6. Recommend future field teams enter no more than 2 at a time. Resonance appears to treat a choir as a single louder mind, not forty separate ones. This should have been obvious sooner.'",
+    text: "Archive marginalia, cross-referenced three times: 'Forty souls entered the Singing Library seeking translation of Venn liturgical harmonics. The merging came upon the sixth hour. Let no company send more than two down at a time. Resonance appears to treat a choir as a single louder mind, not forty separate ones. This should have been obvious sooner.'",
   },
   chorus_the_choirs_tragedy: {
     id: 'chorus_the_choirs_tragedy',
@@ -87,7 +87,7 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     id: 'mira_tols_index',
     title: "Mira Tol's Index",
     category: 'faction',
-    text: 'Every Archive ledger Mira Tol keeps ends with the same footer, hand-inked: "Filed, not forgiven. Understood, not excused." She has catalogued three separate accounts of her own death from timelines that never happened. She keeps them in the same drawer as her keys, so she remembers to check both every morning.',
+    text: 'Every Archive ledger Mira Tol keeps ends with the same footer, hand-inked: "Filed, not forgiven. Understood, not excused." She has catalogued three separate accounts of her own death from lives that never happened. She keeps them in the same drawer as her keys, so she remembers to check both every morning.',
   },
   the_unmarked_names: {
     id: 'the_unmarked_names',
@@ -135,7 +135,7 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     id: 'what_the_vault_showed',
     title: 'What the Vault Showed',
     category: 'personal',
-    text: 'You went into Keth-7 with a team of eleven. You do not let yourself finish that sentence very often. The vault did not hurt anyone. It only showed each of them, perfectly, precisely, a version of understanding they could not survive wanting as badly as they suddenly did. You are still not sure why it stopped at ten.',
+    text: 'You went into the Delving of Keth with a company of eleven. You do not let yourself finish that sentence very often. The vault did not hurt anyone. It only showed each of them, perfectly, precisely, a version of understanding they could not survive wanting as badly as they suddenly did. You are still not sure why it stopped at ten.',
   },
   the_dominion_soldiers_oath: {
     id: 'the_dominion_soldiers_oath',
@@ -180,7 +180,7 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     id: 'the_ninth_marker',
     title: 'The Ninth Marker',
     category: 'loom',
-    text: 'This close to the end, the waystone carvings stop describing the road and start describing the traveler. Yours is not carved yet. There is, unmistakably, room.',
+    text: 'The farther down it goes, the more the waystone carvings stop describing the road and start describing the traveler. Yours is not carved yet. There is, unmistakably, room.',
   },
   the_eleventh_marker: {
     id: 'the_eleventh_marker',
@@ -243,23 +243,23 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     id: 'a_childs_height_marks',
     title: "A Child's Height Marks",
     category: 'venn',
-    text: 'Pencil lines on a doorframe, a name and a date beside each, climbing steadily upward for years — and then one more line, well above where a child\'s hand could have reached, in the same handwriting, dated the same day as the last.',
+    text: 'Charcoal lines on a doorframe, a name and a date beside each, climbing steadily upward for years — and then one more line, well above where a child\'s hand could have reached, in the same handwriting, dated the same day as the last.',
   },
   the_last_entry: {
     id: 'the_last_entry',
     title: 'The Last Entry',
     category: 'venn',
-    text: 'A logbook, meticulous for four hundred pages, then one final line in handwriting nothing like the rest: "It just wanted to talk. I don\'t know why we all assumed it would want to hurt us first."',
+    text: 'A ledger, meticulous for four hundred pages, then one final line in handwriting nothing like the rest: "It just wanted to talk. I don\'t know why we all assumed it would want to hurt us first."',
   },
   the_recipe_that_isnt_food: {
     id: 'the_recipe_that_isnt_food',
     title: "A Recipe That Isn't Food",
     category: 'venn',
-    text: "Ingredients, measurements, a cooking time — formatted exactly like a recipe, except the ingredients are concepts, and the final instruction reads: 'serve to the part of yourself that is still afraid, until it agrees to stop.'",
+    text: "Ingredients, measurements, a cooking time — set out exactly like a recipe, except the ingredients are concepts, and the final instruction reads: 'serve to the part of yourself that is still afraid, until it agrees to stop.'",
   },
   the_map_that_updates_itself: {
     id: 'the_map_that_updates_itself',
-    title: 'The Map That Updates Itself',
+    title: 'The Map That Redraws Itself',
     category: 'loom',
     text: 'A hand-drawn map of this exact stretch of corridor — accurate down to the crack in the floor beneath your boots, though no one has been here to draw it since you arrived. The ink of the newest line is still, impossibly, faintly wet.',
   },
@@ -306,7 +306,7 @@ export const LORE_FRAGMENTS: Record<string, LoreFragmentDef> = {
     id: 'the_grief_chorus',
     title: 'The Grief Chorus',
     category: 'faction',
-    text: '"The Loom took our teacher on the third day of the seventh month. She walked into a resonance field singing, and the field sang back, and neither stopped until there was no difference between them. We do not mourn her death. We mourn that she stopped answering." — From the Ash Covenant Book of Losses, fourth edition.',
+    text: '"The Loom took our teacher on the third day of the seventh month. She walked into the resonance singing, and it sang back, and neither stopped until there was no difference between them. We do not mourn her death. We mourn that she stopped answering." — From the Ash Covenant Book of Losses.',
   },
   the_whispered_name: {
     id: 'the_whispered_name',

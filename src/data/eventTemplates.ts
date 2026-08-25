@@ -57,7 +57,7 @@ const TEMPLATES: TemplateDef[] = [
     entries: [
       { id: 'faction_encounter_0', text: 'A {faction} scout blocks the path. They recognize your tablet. They do not recognize your right to carry it.' },
       { id: 'faction_encounter_1', text: '{faction} symbols mark this door. It opens easily. Too easily.' },
-      { id: 'faction_encounter_2', text: 'The air smells of {faction} incense. Someone was here recently. Someone is watching.' },
+      { id: 'faction_encounter_2', text: 'The air carries {faction} sign-cuts in fresh chalk. Someone was here recently. Someone is watching.' },
     ],
   },
   {
@@ -65,7 +65,7 @@ const TEMPLATES: TemplateDef[] = [
     title: 'Natural Wonder',
     weight: 2,
     entries: [
-      { id: 'natural_wonder_0', text: 'A shaft of light pierces the darkness. Dust motes dance. For a moment, you forget where you are.' },
+      { id: 'natural_wonder_0', text: 'Light with no source you can find falls across the stone. Dust motes dance. For a moment, you forget where you are.' },
       { id: 'natural_wonder_1', text: 'Fungus that glows with soft blue light carpets the walls. It pulses in rhythm with your heartbeat.' },
       { id: 'natural_wonder_2', text: 'Underground river. The water is perfectly clear. At the bottom, shapes that might be ruins or might be bones.' },
     ],

@@ -10,7 +10,7 @@ One exclusive pool per chapter; scripted fights are scrubbed to the current chap
 
 | Ch | Pages | Enemies |
 |----|-------|---------|
-| 1 | 1–3 | Dust Wight, Echo-bleached Skeleton |
+| 1 | 1–3 | Keth Deserter, Rust-Picker, Sable Scout *(human leftovers of the dig — Dust Wight/Echo Skeleton are retired from spawning)* |
 | 2 | 4–7 | Venn Custodian, Sable Zealot, Ash Covenant Seer |
 | 3 | 8–11 | Dust-Road Raider, Archive Cipher-Wraith (+ Memory Wraith at Resonance ≥25) |
 | 4 | 12–15 | Sable Inquisitor, Ash Covenant Mutant, Dominion Echo-Soldier |
@@ -20,14 +20,17 @@ One exclusive pool per chapter; scripted fights are scrubbed to the current chap
 
 ---
 
-## 2. Standard Enemies (12)
+## 2. Standard Enemies (13)
 
 ### Chapter 1
 
 | Enemy | Lv | HP | Attacks with | Known affinities | Moves |
 |-------|----|----|--------------|------------------|-------|
-| **Dust Wight** — *a desert-dusted remnant wrapped in funerary linen* | 2 | 45 | Slash | wk slash · str pierce · null blunt · rep flame | Dust Slab (slash); Sand Armor (+20% DEF, 2 turns) |
-| **Echo-bleached Skeleton** — *bones that remember standing, if nothing else* | 2 | 40 | Slash | wk blunt · wk flame · str pierce | Bone Cleave (high-crit slash); Rattle (low blunt + Fear chance) |
+| **Keth Deserter** — *a broken survivor of Anya Korr's company, all nerves and borrowed gear* | 2 | 55 | Pierce | str slash · wk blunt · null sacred | Desperate Jab (pierce); Wild Swing (high-crit slash) |
+| **Rust-Picker** — *a scavenger stripping the abandoned camp for anything that rings* | 2 | 48 | Slash | str slash · wk pierce · wk flame | Hook Blade (slash); Thrown Cleat (blunt) |
+| **Sable Scout** — *the Order's advance watcher on the site, censer smoking under a desert scarf* | 3 | 60 | Blunt | wk blunt · rep flame · str shock | Sling Stone (blunt); Censer Ash (flame + Burn chance) |
+
+*(Retired, no longer spawning but kept defined for lore/tests: Dust Wight, Echo-bleached Skeleton.)*
 
 ### Chapter 2
 
@@ -35,13 +38,13 @@ One exclusive pool per chapter; scripted fights are scrubbed to the current chap
 |-------|----|----|--------------|------------------|-------|
 | **Venn Custodian** — *an Archive golem, still shelving books no one wrote* | 5 | 110 | Blunt | wk frost · str slash/pierce/blunt · drn shock | Archive Bludgeon; Chilling Touch (Chilled); Barrier (self/ally shield) |
 | **Sable Zealot** — *ash-marked, certain, and not entirely wrong* | 5 | 85 | Slash | wk flame · wk blunt · rep sacred | Frenzied Slash (two hits, costs 10% own HP); Reckless Flail (heavy blunt, low accuracy) |
-| **Ash Covenant Seer** — *crystalline growths refract your face wrong* | 6 | 100 | Shock | wk shock · wk pierce · null flame | Spark Arc (shock; Superconducts Chilled → Stun); Siphon (steals 5 MP) |
+| **Ash Covenant Seer** — *crystalline growths refract your face wrong* | 6 | 100 | Shock | wk shock · wk pierce · null flame | Spark Arc (shock; Brittle Frosts Chilled → Stun); Siphon (steals 5 MP) |
 
 ### Chapter 3
 
 | Enemy | Lv | HP | Attacks with | Known affinities | Moves |
 |-------|----|----|--------------|------------------|-------|
-| **Dust-Road Raider** — *human combatant in layered desert fabric; answers to no faction* | 8 | 150 | Pierce | wk pierce · wk flame · str blunt | Quick Stride (fast pierce); Pocket Sand (−20% Accuracy, 2 turns) |
+| **Dust-Road Raider** — *human combatant in layered desert fabric; deniable toll-men the Caravan pretends not to know, following the descent down because dead delvers carry maps* | 8 | 150 | Pierce | wk pierce · wk flame · str blunt | Quick Stride (fast pierce); Pocket Sand (−30% Accuracy, 2 turns) |
 | **Archive Cipher-Wraith** — *a spectral text that reads you while you fail to read it* | 8 | 140 | Shadow | wk sacred · null slash · drn shadow | Erase Memory (shadow + drains 8 MP); Cipher Barrier (nullifies next skill used on it) |
 
 ### Chapter 4
@@ -49,8 +52,8 @@ One exclusive pool per chapter; scripted fights are scrubbed to the current chap
 | Enemy | Lv | HP | Attacks with | Known affinities | Moves |
 |-------|----|----|--------------|------------------|-------|
 | **Sable Inquisitor** — *masked elite, flame motifs worked into heavier armor* | 12 | 230 | Pierce | wk shadow · wk slash · null sacred · str frost | Judgment Pierce (heavy pierce, ignores 30% DEF); Interdict (heal block, 2 turns) |
-| **Ash Covenant Mutant** — *further along the translation than anyone should be* | 12 | 250 | Blunt | wk frost · wk pierce · drn flame · null shock | Mutated Slam (25% crit); Acid Spit (−40% DEF, 2 turns) |
-| **Dominion Echo-Soldier** — *ancient armored construct; spear and shield, weathered metal* | 12 | 240 | Slash | wk sacred · wk blunt · rep slash · str pierce | Spear Thrust; Shield Wall (group DEF up); Counter Stance (reflects attacks, 1 turn) |
+| **Ash Covenant Mutant** — *further along the translation than anyone should be* | 12 | 250 | Blunt | wk frost · wk pierce · drn flame · null shock | Mutated Slam (25% crit); Acid Spit (−50% DEF, 2 turns) |
+| **Dominion Echo-Soldier** — *ancient armored construct; spear and shield, weathered metal* | 12 | 240 | Pierce | wk sacred · wk blunt · rep slash · str pierce | Spear Thrust; Shield Wall (group DEF up); Counter Stance (reflects attacks, 1 turn) |
 
 ### Resonance-gated horrors
 

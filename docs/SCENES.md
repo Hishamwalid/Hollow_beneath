@@ -30,9 +30,9 @@
 ### Scene 1.1 — The Descent
 **Node 1 · `prologue_descent` (cutscene)**
 
-Rope creaks. Three days down a collapsed sinkhole, past rusted pitons, into corridors ribbed with bone-white masonry.
+Rope creaks. Three days down a collapsed sinkhole, past rusted iron pegs, into corridors ribbed with bone-white masonry.
 
-- The Keth-7 survey went silent here — leader, geologist, supplies, gone into the gold light.
+- The Delving of Keth went silent here — leader, stone-reader, supplies, gone into the gold light.
 - The walls read like a question.
 
 Choices: **Walk toward the gold light** / **Say something to the dark** *(+2 Resonance; the echo comes back half-second late)*.
@@ -40,7 +40,7 @@ Choices: **Walk toward the gold light** / **Say something to the dark** *(+2 Res
 ### Scene 1.2 — The First Voice
 **Node 8 · `eves_first_voice` (staged cutscene, +1 eveVoiceHeard)**
 
-An old expedition camp. Broken equipment. Dried blood. A journal lies open on a crate — a sketch of a door, drawn until the paper wore through.
+An old company camp. Broken equipment. Dried blood. A journal lies open on a crate — a sketch of a door, drawn until the paper wore through.
 
 Stage 2 — **THE VOICE:** *"You shouldn't have come here."* Close. Closer than a voice has any right to be — and familiar in a way you cannot place.
 
@@ -52,9 +52,9 @@ Final beat: the camp is empty; the voice came from everywhere and nowhere. → *
 ### Scene 1.3 — First Blood
 **Node 15 · `first_blood` (scripted combat)**
 
-Pale sand. A DUST WIGHT rises — it does not attack until looked at too long.
+Pale sand. A RUST-PICKER rises from behind a wind-flattened tent — hook-blade low, counting what you carry.
 
-Afterward it crumbles; beneath it: a Sable ash-mark, half-burned, and a word scratched into the sand that the wind is already taking apart.
+Afterward he does not get up. Beside his hand: a Sable ash-mark, half-burned, and a word scratched into the sand that the wind is already taking apart.
 
 ### Scene 1.T — Threshold: The Third Marker
 **Node 30 · minor landmark**
@@ -90,7 +90,7 @@ Aftermath — silver flaking like ash:
 
 A Sable shelter. An old man wrapped in blankets — clear eyes, empty mind. He is Hollow.
 
-- **HOLLOWED MAN:** Are you with the expedition? No. Of course not. You're one of the ones who keeps walking.
+- **HOLLOWED MAN:** Are you with the company? No. Of course not. You're one of the ones who keeps walking.
 - **PLAYER:** Who did you come down here for?
 - **HOLLOWED MAN:** A woman. She told me to go home. She said the Deep wasn't what I thought. She said the next one would come eventually. And that I should tell them—
 - *(the sentence dies in his hand)*
@@ -111,7 +111,7 @@ The Resonant Hall. Books whose ink has not dried in five millennia. The pages ar
 
 The Dark Vault — a forward chapel of the Sable Order. Incense and ash.
 
-- **PATRIARCH OREN CASS:** Keth-7. The expedition that lost its leader, its geologist, and its way. Yet you persist.
+- **PATRIARCH OREN CASS:** The Delving of Keth. The company that lost its leader, its stone-reader, and its way. Yet you persist.
 - **PLAYER:** I'm looking for someone who came down before me.
 - **CASS** *(nods slowly)***:** Then you have been hearing her.
 - **PLAYER:** Hearing her?
@@ -149,7 +149,7 @@ Choices: **Keep the memory, even if it is false** / **Give the memory back** (-2
 ### Scene 3.2 — The Memory Room
 **Node 92 · `the_memory_room` (staged cutscene, +1 eveVoiceHeard)**
 
-A chamber that should not exist: childhood bed, old toys, a reading chair worn smooth by one person in the same spot. On the desk — family photographs, face-down. Every one of them.
+A chamber that should not exist: childhood bed, old toys, a reading chair worn smooth by one person in the same spot. On the desk — family portraits, face-down. Every one of them.
 
 Turn them over: the same face scratched out of every single one — carefully, deliberately.
 
@@ -230,9 +230,9 @@ Or say nothing and keep walking — the silence weighs more than any question wo
 
 Title: **THE VOICE, GIVEN A FACE.**
 
-The Covenant Spire — a temple built toward rather than away. At its heart stands a woman: translucent, a projection, a fragment of the Loom. Her expression is real.
+The Covenant Spire — a temple built toward rather than away. At its heart stands a woman: translucent, an apparition, a fragment of the Loom. Her expression is real.
 
-She speaks, and the floor drops out of you. That voice — the empty camp, the scratched photographs, the breathing tunnels. Everywhere and nowhere, the whole way down.
+She speaks, and the floor drops out of you. That voice — the empty camp, the scratched portraits, the breathing tunnels. Everywhere and nowhere, the whole way down.
 
 - **PLAYER:** It was you. Every time. It was always you.
 - **EVE:** Every time. From the first camp onward. I couldn't come closer than this — not without becoming part of what holds you here.

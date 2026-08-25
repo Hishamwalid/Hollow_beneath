@@ -1,6 +1,6 @@
 # THE HOLLOW BENEATH — Main Story
 
-*Definitive Edition. Endings: 3, all tragic. Companions: none. The cycle is unbreakable.*
+*Definitive Edition. Three witnessed fates — plus THE SILENCE, which only a New Game+ that has silenced the Loom can reach. Companions: none. The cycle is unbreakable.*
 
 ---
 
@@ -17,7 +17,7 @@ The journal's final entry, in shaky, almost childlike handwriting:
 
 Eve was a Seeker. She entered the Beneath, and she came back — but not as the same person. When the PLAYER was eleven, she became a **Hollow**. When they were twenty-one, she died. She forgot almost everything. Eventually, she forgot how to breathe.
 
-The PLAYER is **not** a Seeker. They never dreamed the dream. They have no promise of power. They pick up the journal and a photograph of a young woman at the mouth of a cave, smiling and alive, and walk toward a sinkhole in the earth for one reason:
+The PLAYER is **not** a Seeker. They never dreamed the dream. They have no promise of power. They pick up the journal and a painted portrait of a young woman at the mouth of a cave, smiling and alive, and walk toward a sinkhole in the earth for one reason:
 
 **You want to understand what happened to your mother.**
 
@@ -29,7 +29,7 @@ The light from above shrinks to a coin, then a needle, then nothing.
 
 - **The Beneath / The Hollow** — not a dungeon; a dead city preserved in cold stone and warm bone. Its architecture is syntax: corridors form sentences, rooms are paragraphs, and the deeper you go the more it reads like a question you are walking toward the answer of.
 - **The Venn** — the civilization that built it. Five thousand years ago they walked into the Loom deliberately, systematically. They set down their cups, left their bread uneaten, and did not return. *"We go not because we are called, but because we have finished the question."*
-- **The Loom** — what waits at the bottom. Not a god, not a machine: something between a mirror and a choir. It reflects what you bring it and harmonizes with what it recognizes. It does not destroy identity — it *optimizes* it.
+- **The Loom** — what waits at the bottom. Not a god, not a machine: something between a mirror and a choir. It reflects what you bring it and harmonizes with what it recognizes. It does not destroy identity — it *perfects* it.
 - **Seekers & the Cycle** — Seekers descend chasing the dream of power. Whoever reaches the end and accepts it becomes part of the Hollow. The Hollow does not just wait — it *maintains*: it keeps the door open and the promise alive for the next one.
 
 The descent is **200 nodes across 5 chapters**, each chapter its own full-screen map, ending in a Landmark guardian.
@@ -47,7 +47,7 @@ The descent is **200 nodes across 5 chapters**, each chapter its own full-screen
 ## 3. The Journey
 
 ### Chapter 1 — The Archive Opens
-Three days into the Keth-7 survey: a cave-in at the Chalk Doorway cost the expedition half its supplies and its geologist; leader Anya Korr extended the timeline by a week, then went silent. Alone, the child of Eve descends. At an abandoned camp, Eve's voice speaks from everywhere and nowhere — *"Keep walking."* The first Dust Wight rises; beneath its dust, a half-burned ash-mark and a name scratched in sand: **EVE**.
+Three days into the Delving of Keth: a cave-in at the Chalk Doorway cost the company half its supplies and its stone-reader; leader Anya Korr sent word up the resonance-link that she was extending the delve by a week, then went silent. Alone, the child of Eve descends. At an abandoned camp, Eve's voice speaks from everywhere and nowhere — *"Keep walking."* A Rust-Picker rises from behind a flattened tent, hook-blade low; he does not get up again, and beside his hand lie a half-burned ash-mark and a word scratched in sand that the wind is already taking apart.
 
 At the Archive Threshold stands the **Argent Sentinel**, a silver guardian that studies rather than strikes. When asked why it guards the Door, and told about a mother — it tilts its head, almost recognizing: *"...Then you are not here for the Door. You are here for the threshold."* Defeated, silver flaking like ash, it confesses: *"You are not the one I remember... She asked the same question."*
 
@@ -55,7 +55,7 @@ At the Archive Threshold stands the **Argent Sentinel**, a silver guardian that 
 In a Sable shelter sits the **Hollowed Man** — clear eyes, empty mind. Eve once told him to go home, and that *"her child would come eventually"* — but the message he was meant to deliver slipped away with everything else. In the Resonant Hall, an Ash Covenant Seer calls the PLAYER a carrier of *"the echo of the woman who said no."* At the Dark Vault, **Patriarch Oren Cass** knows her at once: *"Everyone who has gone deep enough knows Eve... She tried to save us. From ourselves."* Dying, smiling, he passes on the same warning: *"She is still down there. Waiting. Not for rescue. For the next one."*
 
 ### Chapter 3 — The Singing Deep
-Reality frays. Inscriptions teach false memories — *"I remember Mom teaching me this. Wait. Did she?"* In the Memory Room, a childhood home rebuilt in stone, every photograph bears Eve's carefully scratched-out face and a plea: *"Don't look. Because you'll remember... that I wasn't always your mother."* At the Loom Gate stand forty merged scholars speaking as one chord. They remember Eve too: *"She almost joined us. She chose solitude instead."* As the Chorus falls apart, one figure remains human — an old woman mouthing three silent words: **"She loved you."**
+Reality frays. Inscriptions teach false memories — *"I remember Mom teaching me this. Wait. Did she?"* In the Memory Room, a childhood home rebuilt in stone, every portrait bears Eve's carefully scratched-out face and a plea: *"Don't look. Because you'll remember... that I wasn't always your mother."* At the Loom Gate stand forty merged scholars speaking as one chord. They remember Eve too: *"She almost joined us. She chose solitude instead."* As the Chorus falls apart, one figure remains human — an old woman mouthing three silent words: **"She loved you."**
 
 ### Chapter 4 — The Reach of Dust
 The Venn Truth, carved intact in crystal: they left because they had *finished the question.* In the Archive Depths, the PLAYER finds Eve's **first journal**, written before the forgetting:
@@ -72,9 +72,9 @@ At the Final Chamber stands the **Final Reflection** — the PLAYER, but finishe
 
 ---
 
-## 4. The Three Endings
+## 4. The Endings
 
-There is no victory. There is only the cycle.
+There is no victory. There is only the cycle — and, for those who have already heard the Loom stop once, one way to unask it entirely (**THE SILENCE**: New Game+ · `silence_path_unlocked` + `loom_silenced` · Resonance ≥75).
 
 ### Ending 1 — THE HOLLOW
 *Trigger: reduce the Final Reflection to 0 HP.*
@@ -86,7 +86,7 @@ Cut to black.
 
 ### Ending 2 — LOST IN THE DARK
 *Trigger: fall to the Final Reflection → choose "Accept the dark."*
-*"You cannot win. But you do not have to become me."* The PLAYER lets go and sinks into stone. Time passes, or doesn't. Much later, an expedition finds a figure in the Warrens — dust-caked, wrapped in funerary linen, attacking nothing until looked at too long. A Dust Wight now. It doesn't remember its name. It doesn't remember Eve. Forgotten. Eternal. Empty.
+*"You cannot win. But you do not have to become me."* The PLAYER lets go and sinks into stone. Time passes, or doesn't. Much later, a delving party finds a figure in the Warrens — dust-caked, wrapped in funerary linen, attacking nothing until looked at too long. A Dust Wight now. It doesn't remember its name. It doesn't remember Eve. Forgotten. Eternal. Empty.
 
 ### Ending 3 — THE RETURN
 *Trigger: fall to the Final Reflection → choose "Climb to the surface."*

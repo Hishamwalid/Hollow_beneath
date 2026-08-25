@@ -16,7 +16,7 @@ export const INTRO_SCREEN: TutorialScreen = {
   icons: ['tok_player'],
 };
 
-/** Optional reference pages — Menu → "How to Play" (the Field Manual). */
+/** Optional reference pages — Menu → "How to Play" (the Delver's Primer). */
 export const TUTORIAL_SCREENS: TutorialScreen[] = [
   {
     id: 'on_the_road',
@@ -34,7 +34,7 @@ export const TUTORIAL_SCREENS: TutorialScreen[] = [
     id: 'scan_and_reactions',
     title: 'Scan & Reactions',
     icons: ['node_combat', 'node_discovery'],
-    body: 'Every enemy starts with eight UNKNOWN affinity slots. Hit a foe with a damage type to test that slot forever:\n\nwk = weakness (+50% dmg, Downed, grants 1-More) · str = resist\nnull = immune · rep = reflects back at you · drn = heals them\n\nSCAN is free, anytime. Discoveries persist across every run in your Bestiary.\n\nElements interact: Shock a CHILLED target → Superconduct (stun). Burn a Shocked one → Overcharge. Hit a Sacred-marked foe with Shadow → Eclipse (strips buffs, double damage).',
+    body: 'Every enemy starts with eight UNKNOWN affinity slots. Hit a foe with a damage type to test that slot forever:\n\nwk = weakness (+50% dmg, Downed, grants 1-More) · str = resist\nnull = immune · rep = reflects back at you · drn = heals them\n\nSCAN is free, anytime. Discoveries persist across every run in your Bestiary.\n\nElements interact: Shock a CHILLED target → Brittle Frost (stun). Burn a Shocked one → Overcharge. Hit a Sacred-marked foe with Shadow → Eclipse (strips buffs, double damage).',
   },
   {
     id: 'loadout_and_goal',

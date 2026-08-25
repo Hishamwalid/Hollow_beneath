@@ -65,7 +65,7 @@ From the implementation guide (Part VII) plus gaps opened by the narrative revam
 | `spr_final_reflection.png` (+ idle/attack/hit/victory/defeat) | Final boss sprite | PLAYER's model with hollow eyes, translucent skin | P0 |
 | Boss sprites — `patriarch`, `chorus`, `fossil_king` | Landmark encounters ch 2–4 | Match Sentinel set depth (idle/attack/hit/face/defeat minimum) | P1 |
 | Enemy sets — `venn_custodian`, `sable_zealot`, `ash_seer`, `dust_road_raider`, `archive_cipher_wraith`, `memory_wraith`, `sable_inquisitor`, `ash_mutant`, `echo_soldier`, `the_unread`, 4 Echoes | Ch 2–5 rosters | idle/attack/hit/face each | P1 |
-| `eve_portrait.png` | Node 185 reveal / memory-room flash | Young Eve, expedition gear, holding a journal — used translucent/faded | P1 |
+| `eve_portrait.png` | Node 185 reveal / memory-room flash | Young Eve in delver's gear, holding a journal — used translucent/faded | P1 |
 | Combat backgrounds ch 2–5 (`bg_combat_ch2…ch5`) | Combat scenes past chapter 1 | Faith-warrens stone, singing-deep blue, imperial basalt, silver gallery | P2 |
 | Board map touch-ups (`map2–map5` node-path pass) | Hand-authored node positions per chapter (only ch 1 has a clicked path) | Dev tool exists: `?editpath=1` | P2 |
 

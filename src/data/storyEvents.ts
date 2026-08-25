@@ -28,7 +28,7 @@ export const PINNED_STORY_EVENTS: Record<number, string> = {
  * of the descent survives the long stretches between story nodes.
  */
 export const STORY_BEAT_REMINDERS: Record<string, string> = {
-  prologue_descent: 'The whole dig site points down.',
+  prologue_descent: 'The whole delving points down.',
   eves_first_voice: '"Keep walking."',
   first_blood: 'A name in the sand, almost legible.',
   the_hollowed_man: '"She said the next one would come."',
@@ -43,23 +43,23 @@ export const STORY_BEAT_REMINDERS: Record<string, string> = {
 
 export const STORY_EVENTS: Record<string, EventDef> = {
   // ---- SCENE 1.1 — THE DESCENT (Node 1) ------------------------------------
-  // Canon: the journey begins ABOVE GROUND, at the abandoned dig site.
+  // Canon: the journey begins ABOVE GROUND, at the abandoned delving.
   // The Beneath stays sealed until the Sentinel falls at node 40.
   prologue_descent: {
     id: 'prologue_descent',
     title: 'The Descent',
     chapterRange: [1, 1],
     flavorText: [
-      'The Keth-7 dig site. Survey flags snap in a dry wind that nobody else is left to feel. Tents stand open. Meals half-eaten. Radios hiss static at an empty sky.',
+      'The Delving of Keth. Marker flags snap in a dry wind that nobody else is left to feel. Tents stand open. Meals half-eaten. Resonance-crystals hiss dead static at an empty sky.',
       '',
-      'At the heart of it all: the cave-in. A sinkhole punched clean through the desert floor. Rusted pitons still hold a rope where the expedition went down — and did not come back.',
+      'At the heart of it all: the cave-in. A sinkhole punched clean through the desert floor. Rusted iron pegs still hold a rope where the company went down — and did not come back.',
       '',
-      'Gold light climbs slowly out of the shaft, steady as a held note. Nine days since the leader\'s last radio crackle. Seven centuries of dreams about whatever is making that light.',
+      'Gold light climbs slowly out of the shaft, steady as a held note. Nine days since the leader\'s last resonance crackle. Seven centuries of dreams about whatever is making that light.',
     ].join('\n'),
     choices: [
       {
         id: 'walk_to_light',
-        label: 'Walk the survey lines toward the light.',
+        label: 'Walk the marker cords toward the light.',
         onSuccess: () => 'You follow the flags inward. The closer you come to the shaft, the more the ground under your boots reads like the first word of a very long sentence.',
       },
       {
@@ -79,7 +79,7 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'The First Voice',
     chapterRange: [1, 1],
     flavorText: [
-      'An old expedition camp. Broken equipment. Dried blood.',
+      'An old company camp. Broken equipment. Dried blood.',
       '',
       'A journal lies open on a crate — a sketch of a door, drawn and redrawn until the paper wore through.',
     ].join('\n'),
@@ -197,20 +197,20 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'First Blood',
     chapterRange: [1, 1],
     flavorText: [
-      'Pale sand shifts ahead. Something rises out of it — a desert-dusted remnant wrapped in funerary linen. A Dust Wight.',
+      'Pale sand shifts ahead. A figure rises from behind a wind-flattened tent — a scavenger in mismatched company gear, hook-blade held low, eyes doing arithmetic on what you carry.',
       '',
-      'It does not attack. It waits to be watched too long.',
+      'RUST-PICKER: "...You heard it too, didn\'t you. The light, singing. That makes you rich, friend. Or empty."',
     ].join('\n'),
     choices: [
       {
         id: 'face_it',
-        label: 'Face it.',
-        onSuccess: () => 'You raise your weapon. The Wight turns toward you.',
+        label: 'Face him.',
+        onSuccess: () => 'You raise your weapon. He circles left, blade low.',
         combat: {
-          enemyIds: ['dust_wight'],
+          enemyIds: ['rust_picker'],
           onVictory: (_player, ctx) => {
             ctx.setFlag('first_blood_done');
-            return 'After combat, the Wight crumbles. Beneath it: a Sable ash-mark, half-burned. And a word scratched into the sand that the wind is already taking apart.';
+            return 'He does not get up. Beside his hand: a Sable ash-mark, half-burned, torn from someone else\'s body. And a word scratched into the sand that the wind is already taking apart.';
           },
         },
       },
@@ -225,7 +225,7 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     flavorText: [
       'A Sable shelter — rough stone reinforced with iron. An old man sits wrapped in blankets. His eyes are clear, and empty. Hollow.',
       '',
-      'HOLLOWED MAN: "Are you with the expedition? No. Of course not. You\'re one of the ones who keeps walking."',
+      'HOLLOWED MAN: "Are you with the company? No. Of course not. You\'re one of the ones who keeps walking."',
     ].join('\n'),
     choices: [
       {
@@ -346,12 +346,12 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     flavorText: [
       'A chamber that should not exist: a childhood bed, old toys, a reading chair worn smooth by one person, over and over, in the same spot.',
       '',
-      'On the desk: family photographs, face-down. Every one of them.',
+      'On the desk: family portraits, face-down. Every one of them.',
     ].join('\n'),
     choices: [
       {
         id: 'turn_photos',
-        label: 'Turn over the photographs.',
+        label: 'Turn over the portraits.',
         onSuccess: () => '',
         then: {
           flavorText: [
@@ -366,12 +366,12 @@ export const STORY_EVENTS: Record<string, EventDef> = {
               onSuccess: (player) => {
                 player.story.eveVoiceHeard += 1;
                 player.resonance = Math.min(100, player.resonance + 3);
-                return 'You lift the last photograph anyway. The scratched faces tell you nothing. The scratch marks tell you everything: someone wanted to forget her on purpose. (+3 Resonance)';
+                return 'You lift the last portrait anyway. The scratched faces tell you nothing. The scratch marks tell you everything: someone wanted to forget her on purpose. (+3 Resonance)';
               },
             },
             {
               id: 'step_back',
-              label: 'Put the photographs down.',
+              label: 'Put the portraits down.',
               onSuccess: () => 'You set them face-down again, exactly as they lay.\n\nTHE VOICE, softer: "Thank you."',
             },
           ],
@@ -383,7 +383,7 @@ export const STORY_EVENTS: Record<string, EventDef> = {
         onSuccess: () => 'For a moment — nothing. Then the room itself seems to hold its breath.',
         then: {
           flavorText: [
-            'THE VOICE: "Don\'t look at the photographs."',
+            'THE VOICE: "Don\'t look at the portraits."',
             '',
             'They are still face-down. Waiting to be turned or left alone — the choice sits in your hands either way.',
           ].join('\n'),
@@ -532,9 +532,9 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'The Voice, Given a Face',
     chapterRange: [1, 5],
     flavorText: [
-      'The Covenant Spire — a temple built toward rather than away. At its heart stands a woman. Not young, not old. Translucent: a projection, a memory, a fragment of the Loom. Her expression is real.',
+      'The Covenant Spire — a temple built toward rather than away. At its heart stands a woman. Not young, not old. Translucent: an apparition, a memory, a fragment of the Loom. Her expression is real.',
       '',
-      'She speaks, and the floor drops out of you. That voice. The empty camp. The scratched photographs. The breathing tunnels. Everywhere and nowhere, the whole way down.',
+      'She speaks, and the floor drops out of you. That voice. The empty camp. The scratched portraits. The breathing tunnels. Everywhere and nowhere, the whole way down.',
       '',
       '"It was you. Every time. It was always you."',
       '',

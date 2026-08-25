@@ -24,10 +24,10 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 | Lever | Effect | Where |
 |-------|--------|-------|
 | **Event choices** | The main driver — see the catalog in Part II | `events.ts` |
-| **Landmark bosses** | Argent Sentinel **+20 Archive** · Patriarch Oren Cass **+25 Sable** · Fossil King **+15 Caravan, +10 Archive** (Chorus & Reflection grant none) | `bosses.ts` getRewards |
+| **Landmark bosses** | Argent Sentinel **+20 Archive** · Patriarch Oren Cass **+25 Sable** · Merged Chorus **±by approach** (Appeal +15 Archive / Challenge +20 Sable) · Fossil King **+15 Caravan, +10 Archive** (Reflection grants none) | `bosses.ts` getRewards |
 | **Faction gear** | Equipping a faction's signature item gives **+1 to that faction every node visited**: Sable Ash Blade → Sable, Archive Field Coat → Archive, Traveler's Ledger → Caravan, Muted Stone → Covenant | `BoardScene.applyFactionGearBonus` |
 | **Discovery nodes** | The "small cache" find grants **+1 to your currently leading faction** | `BoardScene.resolveDiscovery` |
-| **Shard Shop blessings** | Permanent unlocks give **+10 starting influence** next runs (200 shards each): Sable Blessing / Archive Clearance / Covenant Whisper / Caravan Map | `EchoShardSystem` |
+| **Shard Shop blessings** | Permanent unlocks give **+25 starting influence** next runs (200 shards each): Sable Blessing / Archive Writ / Covenant Whisper / Caravan Map | `EchoShardSystem` |
 
 ### What factions never do (current build)
 
@@ -38,7 +38,7 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 
 **⚔ Sable Order** — pleased by containment: handing over tablets and findings (+15/+18/+20), sealing sites (+10), destroying Venn phenomena (+5/+6), turning in fugitives (+15), Sable counter-rites against Covenant rituals (+8…+10). Angered by fighting them (−8/−10), hiding ash-marked children (−15), defending Covenant converts. Their gate opens merchant-free passage and scripture quotes; their ending is **The Seal** (Sable ≥50, Resonance ≤24).
 
-**📖 Argent Archive** — pleased by scholarship: answering Mira Tol's questions (+12), cataloguing lore fragments (+10), recording hymns and frequencies (+8…+12), deciphering glyphs and mosaics (+8/+10), repairing Dominion relics (+12). Almost never angered — their risk is *you*, not them. Their ending is **The Keeper's Legacy** (Archive ≥50, ≥15 lore).
+**📖 Argent Archive** — pleased by scholarship: answering Mira Tol's questions (+12), cataloguing lore fragments (+10), recording hymns and resonance patterns (+8…+12), deciphering glyphs and mosaics (+8/+10), repairing Dominion relics (+12). Almost never angered — their risk is *you*, not them. Their ending is **The Keeper's Legacy** (Archive ≥50, ≥15 lore).
 
 **🔥 Ash Covenant** — pleased by participation and empathy: joining hymns and whispers (+12/+15), helping transformations finish (+12), sitting with the grieving (+5), offering yourself to the Loom (+15). Angered when you break their circles or stop their conversions (−5…−8). Their ending is **The Ascension** (Covenant ≥50, Resonance ≥75).
 
@@ -73,7 +73,7 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 
 **The Whispering Wall** *(whispering_wall)* — ch 1 · Resonance ≤24 · A wall hums your unspoken words.
 - Touch the wall → +5 Resonance
-- Record the frequency (INT ≥6) [gate: archive] → **+8 Archive**, Resonance Sketch item
+- Record the resonance (INT ≥6) [gate: archive] → **+8 Archive**, Resonance Sketch item
 - Destroy it (STR ≥8) → **+5 Sable**, −3 Resonance, Muted Stone item
 - Walk away → **+3 Caravan**
 
@@ -82,7 +82,7 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - Blank book for 50g [gate: caravan] → Blank Book
 - Blank book for 8 Resonance [gate: caravan] → Blank Book, −8 Resonance
 - Ask why she left the roads above → **+5 Caravan**
-- Rob her [COMBAT vs Dust-Road Raider] → she was expecting it
+- Rob her [COMBAT vs her two hired blades] → they were expecting it
 
 **Mira Tol's Ledger** *(archivists_ledger)* — ch 1 · An Archive field scholar interviews you.
 - Answer her question (INT DC12) → **+12 Archive**, +15g, lore fragment (fail: **+2 Archive**)
@@ -98,11 +98,11 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 
 **A Quiet Passage** *(quiet_passage)* — ch 1–5 · repeatable · Nothing wrong here. Rest a moment → +5% HP.
 
-**The Page Left Behind** *(page_left_behind)* — ch 1 · requires Sentinel defeated · A farewell note pinned by broken Sentinel parts.
+**The Page Left Behind** *(page_left_behind)* — ch 1–2 · requires Sentinel defeated · A farewell note pinned by broken Sentinel parts.
 - Read it → +3 Resonance, lore fragment
 - Leave it pinned → **+3 Sable**
 
-**The Toll Road** *(tollroad_ambush)* — ch 1–2 · Independent raiders demand a toll.
+**The Toll Road** *(tollroad_ambush)* — ch 3 · Independent raiders demand a toll, deep where their kind follows the descent down.
 - Pay (20g) → **+8 Caravan**
 - Refuse, draw [COMBAT]
 - Talk past them (WILL DC12) [COMBAT] → **+10 Caravan**
@@ -112,18 +112,18 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - Share your own story (WILL DC11) → **+12 Caravan**, −2 Resonance
 - Just listen → **+5 Caravan**
 
-**Sable Hunters** *(sable_hunters)* — ch 1–2 · Four hunters close in.
+**Sable Hunters** *(sable_hunters)* — ch 2 · Four hunters close in.
 - Hand over findings → **+18 Sable**, −5 Resonance
 - Outrun (WILL DC11) [COMBAT] → **+8 Sable**
 - Trap the leader (DEX ≥7) → **+10 Sable, +3 Covenant**, Sable Ash Blade
 - Fight through [COMBAT] → **+8 Covenant, −8 Sable**
 
-**The Echoing Hallway** *(echoing_hallway)* — ch 1–2 · Your steps echo a fraction late.
+**The Echoing Hallway** *(echoing_hallway)* — ch 3–4 · Your steps echo a fraction late.
 - Walk through carefully (DEX DC11) [COMBAT] → +6 Resonance, lore fragment
 - Mark the walls (INT ≥6) → **+6 Archive**, +3 Resonance
 - Turn back → **+3 Caravan**
 
-**The Choir's Lament** *(choirs_lament)* — ch 1 · Resonance ≥20 · Covenant novices sing grief.
+**The Choir's Lament** *(choirs_lament)* — ch 2 · Resonance ≥20 · Covenant novices sing grief.
 - Join the lament (WILL DC13) [COMBAT] → **+10 Archive**, +6 Resonance, lore fragment
 - Record it (INT ≥7) → **+12 Archive, +5 Covenant**, +4 Resonance
 - Silence them (Sable method) → **+8 Sable, −5 Covenant**, +2 Resonance
@@ -142,7 +142,7 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - "Your bread was stale." → **+5 Sable**, −2 Resonance
 - "I don't answer to ghosts." → **+3 Caravan**
 
-**Patriarch's Ash** *(patriarchs_ash)* — ch 2 · requires Cass defeated *and* purification accepted · A cold fire pit, ash in a careful spiral.
+**Patriarch's Ash** *(patriarchs_ash)* — ch 2–3 · requires Cass defeated *and* purification accepted · A cold fire pit, ash in a careful spiral.
 - Sit by the ash → **+5 Sable**, +2 Resonance, lore fragment
 - Scatter it → **+6 Covenant, −4 Sable**
 - Leave it untouched → **+3 Sable**
@@ -160,8 +160,8 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - "Leave me alone." (Sable prayer) → **+5 Sable**, −5 Resonance
 - "The Chorus taught me to listen." → **+5 Covenant**, +5 Resonance, +8 XP
 
-**Keth-7, Revisited** *(keth7_revisited)* — ch 2–3 · The tablet shows text you never typed.
-- Let yourself remember (WILL DC14) → +3 Resonance, Keth-7 Tablet Shard, lore fragment
+**Keth, Revisited** *(keth7_revisited)* — ch 2–3 · The tablet shows words you never wrote.
+- Let yourself remember (WILL DC14) → +3 Resonance, Keth Tablet Shard, lore fragment
 - Push it down → −2 Resonance
 - Write it down instead → **+8 Archive**
 
@@ -181,7 +181,7 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - Steal something (DEX DC14) [COMBAT] → Auctioneer's Token, **−5 Sable**
 - Browse and leave → **+3 Archive**
 
-**The Second Excavation** *(second_excavation)* — ch 2 · A survey camp abandoned mid-sentence.
+**The Second Excavation** *(second_excavation)* — ch 2 · A company camp abandoned mid-sentence.
 - Read the journal (INT DC13) → **+10 Archive**, +3 Resonance
 - Seal the site → **+10 Sable**
 - Take supplies → **+5 Caravan**, gold
@@ -202,14 +202,14 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - Quote the Archive charter (INT ≥7) → **+8 Archive, +5 Sable**
 - Fight → **−10 Sable**
 
-**The Caravan Courier** *(caravan_courier)* — ch 2 · A runner with a merchant's eye.
+**The Caravan Courier** *(caravan_courier)* — ch 2 · A runner with a merchant's eye. Her "pillar" is a dormant custodian.
 - Buy supplies (35g) → 2 Rations, Traveler's Ledger
 - Road charm (45g) → Raider's Charm
 - Route ahead for 6 Resonance → **+8 Caravan**
 - Ask about the road → **+6 Caravan, +2 Archive**
 - Take her satchel [COMBAT] → she was faster
 
-**The Singing Floor** *(singing_floor)* — ch 2–3 · You are standing on the chorus.
+**The Singing Floor** *(singing_floor)* — ch 3–4 · You are standing on the chorus.
 - Decipher it (INT DC12) [COMBAT] → **+8 Archive**, +7 Resonance, lore fragment
 - Stomp the dissonance (STR ≥6) → **+6 Sable**, −2 Resonance
 - Step off quickly → **+4 Caravan**
@@ -219,7 +219,7 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - Repair it (INT DC14) → **+12 Archive**, Dominion Plate Scrap
 - Leave it → **+4 Sable**
 
-**The Choir's Whisper** *(choirs_whisper)* — ch 2–3 · Resonance ≥30 · Three convert in perfect sync.
+**The Choir's Whisper** *(choirs_whisper)* — ch 2 · Resonance ≥30 · Three convert in perfect sync.
 - Step into the circle (WILL DC14) [COMBAT] → **+12 Covenant**, +8 Resonance, +8 Dodge
 - Listen from shadows (DEX ≥7) → **+6 Covenant, +6 Archive**, +4 Resonance, lore fragment
 - Break the circle (Sable method) → **+10 Sable, −8 Covenant**, Choir Tuning Fork
@@ -237,6 +237,66 @@ Each faction tracks a separate influence value, clamped to **−100…+100** (`c
 - Take stock → +2 Resonance, **+3 Sable**
 - Keep moving → +15% HP
 - Write your own page → **+5 Archive**
+
+### The Final Descent (authored finale beats)
+
+**The Last Camp** *(the_last_camp)* — ch 5 · A camp arranged to your habits by something that watches.
+- Sleep in it → +20% HP, +2 Resonance
+- Burn it → **+8 Sable**, −2 Resonance
+- Leave a token → **+6 Caravan**, +10 XP
+
+**The Silver Gallery Gaze** *(silver_gallery_gaze)* — ch 5 · Resonance ≥40 · Mirrors rehearse your old choices.
+- Meet your eyes → +4 Resonance
+- Cover them → **+5 Sable**, −1 Resonance
+- Study the rehearsals (INT ≥7) → **+8 Archive**, +12 XP
+
+**The Spire's Toll** *(spire_toll)* — ch 5 · The deep stopped wanting gold a long time ago.
+- Pay resonance (−6) → **+10 Covenant**
+- Sing instead (WILL DC13) → **+14 Covenant**, +3 Resonance
+- Force the door (STR ≥9) → **−8 Covenant, +6 Sable**, gold
+
+**The Archive's Last Question** *(archive_depths_call)* — ch 4–5 · requires Mira met · Her answer is already folded under.
+- Read hers first → **+10 Archive**, +2 Resonance
+- Answer only yours → **+5 Caravan**, lore fragment
+- Leave blank → **+4 Archive**, −1 Resonance
+
+**The Warrens of You** *(warrens_of_you)* — ch 5 · Resonance ≥50 · requires echo-hall/floor-song · Footprints: yours, going up.
+- Follow them forward → +5 Resonance, +15 XP
+- Study the turnaround (WILL ≥7) → **+8 Archive**, −2 Resonance
+- Break stride → **+5 Sable**, +1 Resonance
+
+**What the Old Man Kept** *(hollowed_man_end)* — ch 4–5 · requires meeting the Hollowed Man · His fist finally opens.
+- Say the ending aloud → +4 Resonance (message delivered)
+- Carry the scrap → **+8 Covenant**, lore fragment, +12 XP
+- Bury him right (STR ≥7) → **+6 Sable, +4 Caravan**, +2 Resonance
+
+**The Last Post** *(dominion_last_post)* — ch 4–5 · Echo-soldiers salute a passing standard.
+- Return the salute → **+6 Archive, +4 Caravan**, +10 XP
+- "Who relieves you?" → +3 Resonance
+- Pass unmarked → **+4 Sable**
+
+**The Question, Backwards** *(question_asked_backwards)* — ch 5 · Resonance ≥60 · You knew before you looked.
+- Finish it in order (WILL DC14) → +6 Resonance, +20 XP
+- Refuse the grammar → **+8 Sable**, −2 Resonance
+- Copy it backward (INT ≥8) → **+12 Archive**, +3 Echo Shards
+
+### Devoted-tier honors *(new: fire only while the faction stands at ≥75 influence)*
+
+**The Ash Vigil** *(ash_vigil)* — ch 2–5 · Sable ≥75 · They show you their faces.
+- Lead the vigil → **+8 Sable**, +15% HP, −3 Resonance
+- "I lead nothing. I walk." → **+4 Sable**
+
+**The Reading of You** *(reading_of_you)* — ch 2–5 · Archive ≥75 · Your entry is the longest in the ledger.
+- Sit. Be read → **+10 Archive**, +20 XP, lore fragment
+- Correct one line of it (INT ≥8) → **+6 Archive**, +2 Resonance
+
+**A Translation, Offered Gently** *(translation_rite)* — ch 2–5 · Covenant ≥75 · No circle. No whispers. A blank page.
+- Keep the verse → **+8 Covenant**, +4 Resonance, +25% MP
+- Burn it gracefully → **+5 Covenant**
+
+**Mara's Table** *(maras_table)* — ch 1–5 · Caravan ≥75 · Family eats first.
+- Eat first → fully restored, **+8 Caravan**
+- Take the road-gift → **+6 Caravan**, supplies, +2 Echo Shards
 
 ---
 
@@ -268,7 +328,7 @@ Ten capture-point vignettes at fixed nodes (two per chapter). Each is a small tw
 | 130 | 4 | **The Thirteenth Marker** | Study thirteen faces, one blank → lore fragment, +2 Resonance |
 | 150 | 4 | **The Fifteenth Marker** | Read *"Choose"* aloud → lore fragment, **+2 Sable** |
 | 170 | 5 | **The Seventeenth Marker** | Look into the chasm → lore fragment, +3 Resonance |
-| 190 | 5 | **The Nineteenth Marker** | Find the postscript *"For Lyra."* → lore fragment + story flag |
+| 190 | 5 | **The Nineteenth Marker** | Find the postscript *"For my child."* → lore fragment + story flag |
 
 ---
 

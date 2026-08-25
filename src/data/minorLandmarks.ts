@@ -1,7 +1,8 @@
 // ============================================================================
 // THE HOLLOW BENEATH — Minor Landmarks
 // GDD §7.3: "10 Landmark nodes (5 major bosses + 5 minor story beats)".
-// These are the 5 minor beats, at the capture-point nodes (10/30/50/70/90).
+// These are the 10 minor beats, at the capture-point nodes
+// (10/30/50/70/90/110/130/150/170/190) — two per chapter.
 // Reuses the EventDef shape (rendered by EventScene) but is looked up
 // directly by node index in BoardScene — never enters the random event pool.
 // Reward baseline matches the previous plain capture-point payout exactly
@@ -150,7 +151,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
     title: 'The Ninth Marker',
     chapterRange: [3, 3],
     flavorText:
-      'This close to the end, the waystone carvings stop describing the road and start describing the traveler. Yours is not carved yet. There is, unmistakably, room.',
+      'The farther down it goes, the more the waystone carvings stop describing the road and start describing the traveler. Yours is not carved yet. There is, unmistakably, room.',
     choices: [
       {
         id: 'keep_moving',

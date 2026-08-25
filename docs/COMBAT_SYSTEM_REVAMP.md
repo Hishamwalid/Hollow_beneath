@@ -68,10 +68,10 @@ Skills are unlocked to directly match the stage-by-stage enemy elemental vulnera
   6. `Ignite` (Magic - MP Cost) — Light Flame damage with a chance to inflict Burn.
 
 ### **Chapter 2 Loadout: Cults & Factions**
-* **Target Enemy Counters:** Frost, Shock, Flame, Blunt (Superconduct Reaction)
+* **Target Enemy Counters:** Frost, Shock, Flame, Blunt (Brittle Frost Reaction)
 * **Equipped Skills (6 Slots):**
   1. `Frost Touch` (Magic - MP Cost) — Frost damage. Inflicts **Chilled**.
-  2. `Shock Arc` (Magic - MP Cost) — Shock damage. Triggers **Superconduct** (1-turn Stun) on Chilled targets.
+  2. `Shock Arc` (Magic - MP Cost) — Shock damage. Triggers **Brittle Frost** (1-turn Stun) on Chilled targets.
   3. `Flame Pulse` (Magic - MP Cost) — Retained from Ch. 1 for Flame weakness targets.
   4. `Heavy Guard` (Physical - HP Cost) — Retained for Blunt damage.
   5. `Cleanse & Surge` (Utility - MP Cost) — Cleanses debuffs and recovers +4 MP.
@@ -80,11 +80,11 @@ Skills are unlocked to directly match the stage-by-stage enemy elemental vulnera
 ### **Chapter 3 Loadout: Deepening & Memory Loss**
 * **Target Enemy Counters:** Shock, Flame, Sacred, Pierce (Overcharge Reaction)
 * **Equipped Skills (6 Slots):**
-  1. `Chain Plasma` (Magic - MP Cost) — AOE Shock damage.
+  1. `Chain Lightning` (Magic - MP Cost) — AOE Shock damage.
   2. `Inferno Wave` (Magic - MP Cost) — AOE Flame damage. Triggers **Overcharge** (bonus splash) on Shocked targets.
   3. `Sacred Ray` (Magic - MP Cost) — Sacred damage against wraiths/undead.
   4. `Pinpoint Strike` (Physical - HP Cost) — Retained for Pierce weakness targets.
-  5. `Barrier Protocol` (Utility - MP Cost) — Grants a shield equal to 25% Max HP.
+  5. `Aegis Ward` (Utility - MP Cost) — Grants a shield equal to 25% Max HP.
   6. `Mend` (Utility - MP Cost) — Restores HP.
 
 ### **Chapter 4 Loadout: Corruption & Mutants**
@@ -102,7 +102,7 @@ Skills are unlocked to directly match the stage-by-stage enemy elemental vulnera
 * **Key Tools:**
   * `Full Knowledge` (Utility - MP Cost) — Instantly reveals all unknown (`?`) affinity slots for all active enemies.
   * `Eclipse Blade` (Dual - HP/MP Cost) — Slash + Shadow dual-type attack.
-  * `Absolute Zero` (Magic - MP Cost) — High-damage AOE Frost spell with Stun chance.
+  * `Winter's Grasp` (Magic - MP Cost) — High-damage AOE Frost spell with Stun chance.
   * `Aegis Covenant` (Utility - MP Cost) — Complete status immunity + massive heal.
 
 ---
@@ -137,7 +137,7 @@ Skills are unlocked to directly match the stage-by-stage enemy elemental vulnera
   * *Move 2:* `Reckless Flail` — Heavy Blunt damage with reduced accuracy.
 * **Ash Covenant Seer (`ash_seer`)**
   * *Affinities:* Weak: Shock, Pierce | Null: Flame
-  * *Move 1:* `Spark Arc` — Shock damage. Triggers **Superconduct** (Stun) if player is Chilled.
+  * *Move 1:* `Spark Arc` — Shock damage. Triggers **Brittle Frost** (Stun) if player is Chilled.
   * *Move 2:* `Siphon` — Steals 5 MP from the player.
 * **BOSS: Patriarch Oren Cass (`patriarch`) (Page 8)**
   * *Affinities:* Weak: Shock, Frost | Reflect: Physical | Drain: Shadow

@@ -28,7 +28,7 @@ export const FACTIONS: Record<keyof FactionState, FactionMeta> = {
   covenant: {
     id: 'covenant',
     name: 'The Ash Covenant',
-    motto: 'We do not evolve. We are translated.',
+    motto: 'We do not change. We are translated.',
     color: 0x7b4b9e,
     colorCss: '#7b4b9e',
   },

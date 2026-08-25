@@ -31,7 +31,7 @@ export const SENTINEL: BossDef = {
   theme: 'The danger of curiosity.',
   baseStats: { hp: 150, mp: 50, atk: 15, matk: 12, def: 12, mdef: 11, spd: 14 },
   approachText:
-    'The First Door. Every survey line at Keth-7 converges here — on the sinkhole at the dig\'s heart. Gold light climbs out of the shaft, steady as a held note, and the expedition\'s rope hangs cut where they went down. Before the mouth stands THE ARGENT SENTINEL — a silver guardian engraved edge-to-edge with a language that almost resolves into words you know. It does not attack. It studies.\n\nTHE ARGENT SENTINEL: "Why do you seek the Door?"',
+    'The First Door. Every marker cord at the Delving of Keth converges here — on the sinkhole at the dig\'s heart. Gold light climbs out of the shaft, steady as a held note, and the company\'s rope hangs cut where they went down. Before the mouth stands THE ARGENT SENTINEL — a silver guardian engraved edge-to-edge with a language that almost resolves into words you know. It does not attack. It studies.\n\nTHE ARGENT SENTINEL: "Why do you seek the Door?"',
   preCombatChoices: [
     {
       id: 'want_answers',
@@ -79,7 +79,7 @@ export const SENTINEL: BossDef = {
     {
       id: 'charge_protocol', label: 'Charge Protocol', weight: 4, charge: true,
       description: 'Charges for 1 turn; unleashes Unstoppable Strike next turn. Guard!',
-      condition: (ctx) => !ctx.self.flags.chargedOnce || ctx.turn - (ctx.self.flags.chargedOnce ?? 0) >= 5,
+      condition: (ctx) => !ctx.self.flags.lastChargeTurn || turnsWithNoCharge(ctx) >= 5,
       resolve(ctx) {
         // Unleash path handled by the engine on the following turn.
         void ctx;
@@ -140,7 +140,7 @@ export const PATRIARCH: BossDef = {
   theme: 'Faith as anesthetic.',
   baseStats: { hp: 210, mp: 70, atk: 16, matk: 20, def: 16, mdef: 18, spd: 12 },
   approachText:
-    'The Dark Vault. A forward chapel of the Sable Order. Incense and ash. At the altar stands PATRIARCH OREN CASS — ash-marked, certain, and not entirely wrong.\n\nPATRIARCH OREN CASS: "Keth-7. The expedition that lost its leader, its geologist, and its way. Yet you persist."\n\n"I\'m looking for someone who came down before me."\n\nHe nods slowly. CASS: "Then you have been hearing her."\n\nYou go very still. "Hearing her?"\n\nCASS: "The deep keeps what it cannot keep out. Everyone who has gone deep enough hears a voice that does not belong to the stone."\n\n"What is she?"\n\nCASS: "Someone who tried to save us."\n\n"From the Loom?"\n\n"No."\n\nHe turns. His eyes are hollow in a different way — not empty, but full, overflowing with something that has nowhere to go.\n\nCASS: "From ourselves."',
+    'The Dark Vault. A forward chapel of the Sable Order. Incense and ash. At the altar stands PATRIARCH OREN CASS — ash-marked, certain, and not entirely wrong.\n\nPATRIARCH OREN CASS: "The Delving of Keth. The company that lost its leader, its stone-reader, and its way. Yet you persist."\n\n"I\'m looking for someone who came down before me."\n\nHe nods slowly. CASS: "Then you have been hearing her."\n\nYou go very still. "Hearing her?"\n\nCASS: "The deep keeps what it cannot keep out. Everyone who has gone deep enough hears a voice that does not belong to the stone."\n\n"What is she?"\n\nCASS: "Someone who tried to save us."\n\n"From the Loom?"\n\n"No."\n\nHe turns. His eyes are hollow in a different way — not empty, but full, overflowing with something that has nowhere to go.\n\nCASS: "From ourselves."',
   preCombatChoices: [
     {
       id: 'accept',
@@ -300,6 +300,7 @@ export const PATRIARCH: BossDef = {
       id: 'unleash_martyrs_flame', label: "Unleash Martyr's Flame", weight: 0,
       description: 'Unguardable Martyr\'s Flame with self-recoil.',
       resolve(ctx) {
+        ctx.self.flags.martyrUsed = 1;
         if (!ctx.self.flags.martyrEntered) {
           ctx.self.flags.martyrEntered = 1;
           ctx.self.atk = Math.round(ctx.self.atk * 1.25);
@@ -352,7 +353,7 @@ export const CHORUS: BossDef = {
   theme: 'The self as a chosen fiction.',
   baseStats: { hp: 260, mp: 80, atk: 17, matk: 21, def: 12, mdef: 16, spd: 15 },
   approachText:
-    'The Loom Gate. Forty figures stand in a circle, wearing the robes of Archive scholars. They move as one. They speak as one. But the voice is not human — it is a chord, a harmony, a consensus.\n\nTHE MERGED CHORUS: "You call us forty."\n\n"You are forty people."\n\nTHE MERGED CHORUS: "Were."\n\n"Then what are you?"\n\nTHE MERGED CHORUS: "Less. And more."\n\nThe seams show — a hand that doesn\'t match the shoulder, a cadence changing mid-word.\n\nTHE MERGED CHORUS: "How many memories make a person? How many voices make a self? We entered as scholars. We catalogued. We measured. We thought understanding would protect us."\n\nOne of the mouths opens wider than it should.\n\nTHE MERGED CHORUS: "The Loom does not destroy identity. It optimizes it. Forty egos. Forty fears. Forty lonely midnights. Reduced to one clear note."\n\nAnd then, softer, in forty voices at once:\n\nTHE MERGED CHORUS: "We remember another. Almost one of us, once. She chose solitude instead. A strange choice."',
+    'The Loom Gate. Forty figures stand in a circle, wearing the robes of Archive scholars. They move as one. They speak as one. But the voice is not human — it is a chord, a harmony, a consensus.\n\nTHE MERGED CHORUS: "You call us forty."\n\n"You are forty people."\n\nTHE MERGED CHORUS: "Were."\n\n"Then what are you?"\n\nTHE MERGED CHORUS: "Less. And more."\n\nThe seams show — a hand that doesn\'t match the shoulder, a cadence changing mid-word.\n\nTHE MERGED CHORUS: "How many memories make a person? How many voices make a self? We entered as scholars. We catalogued. We measured. We thought understanding would protect us."\n\nOne of the mouths opens wider than it should.\n\nTHE MERGED CHORUS: "The Loom does not destroy identity. It perfects it. Forty egos. Forty fears. Forty lonely midnights. Reduced to one clear note."\n\nAnd then, softer, in forty voices at once:\n\nTHE MERGED CHORUS: "We remember another. Almost one of us, once. She chose solitude instead. A strange choice."',
   preCombatChoices: [
     {
       id: 'insight',
@@ -525,7 +526,7 @@ export const FOSSIL_KING: BossDef = {
   theme: 'Power that outlived its purpose.',
   baseStats: { hp: 320, mp: 60, atk: 22, matk: 20, def: 18, mdef: 18, spd: 11 },
   approachText:
-    'A throne room of black basalt. DOMINION, LAST OF ITS COURT, sits mid-decree — a king fossilizing in real time, one hand still raised for an order nobody living remembers how to follow. His voice comes from somewhere behind his own calcified mouth, layered and slow.\n\nTHE FOSSIL KING: "Kneel. The empire persists."\n\n"Your empire is dust."\n\nTHE FOSSIL KING: "Dust is merely empire in another form."\n\n"Why did you stay when the Venn left?"\n\nTHE FOSSIL KING: "Someone must issue the last order. Even if there is no one left to hear it."',
+    'A throne room of black basalt. DOMINION, LAST OF ITS COURT, sits mid-decree — a king fossilizing even as you watch, one hand still raised for an order nobody living remembers how to follow. His voice comes from somewhere behind his own calcified mouth, layered and slow.\n\nTHE FOSSIL KING: "Kneel. The empire persists."\n\n"Your empire is dust."\n\nTHE FOSSIL KING: "Dust is merely empire in another form."\n\n"Why did you stay when the Venn left?"\n\nTHE FOSSIL KING: "Someone must issue the last order. Even if there is no one left to hear it."',
   preCombatChoices: [
     {
       id: 'ask_become',
@@ -624,12 +625,12 @@ export const FOSSIL_KING: BossDef = {
       },
     },
     {
-      id: 'last_law', label: 'the Last Law', weight: 2,
+      id: 'last_law', label: 'The Last Law', weight: 2,
       description: 'Sacred decree damage.',
       condition: (ctx) => ctx.phaseKey === 'silence' || ctx.phaseKey === 'rebellion',
       resolve(ctx) {
         const dmg = bossMagic(ctx.self.matk, ctx.player.mdef, 1.2);
-        ctx.applyDamageToPlayer(dmg, 'sacred', `${ctx.self.name} — the Last Law`);
+        ctx.applyDamageToPlayer(dmg, 'sacred', `${ctx.self.name} — The Last Law`);
         ctx.log.push(`${ctx.self.name} invokes the Last Law — ${dmg} damage.`);
         return '';
       },
@@ -654,7 +655,7 @@ export const FOSSIL_KING: BossDef = {
       },
     },
     {
-      id: 'fossil_last_blow', label: 'a last, unfocused blow', weight: 3,
+      id: 'fossil_last_blow', label: 'A Last, Unfocused Blow', weight: 3,
       description: 'The Fossil phase: weak strikes only.',
       resolve(ctx) {
         const dmg = bossDamage(ctx.self.atk * 0.6, ctx.player.def, 1.0);
@@ -816,6 +817,10 @@ export const REFLECTION: BossDef = {
         ctx.self.flags.eveLinesSpoken = spoke + 1;
         if ((ctx.self.flags.motherJournalFound ?? 0) === 1 && spoke === 0) {
           ctx.log.push('THE FINAL REFLECTION: "She already said yes. And now you have to say it too."');
+        } else if (spoke === 1 && (ctx.self.flags.met_hollowed_man ?? 0) === 1) {
+          // The Hollowed Man's message finally arrives — carried by the thing
+          // that has been wearing her voice the whole way down.
+          ctx.log.push('THE FINAL REFLECTION: "The old man by the dying fire was given words for you. He dropped them, so I kept them."\n\nIt leans close, wearing her mouth.\n\n"Tell them: it doesn\'t hurt. That was the lie I needed him to carry."');
         } else if ((ctx.self.flags.eveVoiceHeard ?? 0) >= 3) {
           ctx.log.push('THE FINAL REFLECTION: "You keep asking if I\'m really her. Does it matter?"');
         } else {

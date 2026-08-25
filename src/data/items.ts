@@ -68,7 +68,7 @@ export const ITEMS: Record<string, ItemDef> = {
   resonance_sketch: {
     id: 'resonance_sketch',
     name: 'Resonance Sketch',
-    description: 'A recorded frequency. Sells well.',
+    description: 'A resonance pattern pressed into wax. Sells well.',
     kind: 'material',
     sellValue: 50,
   },
@@ -134,7 +134,7 @@ export const ITEMS: Record<string, ItemDef> = {
   archive_field_coat: {
     id: 'archive_field_coat',
     name: 'Archive Field Coat',
-    description: 'Standard Argent Archive field issue. +2 DEF, +2 MDEF.',
+    description: 'Cut for Argent Archive wardens. +2 DEF, +2 MDEF.',
     kind: 'armour',
     effect: { statBonus: { def: 2, mdef: 2 } },
     sellValue: 40,
@@ -177,7 +177,7 @@ export const ITEMS: Record<string, ItemDef> = {
   },
   keth7_tablet_shard: {
     id: 'keth7_tablet_shard',
-    name: 'Keth-7 Tablet Shard',
+    name: 'Keth Tablet Shard',
     description: 'A broken piece of a Venn translation tablet. Warm to the touch, always. +2 ATK, +2 MATK.',
     kind: 'accessory',
     effect: { statBonus: { atk: 2, matk: 2 } },
