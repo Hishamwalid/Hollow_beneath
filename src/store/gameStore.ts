@@ -26,7 +26,7 @@ import { getLoreFragment, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { resonanceTier, TIER_LABELS } from '@systems/ResonanceSystem';
 import { chapterGrantSkills } from '@data/skills';
 
-export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0, name = "Eve's Child"): PlayerState {
+export function createStartingPlayer(stats: StatBlock, purchasedUnlocks: string[], totalRuns = 0, name = 'The Listener'): PlayerState {
   const derived = computeDerivedStats(stats, STARTING_EQUIPMENT_BONUSES as EquipmentBonuses);
   const granted = chapterGrantSkills(1);
   const player: PlayerState = {

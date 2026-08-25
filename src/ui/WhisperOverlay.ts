@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { FONT_BODY, PALETTE_HEX } from './uiTheme';
 import { resonanceTier } from '@systems/ResonanceSystem';
+import { settingsManager } from '@systems/SettingsManager';
 
 /**
  * Subtle full-screen color wash that intensifies with Resonance tier — the
@@ -54,6 +55,18 @@ export function showWhisper(scene: Phaser.Scene, x: number, y: number, text: str
     .setAlpha(0)
     .setDepth(50);
 
+  let drift = false;
+  try {
+    // Whispers rise as they speak — never static.
+    // (Settings are consulted lazily so reduced-motion players get a plain fade.)
+    const s = settingsManager.get();
+    drift = !s.reduceMotion;
+  } catch {
+    drift = true;
+  }
+  if (drift) {
+    scene.tweens.add({ targets: t, y: y - 14, duration: 5200, ease: 'Sine.easeOut' });
+  }
   scene.tweens.add({
     targets: t,
     alpha: { from: 0, to: 0.85 },

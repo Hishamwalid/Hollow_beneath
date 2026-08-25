@@ -1,65 +1,65 @@
 # THE HOLLOW BENEATH — Scenes (Full Narrative Script)
 
-*Definitive Edition scene reference. Each scene lists its board node and event/boss id. Dialogue is verbatim from the Definitive Narrative Script. Boss battles keep their full mechanical detail in `ENEMIES_AND_BOSSES.md`.*
+*Definitive Edition scene reference — synced to the staged-narrative pass. Each scene lists its board node and event/boss id. Boss battles keep their full mechanical detail in `ENEMIES_AND_BOSSES.md`.*
+
+**Presentation rules (Definitive pass):**
+- Story beats are STAGED: short narration → a reaction for the player → consequence. No walls of prose.
+- **The abstraction rule:** before Node 185, the recurring voice is never named or attributed. It is credited as `THE VOICE` in dialog and speaker plates. Eve / mother / "Mom" do not appear in any player-facing text until `eve_reveal`.
+- Chapter dramatic questions are surfaced on chapter cards and the board title:
+  1 · *What spoke to me?* · 2 · *Who else has heard it?* · 3 · *What did the Venn know?* · 4 · *What did she find?* · 5 · *What is waiting, wearing my face?*
+- Pre-boss markers (nodes 30/70/110/150/190) carry one threshold line each that closes the chapter's question and aims at the guardian ahead.
+- After every story beat, the board's Journal panel shows a reminder chip (`✦ <beat> — "<signature line>"`) so context survives long node stretches.
+- The Voice reacts to play via the VoiceSystem pool (`victory` / `low_hp` / `boss_fall` / `lore_found`) through the ambient whisper overlay.
 
 ---
 
-## PROLOGUE — THE SURFACE: EVE'S HOUSE
+## PROLOGUE — BEFORE THE DESCENT
 
-*(Presented by the tutorial's "Who You Are" screen + Node 1 cutscene.)*
+*(Character creation + intro screen.)*
 
-*A small room. Dust on every surface except one desk, wiped clean. A leather journal sits in the center. The PLAYER stands before it.*
+**INTRO SCREEN:** "You heard a voice. It said: keep walking. So you walk."
 
-**NARRATION:** For seven hundred years, certain people have experienced the same dream. An impossible version of themselves. Power without limit. The promise of becoming the best they could possibly be. They are called Seekers.
-
-*The journal's final entry, shaky, almost childlike:*
-
-**EVE (V.O.):** *"The Deep stares at you. The emotion in its gaze is the comfort of freedom itself."*
-
-**NARRATION:** Eve was a Seeker. She entered the Beneath, and she came back. But she did not come back as the same person. When you were eleven, she became a Hollow. When you were twenty-one, she died. She forgot almost everything. Eventually, she forgot how to breathe.
-
-*A photograph on the desk: Eve, young, at the mouth of a cave. Smiling. Alive.*
-
-**NARRATION:** You are not a Seeker. You never dreamed the dream. You enter the Beneath for one reason.
-
-**NARRATION:** You want to understand what happened to your mother.
+**CHARACTER CREATION:** *"You stand at the mouth of the sinkhole. The journal is heavy in your hands. The desert wind is loud. Seven hundred years of Seekers have climbed down before you. You never dreamed their dream."*
 
 ---
 
 ## CHAPTER 1 — THE ARCHIVE OPENS (Nodes 1–40)
 
+**Chapter question: What spoke to me?**
+
 ### Scene 1.1 — The Descent
 **Node 1 · `prologue_descent` (cutscene)**
 
-The PLAYER descends through a collapsed sinkhole — rope creaks, expedition rope and rusted pitons give way to ashfall corridors ribbed with Venn masonry. Gold light pulses ahead.
+Rope creaks. Three days down a collapsed sinkhole, past rusted pitons, into corridors ribbed with bone-white masonry.
 
-**NARRATION:** Three days into the Keth-7 survey. A cave-in at the Chalk Doorway cost the expedition half its supplies and its best geologist. Expedition leader Anya Korr extended the timeline by a week. Then she went silent. Contact with the surface failed yesterday.
+- The Keth-7 survey went silent here — leader, geologist, supplies, gone into the gold light.
+- The walls read like a question.
 
-**NARRATION:** The Hollow is not a dungeon. It is a dead city preserved in cold stone and warm bone. Its architecture is syntax. Corridors form sentences. Rooms are paragraphs. The deeper you descend, the more the structure reads like a question you are walking toward the answer of.
+Choices: **Walk toward the gold light** / **Say something to the dark** *(+2 Resonance; the echo comes back half-second late)*.
 
-### Scene 1.2 — Eve's First Voice
-**Node 8 · `eves_first_voice` (cutscene, +1 eveVoiceHeard)**
+### Scene 1.2 — The First Voice
+**Node 8 · `eves_first_voice` (staged cutscene, +1 eveVoiceHeard)**
 
-An old expedition camp. Broken equipment. Dried blood. A journal open on a crate — a sketch of the First Door.
+An old expedition camp. Broken equipment. Dried blood. A journal lies open on a crate — a sketch of a door, drawn until the paper wore through.
 
-- **PLAYER:** Mom?
-- **EVE (V.O.):** You shouldn't have come here.
-- **PLAYER:** Mom?
-- **EVE (V.O.):** Keep walking.
-- **PLAYER:** Where are you?
-- *(long silence; wind through stone)*
-- **EVE (V.O.):** I don't know.
+Stage 2 — **THE VOICE:** *"You shouldn't have come here."* Close. Closer than a voice has any right to be — and familiar in a way you cannot place.
 
-The camp is empty. The voice came from everywhere and nowhere.
+- **PLAYER:** Who are you? → **THE VOICE:** Keep walking.
+- **PLAYER:** Where are you? → *(wind through stone)* → **THE VOICE:** I don't know.
+
+Final beat: the camp is empty; the voice came from everywhere and nowhere. → *Keep walking.* (+1 eveVoiceHeard)
 
 ### Scene 1.3 — First Blood
 **Node 15 · `first_blood` (scripted combat)**
 
 Pale sand. A DUST WIGHT rises — it does not attack until looked at too long.
 
-**NARRATION:** The dust-caked dead do not mind being dead. They mind being watched.
+Afterward it crumbles; beneath it: a Sable ash-mark, half-burned, and a word scratched into the sand that the wind is already taking apart.
 
-Combat vs Dust Wight. Afterward it crumbles; beneath it: a Sable ash-mark, half-burned, and a name scratched in the sand — **"EVE."**
+### Scene 1.T — Threshold: The Third Marker
+**Node 30 · minor landmark**
+
+*Threshold line:* "Ahead, past the last stretch of corridor: gold light. A door — and something standing before it that has been asking travelers a question for a very long time."
 
 ### Scene 1.4 — The Argent Sentinel
 **Node 40 · Landmark boss `sentinel`**
@@ -70,13 +70,8 @@ The Archive Threshold. A gold-lit doorway. Before it, the SENTINEL studies rathe
 
 Pre-combat choices:
 - **[A] "I want answers."** → *"Answers are not treasures. They are weights."*
-- **[B] "I want to know what my mother saw."** → the Sentinel tilts its head, almost recognition: *"...Then you are not here for the Door. You are here for the threshold."*
+- **[B] "I want to know what the one before me saw."** → the Sentinel tilts its head, almost recognition: *"...Then you are not here for the Door. You are here for the threshold."*
 - **[C] Attack.** → it raises no weapon; it simply waits.
-
-Phase dialogue:
-- Curator (>66%): *"You are not the first to arrive with grief instead of purpose."*
-- Erudite (>33%): *"The Venn did not flee. They did not fall. They left. Consider what they left behind."*
-- Desperate Guardian (≤33%): *"I have been so very tired. And so very good at my work."*
 
 Aftermath — silver flaking like ash:
 
@@ -84,36 +79,32 @@ Aftermath — silver flaking like ash:
 **PLAYER:** Who do you remember?
 **THE ARGENT SENTINEL:** The woman. ...She asked the same question.
 
-The Sentinel dissolves. The First Door opens. The map turns like a page.
-
 ---
 
 ## CHAPTER 2 — THE SABLE MARCH (Nodes 41–80)
 
+**Chapter question: Who else has heard it?**
+
 ### Scene 2.1 — The Hollowed Man
-**Node 48 · `the_hollowed_man` (dialogue event)**
+**Node 48 · `the_hollowed_man` (staged dialogue)**
 
 A Sable shelter. An old man wrapped in blankets — clear eyes, empty mind. He is Hollow.
 
-- **PLAYER:** Are you with the expedition?
-- **HOLLOWED MAN:** I was... something. I came down here for the same reason everyone does.
-- **PLAYER:** The dream?
-- **HOLLOWED MAN:** No. I came because of a woman.
-- *(the PLAYER goes still)*
-- **HOLLOWED MAN:** She told me to go home. She said the Deep wasn't what I thought. She said... *(he looks directly at the PLAYER)* ...She said her child would come eventually. And that I should tell them...
-- *(the memory slips away like water)*
-- **HOLLOWED MAN:** I don't remember what I was supposed to tell them.
+- **HOLLOWED MAN:** Are you with the expedition? No. Of course not. You're one of the ones who keeps walking.
+- **PLAYER:** Who did you come down here for?
+- **HOLLOWED MAN:** A woman. She told me to go home. She said the Deep wasn't what I thought. She said the next one would come eventually. And that I should tell them—
+- *(the sentence dies in his hand)*
+- **HOLLOWED MAN:** ...Tell them. I had it a moment ago.
+
+Choices: sit with him a while (+2 Resonance) / let the message go.
 
 ### Scene 2.2 — The Deep Pages
-**Node 60 · `the_deep_pages` (dialogue → forced combat)**
+**Node 60 · `the_deep_pages` (dialogue → optional combat)**
 
-The Resonant Hall. Books whose ink has not dried in five millennia. The pages are warm; the ink shifts unobserved. They are not records — they are invitations.
+The Resonant Hall. Books whose ink has not dried in five millennia. The pages are warm.
 
-- **ASH COVENANT SEER:** You carry her echo. The woman who said no.
-- **PLAYER:** What do you know about Eve?
-- **ASH COVENANT SEER:** She reached the Deep. She saw the Loom. And she chose solitude over translation. A strange choice. A selfish one.
-
-Combat vs Ash Covenant Seer. Defeated, it shatters into glass and dust.
+- **ASH COVENANT SEER:** You carry an echo. Someone who said no. She reached the Deep. She saw the Loom. She chose solitude over translation — a selfish choice. Ask me what you actually want to ask, or draw.
+- **PLAYER:** What did she see? *(combat)* — or back out of the hall slowly.
 
 ### Scene 2.3 — Patriarch Oren Cass
 **Node 80 · Landmark boss `patriarch`**
@@ -121,30 +112,22 @@ Combat vs Ash Covenant Seer. Defeated, it shatters into glass and dust.
 The Dark Vault — a forward chapel of the Sable Order. Incense and ash.
 
 - **PATRIARCH OREN CASS:** Keth-7. The expedition that lost its leader, its geologist, and its way. Yet you persist.
-- **PLAYER:** I'm looking for my mother.
-- **CASS** *(nods)***: Eve.**
-- **PLAYER:** You knew her?
-- **CASS:** Everyone who has gone deep enough knows Eve.
-- **PLAYER:** What did she do?
-- **CASS:** She tried to save us.
+- **PLAYER:** I'm looking for someone who came down before me.
+- **CASS** *(nods slowly)***:** Then you have been hearing her.
+- **PLAYER:** Hearing her?
+- **CASS:** The deep keeps what it cannot keep out. Everyone who has gone deep enough hears a voice that does not belong to the stone.
+- **PLAYER:** What is she?
+- **CASS:** Someone who tried to save us.
 - **PLAYER:** From the Loom?
 - **CASS:** No. *(his eyes hollow in a different way — not empty, but full)* From ourselves.
 
 Pre-combat choices:
-- **[A] Accept his purification** *(skips the fight)* — ash on the forehead: *"Go in peace. The Door beyond is sealed by my blessing."* As the PLAYER leaves he whispers: *"She still waits. Not for rescue. For the next one."*
+- **[A] Accept his purification** *(skips the fight)* — as the PLAYER leaves he whispers: *"She still waits. Not for rescue. For the next one."*
 - **[B] Refuse him.** → *"I don't need your salvation. I need the truth." / "The truth is what we are trying to prevent."*
-- **[C] "I know what you burned."** → his face crumples; he attacks enraged (DEF −20%).
 
-Phase dialogue:
-- Base: *"The Venn left because they saw something. It is not a god. It is not a devil. It is a becoming."*
-- The Devout (>30%): *"You think I am mad. But madness is simply clarity without consent."*
-- The Martyr (≤30%): *"Eve understood. The only way to stop the cycle was to become part of it. She was stronger than me. Stronger than you."*
-
-Aftermath — kneeling, ash mixing with blood, smiling:
+Aftermath — kneeling:
 
 **PATRIARCH OREN CASS:** She is still down there. Waiting. Not for rescue. For the next one.
-**PLAYER:** The next what?
-**PATRIARCH OREN CASS:** The next Seeker. The next sacrifice. The next...
 
 He dies smiling. The Second Door opens.
 
@@ -152,100 +135,74 @@ He dies smiling. The Second Door opens.
 
 ## CHAPTER 3 — THE SINGING DEEP (Nodes 81–120)
 
+**Chapter question: What did the Venn know?**
+
 ### Scene 3.1 — False Memories
-**Node 88 · `false_memories` (cutscene)**
+**Node 88 · `false_memories` (staged cutscene)**
 
-A Venn inscription almost resolves into words. Vision blurs.
+A Venn inscription almost resolves into words. Vision blurs — and a thought arrives that does not feel borrowed: warm hands. A low room. Someone counting brush-strokes while they teach you.
 
-- **PLAYER:** I remember Mom teaching me this. ...Wait.
+Wait. Did that happen?
 
-Did she? Or did the stone teach you to remember it that way?
-
-**NARRATION:** The deeper you go, the less certain reality becomes. The Loom is not just below you. It is around you. Reading.
+Choices: **Keep the memory, even if it is false** / **Give the memory back** (-2 Resonance).
 
 ### Scene 3.2 — The Memory Room
-**Node 92 · `the_memory_room` (cutscene, +1 eveVoiceHeard)**
+**Node 92 · `the_memory_room` (staged cutscene, +1 eveVoiceHeard)**
 
-A chamber that should not exist: childhood bed, old toys, Eve's chair, family photographs. Every photograph has Eve's face carefully scratched away with something sharp.
+A chamber that should not exist: childhood bed, old toys, a reading chair worn smooth by one person in the same spot. On the desk — family photographs, face-down. Every one of them.
 
-- **EVE (V.O.):** Don't look.
-- **PLAYER:** Why?
-- **EVE (V.O.):** Because you'll remember.
-- **PLAYER:** Remember what?
-- **EVE (V.O.)** *(softer, pleading)***: That I wasn't always your mother.**
+Turn them over: the same face scratched out of every single one — carefully, deliberately.
 
-For a fraction of a second — a figure in the corner: Eve, young, expedition gear, holding a journal. Then gone.
+- **THE VOICE:** Don't look.
+- **PLAYER:** Look anyway *(+3 Resonance)* → the scratch marks tell you everything: someone wanted to forget her on purpose.
+- Or put them back → **THE VOICE,** softer: Thank you.
 
 ### Scene 3.3 — The Merged Chorus
 **Node 120 · Landmark boss `chorus`**
 
 The Loom Gate. Forty figures in Archive robes moving as one — the voice a chord, a consensus.
 
-- **THE MERGED CHORUS:** You call us forty.
-- **PLAYER:** You are forty people.
-- **THE MERGED CHORUS:** Were.
-- **PLAYER:** Then what are you?
-- **THE MERGED CHORUS:** Less. And more.
-- **THE MERGED CHORUS:** How many memories make a person? How many voices make a self? We entered as scholars. We catalogued. We measured. We thought understanding would protect us.
-- *(one mouth opens wider than it should)*
-- **THE MERGED CHORUS:** The Loom does not destroy identity. It optimizes it. Forty egos. Forty fears. Forty lonely midnights. Reduced to one clear note.
+Closing lines: *"We remember another. Almost one of us, once. She chose solitude instead. A strange choice."*
 
-During combat: *"We remember Eve. She almost joined us. She chose solitude instead. A strange choice." / "She stood where you stand. She heard the harmony. She said no. But she took something with her when she left. A fragment. A seed."*
+Aftermath — one figure remains, mouthing three soundless words:
 
-Aftermath — voices fracturing, separating, screaming in forty pitches, then silence. One figure remains: an old woman, her face the only one still human, mouthing three soundless words:
-
-**ARCHIVE SCHOLAR:** She... loved... you.
-
-The Third Door opens.
+**ARCHIVE SCHOLAR:** She... listens... still.
 
 ---
 
 ## CHAPTER 4 — THE REACH OF DUST (Nodes 121–160)
 
+**Chapter question: What did she find?**
+
 ### Scene 4.1 — The Venn Truth
 **Node 132 · `the_venn_truth` (lore discovery)**
 
-The Crystal Veins. Light fractures into prophecy. An intact inscription:
+The Crystal Veins. One inscription survives intact:
 
-**NARRATION:** The Venn were not destroyed. They did not fall. They walked into the Loom deliberately, systematically. They set down their cups. They left their bread uneaten. And they did not return.
+**PLAYER** *(reading)***:** "We go not because we are called, but because we have finished the question."
 
-**PLAYER** *(reading)***: "We go not because we are called, but because we have finished the question."**
+Copy it (+10 XP, lore fragment) or leave it unread.
 
-### Scene 4.2 — Eve's First Journal
-**Node 155 · `eves_first_journal` (unskippable lore; sets `motherJournalFound`)**
+### Scene 4.2 — The First Journal
+**Node 155 · `eves_first_journal` (staged lore; sets `motherJournalFound`)**
 
-The Archive Depths. A locked case containing not the inherited journal but Eve's FIRST journal — written before the surface, before the forgetting.
+The Archive Depths. A locked case — inside, another journal: older, spine cracked from a descent that happened before yours.
 
-- **EVE (V.O., reading):** *"I found the Loom."*
-- *"It showed me myself. It showed me the person I could become. I understood."*
-- *"The thing in the Deep isn't promising us power. It's showing us what we are willing to sacrifice for it."*
-- *(final page, handwriting shaky)*
-- *"And I am afraid that I already said yes."*
+**THE VOICE,** reading aloud over your shoulder:
+- *"I found the Loom."*
+- *"It showed me myself. What I could become. I understood."*
+- *(final page, shaky)* *"And I am afraid that I already said yes."*
 
-The PLAYER closes the journal. Their hands are trembling.
+Your hands tremble — they are not your tremors. Take the journal (somewhere far below, the voice pauses mid-breath) or close the case gently (this time the voice does not pause; somehow that is worse).
 
 ### Scene 4.3 — The Fossil King
 **Node 160 · Landmark boss `fossil_king`**
 
 A throne room of black basalt. DOMINION, LAST OF ITS COURT, preserved mid-decree.
 
-- **THE FOSSIL KING** *(voice like grinding tectonics)***: Kneel. The empire persists.**
-- **PLAYER:** Your empire is dust.
-- **THE FOSSIL KING:** Dust is merely empire in another form.
-- **PLAYER:** Why did you stay when the Venn left?
-- **THE FOSSIL KING:** Someone must issue the last order. Even if there is no one left to hear it.
-
-Pre-combat choices: *"What did the Venn become?" / "Why did you stay?" / "Will you stop me?" (provokes, HP −10%) / "I have no question." (WILL ≥8, grants Barrier).*
-
-Phase dialogue:
-- Regal Decree (>76%): *"Imperial Edict! The foreigner shall be taxed! The dissident shall be silenced!"*
-- The Rebellion (>52%): *"They rose against me. My own court. They said I had ruled too long. They were correct."*
-- The Silence (>28%): *"The Venn left me behind. Not because I was unworthy. Because I was still speaking. They had finished their sentences. I had not."*
-- The Fossil (final): *"You will outlive your purpose too, child. Everyone does."*
-
 Aftermath — dissolving into sand:
 
-**THE FOSSIL KING:** Eve... stood where you stand. She wept. Not for herself. For the next one. For...
+**THE FOSSIL KING:** Another... stood where you stand. Long ago. They wept. Not for themselves. For the next one. For...
 
 Gone. The Fourth Door opens.
 
@@ -253,61 +210,55 @@ Gone. The Fourth Door opens.
 
 ## CHAPTER 5 — THE FINAL DESCENT (Nodes 161–200)
 
+**Chapter question: What is waiting, wearing my face?**
+
 ### Scene 5.1 — The Ashen Tunnels
-**Node 175 · `ashen_tunnels` (cutscene, +1 eveVoiceHeard)**
+**Node 175 · `ashen_tunnels` (staged cutscene, +1 eveVoiceHeard)**
 
 The tunnels breathe. Walls whisper in Venn — almost understandable now.
 
-- **EVE (V.O.):** You're close.
-- **PLAYER** *(stopping)***: Mom. I need to know. Are you really my mother?**
-- *(silence)*
-- **EVE (V.O.):** Does it matter?
+- **THE VOICE:** You're close.
+- **PLAYER:** I need to know who you are. What you are.
+- **THE VOICE:** Does it matter?
 - **PLAYER:** Yes.
-- **EVE (V.O.)** *(softer)***: That's what I said too.**
+- **THE VOICE** *(softer)***:** That's what I said too.
 
-### Scene 5.2 — The Eve Reveal
-**Node 185 · `eve_reveal` (unskippable cutscene, +1 eveVoiceHeard)**
+Or say nothing and keep walking — the silence weighs more than any question would have.
 
-The Covenant Spire — a temple built toward rather than away. At its heart stands EVE: not young, not old; the age she was when she died, clear-eyed and present. Translucent — a projection, a memory, a fragment of the Loom. Her expression is real.
+### Scene 5.2 — The Reveal
+**Node 185 · `eve_reveal` (unskippable staged cutscene, +1 eveVoiceHeard)**
 
-- **EVE:** I reached the Deep. I became Hollow. Then I tried to stop the next Seeker. I defeated them. They lost themselves. That was the cycle.
-- **PLAYER:** You killed them?
-- **EVE:** No. I saved them from becoming what I became. But saving them meant... becoming part of the mechanism. The Hollow doesn't just wait. It maintains. It keeps the door open. It keeps the promise alive.
-- **PLAYER:** You became part of the Loom.
-- **EVE:** I thought saving someone meant keeping them away from the Deep. I was wrong. The only way to save someone is to let them choose. Even if they choose wrong.
-- *(she steps closer)*
-- **EVE:** The Loom has been reading you since you entered. It knows your techniques. It knows your fears. It knows what you want to become.
-- **PLAYER:** And what do I want to become?
-- **EVE** *(smiles, sad)***: You want to become someone who understands. That's the most dangerous thing to want down here.**
-- *(she fades)*
-- **EVE:** The thing waiting at the end of the journey... is you.
+Title: **THE VOICE, GIVEN A FACE.**
+
+The Covenant Spire — a temple built toward rather than away. At its heart stands a woman: translucent, a projection, a fragment of the Loom. Her expression is real.
+
+She speaks, and the floor drops out of you. That voice — the empty camp, the scratched photographs, the breathing tunnels. Everywhere and nowhere, the whole way down.
+
+- **PLAYER:** It was you. Every time. It was always you.
+- **EVE:** Every time. From the first camp onward. I couldn't come closer than this — not without becoming part of what holds you here.
+- **PLAYER:** Who are you?
+- **EVE:** My name is Eve. And I am your mother.
+
+Then the confession: she reached the Deep, became Hollow, defeated the next Seeker to save them — saving them meant joining the mechanism. The Loom has been reading you since you entered. *"You want to understand. That's the most dangerous thing to want down here."*
+
+She fades: *"The thing waiting at the end of the journey... is you."*
+
+Choices at the naming: **Reach for her** (+5 Resonance) / **"Why tell me only now?"**
 
 ### Scene 5.3 — The Final Reflection
 **Node 200 · Landmark boss `reflection` — ending trigger**
 
-The Final Chamber. Before the door the Venn walked through stands THE FINAL REFLECTION — the PLAYER, but finished. Calm. Certain. Wearing their face with an expression they have never seen in a mirror.
+The Final Chamber. Before the door the Venn walked through stands THE FINAL REFLECTION — the PLAYER, but finished.
 
-- **THE FINAL REFLECTION:** You entered the Beneath to discover what happened to your mother.
-- *(it steps forward; its movements are the PLAYER's movements, perfected)*
-- **THE FINAL REFLECTION:** You discovered that you are walking toward becoming exactly what she became.
-- *(it raises a hand; the PLAYER's own techniques appear as shadows around it)*
-- **THE FINAL REFLECTION:** I am not your enemy. I am your completion. The thought you were too afraid to finish. The power was real. The dream was real. The Beneath was real. But there was a price.
-- *(its smile — the PLAYER's smile, but hollow)*
-- **THE FINAL REFLECTION:** The person who reaches the end and obtains the absolute power becomes part of the Hollow. There is no true return.
-
-Phase dialogue:
-- The Argument (>72%): *"What if she is not lost? What if she is distributed?"* — Mirror Cast.
-- The Evidence (>44%): *"You have been quoting her your whole life. When will you write your own lines?"* — Quoted Choice, Call Echoes.
-- The Question (>16%): *"What are you? A Seeker? No. A survivor? No. A son? A daughter? A question mark wearing skin?"* — Identity Erasure. *"The Loom asks: What will you become? And you have no answer. That is why it cannot read you. That is why you are dangerous."*
-- The Answer: *"I am what you will be if you finish the thought. If you accept that the cycle is not a trap, but a staircase. Step up. Or step away. But do not stand in the doorway forever."* — ⚡ Hollow Surge, telegraphed as *"I am not attacking you. I am offering you the only honest blow you will ever receive."*
+Opening: *"You entered the Beneath to discover what happened to your mother. You discovered that you are walking toward becoming exactly what she became."*
 
 Conditional phase-4 branches:
 - If `motherJournalFound`: **"She already said yes. And now you have to say it too."**
 - If `eveVoiceHeard ≥ 3`: **"You keep asking if I'm really her. Does it matter?"**
 
 ### Outcomes
-- **Victory** → Ending 1: THE HOLLOW (see `MAIN_STORY.md`)
-- **Defeat** → The Offer: *"You cannot win. But you do not have to become me."*
+- **Victory** → Ending 1: THE HOLLOW — the voice is heard one last time; it was always her. *"I'm sorry."*
+- **Defeat** → The Offer: *"You cannot win. But you do not have to become me."* Beneath it — fainter, worn, hers: **"Choose. Either way, I will not let go of you."**
   - **[A] Accept the dark.** → Ending 2: LOST IN THE DARK
   - **[B] Climb to the surface.** → Ending 3: THE RETURN
 
@@ -319,11 +270,11 @@ Both choices lock in immediately (autosave). There is no third option.
 
 Over black:
 
-**EVE (V.O.):** *"The Deep stares at you. The emotion in its gaze is the comfort of freedom itself."*
+**EVE:** *"The Deep stares at you. The emotion in its gaze is the comfort of freedom itself."*
 
 Pause.
 
-**EVE (V.O.)** *(different tone — not from the journal, but from memory, or from the Loom itself)***: But freedom isn't the same as escape.**
+**EVE** *(different tone — not from the journal, but from memory, or from the Loom itself)***:** But freedom isn't the same as escape.
 
 Silence. Wind over stone. Fading. Gone.
 

@@ -78,7 +78,7 @@ function migrateBlob(blob: SaveBlob): SaveBlob {
     }
     // v9: the player names themselves before descending.
     if (typeof player.name !== 'string' || player.name.trim().length === 0) {
-      player.name = "Eve's Child";
+      player.name = 'The Listener';
     }
   }
   if (blob.activeRun?.game) {

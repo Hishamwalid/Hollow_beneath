@@ -1,8 +1,9 @@
-﻿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { SHARD_SHOP } from '@data/shardShop';
 import { useGameStore } from '@store/gameStore';
 import { canAfford, purchase } from '@systems/EchoShardSystem';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { settleIn } from '@systems/motion';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { createTitle } from '@ui/headings';
@@ -20,6 +21,7 @@ export class ShardShopScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
+    settleIn(this);
     const cx = GAME_WIDTH / 2;
     this.rows = [];
 
@@ -63,7 +65,7 @@ export class ShardShopScene extends Phaser.Scene {
       const refresh = () => {
         const meta = useGameStore.getState().meta;
         const owned = meta.purchasedUnlocks.includes(entry.id);
-        costLabel.setText(owned ? 'Owned' : `${entry.cost}◆`);
+        costLabel.setText(owned ? 'Owned' : `${entry.cost}?`);
         btn.setEnabled(!owned && canAfford(meta, entry.id));
       };
       refresh();

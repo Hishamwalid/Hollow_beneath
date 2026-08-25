@@ -12,7 +12,7 @@ export interface TutorialScreen {
 export const INTRO_SCREEN: TutorialScreen = {
   id: 'intro',
   title: 'THE DESCENT',
-  body: "You are Eve's child.\n\nRoll the die. Walk. Choose. Live with it.\n\nEverything else, you'll learn on the way down.",
+  body: "You heard a voice. It said: keep walking.\n\nSo you walk.\n\nRoll the die. Walk. Choose. Live with it.\n\nEverything else, you'll learn on the way down.",
   icons: ['tok_player'],
 };
 
@@ -40,7 +40,7 @@ export const TUTORIAL_SCREENS: TutorialScreen[] = [
     id: 'loadout_and_goal',
     title: 'Loadout & Goal',
     icons: ['node_landmark'],
-    body: 'Six skill slots are active in combat — everything else waits in your ARCHIVE. New chapters unlock techniques tuned to what lurks there; swap freely between fights from the Loadout screen.\n\nFive guardians block the path to the Loom. Each one remembers Eve.\n\nDefeat them all. Reach the chamber at the bottom.\n\nThe thing waiting at the end of the journey is you.',
+    body: 'Six skill slots are active in combat — everything else waits in your ARCHIVE. New chapters unlock techniques tuned to what lurks there; swap freely between fights from the Loadout screen.\n\nFive guardians block the path to the Loom. Each one heard her too.\n\nDefeat them all. Reach the chamber at the bottom.\n\nThe thing waiting at the end of the journey is you.',
   },
 ];
 

@@ -1,17 +1,18 @@
-ï»¿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { NAMED_SKILLS, MAX_EQUIPPED_SKILLS_FALLBACK } from '@data/skills';
 import { MAX_EQUIPPED_SKILLS } from '@data/types';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { settleIn } from '@systems/motion';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { createTitle } from '@ui/headings';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 /**
- * LOADOUT â€” manage your six active skill slots.
+ * LOADOUT — manage your six active skill slots.
  * Everything learned sits in the archive; click to swap in/out. No points,
- * no trees â€” chapter unlocks and discoveries feed the pool directly.
+ * no trees — chapter unlocks and discoveries feed the pool directly.
  */
 export class LoadoutScene extends Phaser.Scene {
   private listContainer?: Phaser.GameObjects.Container;
@@ -24,10 +25,11 @@ export class LoadoutScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
+    settleIn(this);
     const cx = GAME_WIDTH / 2;
 
     createTitle(this, cx, 44, 'Skill Loadout');
-    this.add.text(cx, 82, 'Six slots active in combat. Everything else waits in the archive â€” click a skill to move it.', {
+    this.add.text(cx, 82, 'Six slots active in combat. Everything else waits in the archive — click a skill to move it.', {
       fontFamily: FONT_BODY,
       fontSize: '15px',
       color: PALETTE_HEX.boneMuted,
@@ -58,10 +60,10 @@ export class LoadoutScene extends Phaser.Scene {
     const topY = 120;
     const rowH = 74;
 
-    this.add.text(leftX + colW / 2, topY - 26, 'â€” EQUIPPED (active in combat) â€”', {
+    this.add.text(leftX + colW / 2, topY - 26, '— EQUIPPED (active in combat) —', {
       fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.gold,
     }).setOrigin(0.5);
-    this.add.text(rightX + colW / 2, topY - 26, 'â€” ARCHIVE (learned, not equipped) â€”', {
+    this.add.text(rightX + colW / 2, topY - 26, '— ARCHIVE (learned, not equipped) —', {
       fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted,
     }).setOrigin(0.5);
 
@@ -90,12 +92,12 @@ export class LoadoutScene extends Phaser.Scene {
         fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted,
         wordWrap: { width: colW - 190 },
       });
-      const costText = this.add.text(x + colW - 130, y + 20, costs.join(' Â· '), {
+      const costText = this.add.text(x + colW - 130, y + 20, costs.join(' · '), {
         fontFamily: FONT_MONO, fontSize: '13px',
         color: passive ? PALETTE_HEX.gold : PALETTE_HEX.player,
       }).setOrigin(0, 0);
 
-      const actionLabel = passive ? '' : isEquipped ? 'â–¼' : 'â–²';
+      const actionLabel = passive ? '' : isEquipped ? '?' : '?';
       const actionText = this.add.text(x + colW - 60, y + rowH / 2, actionLabel, {
         fontFamily: FONT_MONO, fontSize: '18px', color: PALETTE_HEX.gold,
       }).setOrigin(0.5);

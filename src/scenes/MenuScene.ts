@@ -6,6 +6,7 @@ import { createButton, type Button } from '@ui/Button';
 import { createPanel } from '@ui/Panel';
 import { createDivider, createSectionLabel, createSubtitle, createTitle } from '@ui/headings';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { reducedMotion } from '@systems/motion';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
@@ -38,12 +39,24 @@ export class MenuScene extends Phaser.Scene {
     this.spawnDust();
 
     // ---- Title -----------------------------------------------------------------
-    createTitle(this, GAME_WIDTH / 2, 96, 'THE HOLLOW BENEATH', { size: '44px' });
-    createSubtitle(this, GAME_WIDTH / 2, 142, 'a descent, a translation, a mistake made carefully');
+    const title = createTitle(this, GAME_WIDTH / 2, 96, 'THE HOLLOW BENEATH', { size: '44px' });
+    const subtitle = createSubtitle(this, GAME_WIDTH / 2, 142, 'a descent, a translation, a mistake made carefully');
     createDivider(this, this.add.container(0, 0), GAME_WIDTH / 2, 176, 420);
+    // The title breathes — faint, slow, alive.
+    if (!reducedMotion()) {
+      this.tweens.add({ targets: title, scale: { from: 1, to: 1.012 }, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: subtitle, alpha: { from: 0.75, to: 1 }, duration: 2600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      title.setAlpha(0).setScale(0.96);
+      subtitle.setAlpha(0);
+      this.tweens.add({ targets: [title, subtitle], alpha: 1, scale: 1, duration: 600, ease: 'Sine.easeOut' });
+    }
 
     // ---- Nav rail ---------------------------------------------------------------
     const navPanel = createPanel(this, { x: 330, y: 470, width: 480, height: 520, variant: 'stone', title: 'Expedition Camp' });
+    if (!reducedMotion()) {
+      navPanel.container.setAlpha(0).setY(470 + 18);
+      this.tweens.add({ targets: navPanel.container, y: 470, alpha: 1, duration: 380, ease: 'Sine.easeOut' });
+    }
 
 
     type Entry = { label: string; sub: string; onClick: () => void };
@@ -91,6 +104,11 @@ export class MenuScene extends Phaser.Scene {
 
     // ---- Expedition ledger ------------------------------------------------------
     const ledger = createPanel(this, { x: 900, y: 470, width: 400, height: 520, variant: 'parchment', title: 'Expedition Ledger' });
+    // The journal opens like a cover: horizontal unfurl.
+    if (!reducedMotion()) {
+      ledger.container.setScale(0.04, 1).setAlpha(0);
+      this.tweens.add({ targets: ledger.container, scaleX: 1, alpha: 1, duration: 420, delay: 160, ease: 'Cubic.easeOut' });
+    }
 
     const lx = -ledger.width / 2 + 26;
     let ly = ledger.contentY + 6;
@@ -138,7 +156,7 @@ export class MenuScene extends Phaser.Scene {
         { fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.inkSoft, fontStyle: 'italic', wordWrap: { width: ledger.width - 60 } },
       );
       void quote;
-      this.add.text(-ledger.width / 2 + 30, ly + 130, 'â€” EVE', {
+      this.add.text(-ledger.width / 2 + 30, ly + 130, 'â€” THE JOURNAL', {
         fontFamily: FONT_MONO, fontSize: '12px', color: PALETTE_HEX.oxide,
       }).setLetterSpacing(2);
     }

@@ -42,7 +42,7 @@ export const SENTINEL: BossDef = {
     },
     {
       id: 'want_mother',
-      label: '"I want to know what my mother saw."',
+      label: '"I want to know what the one before me saw."',
       apply: (player) => {
         player.history.push('sentinel_mother_recognized');
         return 'The Sentinel tilts its head. A gesture almost like recognition.\n\nTHE ARGENT SENTINEL: "...Then you are not here for the Door. You are here for the threshold."';
@@ -140,7 +140,7 @@ export const PATRIARCH: BossDef = {
   theme: 'Faith as anesthetic.',
   baseStats: { hp: 210, mp: 70, atk: 16, matk: 20, def: 16, mdef: 18, spd: 12 },
   approachText:
-    'The Dark Vault. A forward chapel of the Sable Order. Incense and ash. At the altar stands PATRIARCH OREN CASS — ash-marked, certain, and not entirely wrong.\n\nPATRIARCH OREN CASS: "Keth-7. The expedition that lost its leader, its geologist, and its way. Yet you persist."\n\n"I\'m looking for my mother."\n\nHe nods. CASS: "Eve."\n\n"You knew her?"\n\nCASS: "Everyone who has gone deep enough knows Eve."\n\n"What did she do?"\n\nCASS: "She tried to save us."\n\n"From the Loom?"\n\n"No."\n\nHe turns. His eyes are hollow in a different way — not empty, but full, overflowing with something that has nowhere to go.\n\nCASS: "From ourselves."',
+    'The Dark Vault. A forward chapel of the Sable Order. Incense and ash. At the altar stands PATRIARCH OREN CASS — ash-marked, certain, and not entirely wrong.\n\nPATRIARCH OREN CASS: "Keth-7. The expedition that lost its leader, its geologist, and its way. Yet you persist."\n\n"I\'m looking for someone who came down before me."\n\nHe nods slowly. CASS: "Then you have been hearing her."\n\nYou go very still. "Hearing her?"\n\nCASS: "The deep keeps what it cannot keep out. Everyone who has gone deep enough hears a voice that does not belong to the stone."\n\n"What is she?"\n\nCASS: "Someone who tried to save us."\n\n"From the Loom?"\n\n"No."\n\nHe turns. His eyes are hollow in a different way — not empty, but full, overflowing with something that has nowhere to go.\n\nCASS: "From ourselves."',
   preCombatChoices: [
     {
       id: 'accept',
@@ -352,7 +352,7 @@ export const CHORUS: BossDef = {
   theme: 'The self as a chosen fiction.',
   baseStats: { hp: 260, mp: 80, atk: 17, matk: 21, def: 12, mdef: 16, spd: 15 },
   approachText:
-    'The Loom Gate. Forty figures stand in a circle, wearing the robes of Archive scholars. They move as one. They speak as one. But the voice is not human — it is a chord, a harmony, a consensus.\n\nTHE MERGED CHORUS: "You call us forty."\n\n"You are forty people."\n\nTHE MERGED CHORUS: "Were."\n\n"Then what are you?"\n\nTHE MERGED CHORUS: "Less. And more."\n\nThe seams show — a hand that doesn\'t match the shoulder, a cadence changing mid-word.\n\nTHE MERGED CHORUS: "How many memories make a person? How many voices make a self? We entered as scholars. We catalogued. We measured. We thought understanding would protect us."\n\nOne of the mouths opens wider than it should.\n\nTHE MERGED CHORUS: "The Loom does not destroy identity. It optimizes it. Forty egos. Forty fears. Forty lonely midnights. Reduced to one clear note."\n\nAnd then, softer, in forty voices at once:\n\nTHE MERGED CHORUS: "We remember Eve. She almost joined us. She chose solitude instead. A strange choice."',
+    'The Loom Gate. Forty figures stand in a circle, wearing the robes of Archive scholars. They move as one. They speak as one. But the voice is not human — it is a chord, a harmony, a consensus.\n\nTHE MERGED CHORUS: "You call us forty."\n\n"You are forty people."\n\nTHE MERGED CHORUS: "Were."\n\n"Then what are you?"\n\nTHE MERGED CHORUS: "Less. And more."\n\nThe seams show — a hand that doesn\'t match the shoulder, a cadence changing mid-word.\n\nTHE MERGED CHORUS: "How many memories make a person? How many voices make a self? We entered as scholars. We catalogued. We measured. We thought understanding would protect us."\n\nOne of the mouths opens wider than it should.\n\nTHE MERGED CHORUS: "The Loom does not destroy identity. It optimizes it. Forty egos. Forty fears. Forty lonely midnights. Reduced to one clear note."\n\nAnd then, softer, in forty voices at once:\n\nTHE MERGED CHORUS: "We remember another. Almost one of us, once. She chose solitude instead. A strange choice."',
   preCombatChoices: [
     {
       id: 'insight',
@@ -463,7 +463,7 @@ export const CHORUS: BossDef = {
     if ((flags.chorusChallenge ?? 0) === 1) {
       return 'The Chorus fragments the moment you name what was done to it.';
     }
-    return 'The seams finally give. The voices separate, screaming in forty pitches, then silence.\n\nOne figure remains — an old woman, her face the only one still human. She mouths three words, soundlessly:\n\nARCHIVE SCHOLAR: "She... loved... you."\n\nShe collapses. The Third Door opens.';
+    return 'The seams finally give. The voices separate, screaming in forty pitches, then silence.\n\nOne figure remains — an old woman, her face the only one still human. She mouths three words, soundlessly:\n\nARCHIVE SCHOLAR: "She... listens... still."\n\nShe collapses. The Third Door opens.';
   },
   getRewards: (flags) => {
     if ((flags.chorusOffer ?? 0) === 1) {
@@ -666,8 +666,8 @@ export const FOSSIL_KING: BossDef = {
   ],
   aftermathText: (flags) =>
     (flags.ultimateCharging ?? 0) === 1
-      ? 'He falls mid-syllable, the ultimate decree unfinished, and something in his stone face looks — almost — relieved.\n\nTHE FOSSIL KING, dissolving into sand: "Eve... stood where you stand. She wept. Not for herself. For the next one. For..."\n\nGone. The Fourth Door opens.'
-      : 'The last of him settles into the throne completely, indistinguishable now from the stone around it.\n\nTHE FOSSIL KING, dissolving into sand: "Eve... stood where you stand. She wept. Not for herself. For the next one. For..."\n\nGone. The Fourth Door opens.',
+      ? 'He falls mid-syllable, the ultimate decree unfinished, and something in his stone face looks — almost — relieved.\n\nTHE FOSSIL KING, dissolving into sand: "Another... stood where you stand. Long ago. They wept. Not for themselves. For the next one. For..."\n\nGone. The Fourth Door opens.'
+      : 'The last of him settles into the throne completely, indistinguishable now from the stone around it.\n\nTHE FOSSIL KING, dissolving into sand: "Another... stood where you stand. Long ago. They wept. Not for themselves. For the next one. For..."\n\nGone. The Fourth Door opens.',
   getRewards: () => ({
     factionDelta: { caravan: 15, archive: 10 },
     resonanceDelta: 10,
@@ -808,8 +808,8 @@ export const REFLECTION: BossDef = {
       },
     },
     {
-      id: 'eve_memory', label: "Eve's Memory", weight: 10000,
-      description: 'Phase-4 dialogue branching on journal found / Eve voices heard.',
+      id: 'eve_memory', label: 'Echoed Memory', weight: 10000,
+      description: 'Phase-4 dialogue branching on journal found / voices heard.',
       condition: (ctx) => ctx.phaseKey === 'answer' && (ctx.self.flags.eveLinesSpoken ?? 0) < 2,
       resolve(ctx) {
         const spoke = (ctx.self.flags.eveLinesSpoken ?? 0);

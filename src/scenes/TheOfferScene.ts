@@ -4,6 +4,7 @@ import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { createButton } from '@ui/Button';
 import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createTitle } from '@ui/headings';
+import { reducedMotion } from '@systems/motion';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 /**
@@ -35,23 +36,37 @@ export class TheOfferScene extends Phaser.Scene {
         { fontFamily: FONT_SERIF, fontSize: '21px', color: PALETTE_HEX.gold, align: 'center', wordWrap: { width: 820 } })
       .setOrigin(0.5);
 
+    this.add
+      .text(cx, GAME_HEIGHT / 2 + 44,
+        'And beneath it — fainter, worn, hers:\n\nEVE: "Choose. Either way, I will not let go of you."',
+        { fontFamily: FONT_BODY, fontSize: '15px', color: PALETTE_HEX.oxide, fontStyle: 'italic', align: 'center', wordWrap: { width: 820 }, lineSpacing: 6 })
+      .setOrigin(0.5);
+
     // Choice A — accept the dark.
-    createButton(this, cx - 190, GAME_HEIGHT - 170, 'Accept the dark.', () => this.choose('dark'), {
+    const darkBtn = createButton(this, cx - 190, GAME_HEIGHT - 170, 'Accept the dark.', () => this.choose('dark'), {
       width: 320, height: 56, fontSize: '17px',
-    }).container.setDepth(10);
+    });
+    darkBtn.container.setDepth(10);
     this.add
       .text(cx - 190, GAME_HEIGHT - 128, 'Sink into the stone. Become part of the architecture.',
         { fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5);
 
     // Choice B — climb.
-    createButton(this, cx + 190, GAME_HEIGHT - 170, 'Climb to the surface.', () => this.choose('climb'), {
+    const climbBtn = createButton(this, cx + 190, GAME_HEIGHT - 170, 'Climb to the surface.', () => this.choose('climb'), {
       width: 320, height: 56, fontSize: '17px',
-    }).container.setDepth(10);
+    });
+    climbBtn.container.setDepth(10);
     this.add
       .text(cx + 190, GAME_HEIGHT - 128, 'Go home. Live. Forget. The same fate as Eve\'s.',
         { fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.boneMuted })
       .setOrigin(0.5);
+
+    // The weight of choice: the two options breathe in opposition.
+    if (!reducedMotion()) {
+      this.tweens.add({ targets: darkBtn.container, scale: { from: 1, to: 1.03 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: climbBtn.container, scale: { from: 1.03, to: 1 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
 
     this.add
       .text(cx, GAME_HEIGHT - 60,

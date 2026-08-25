@@ -111,11 +111,13 @@ export function createButton(
     hovered = true;
     applyVisuals();
     scene.tweens.add({ targets: container, y: y - 2, duration: 90, ease: 'Sine.easeOut' });
+    if (hoverBg) scene.tweens.add({ targets: hoverBg, fillAlpha: 0.16, duration: 140, ease: 'Sine.easeOut' });
   });
   bg.on('pointerout', () => {
     hovered = false;
     applyVisuals();
     scene.tweens.add({ targets: container, y, duration: 90, ease: 'Sine.easeOut' });
+    if (hoverBg) scene.tweens.add({ targets: hoverBg, fillAlpha: 0, duration: 160, ease: 'Sine.easeOut' });
   });
   bg.on('pointerdown', () => {
     if (!enabled) return;

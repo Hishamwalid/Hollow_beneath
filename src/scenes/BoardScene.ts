@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import type { BoardNode, FactionState } from '@data/types';
 import { CHECKPOINTS, LANDMARK_INDICES, CAPTURE_INDICES } from '@systems/BoardGenerator';
-import { PINNED_STORY_EVENTS, STORY_EVENTS } from '@data/storyEvents';
+import { PINNED_STORY_EVENTS, STORY_EVENTS, STORY_BEAT_REMINDERS } from '@data/storyEvents';
 import { FIRST_NODE_TOOLTIPS } from '@data/tutorialText';
 import { rollDie, rollMovement } from '@systems/checks';
 import { TOTAL_NODES, CHAPTERS, NODES_PER_CHAPTER, GAME_WIDTH, GAME_HEIGHT } from '@/config';
@@ -14,6 +14,10 @@ import { MINOR_LANDMARKS } from '@data/minorLandmarks';
 import { DISCOVERABLE_SKILLS, NAMED_SKILLS } from '@data/skills';
 import { shardsForNodeVisit, applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
+import { maybeVoiceLine } from '@systems/VoiceSystem';
+import { pulseOnce, shake, floatDelta, reducedMotion } from '@systems/motion';
+import { spawnHitParticles } from '@systems/particles';
+import { takeBoardFx } from '@systems/fxDelta';
 import { createDiceRoller } from '@ui/DiceRoller';
 import { createNodePreview } from '@ui/NodePreview';
 import { createPlayerPanel } from '@ui/PlayerPanel';
@@ -39,6 +43,15 @@ const CHAPTER_NAMES: Record<number, string> = {
   3: 'The Singing Deep',
   4: 'The Reach of Dust',
   5: 'The Final Descent',
+};
+
+/** The dramatic question each chapter asks — surfaced on transitions + title. */
+const CHAPTER_QUESTIONS: Record<number, string> = {
+  1: 'What spoke to me?',
+  2: 'Who else has heard it?',
+  3: 'What did the Venn know?',
+  4: 'What did she find?',
+  5: 'What is waiting, wearing my face?',
 };
 
 const NODES_PER_MAP = NODES_PER_CHAPTER;
@@ -233,6 +246,7 @@ export class BoardScene extends Phaser.Scene {
   private chapterPips: Phaser.GameObjects.Rectangle[] = [];
   private playerPanel?: ReturnType<typeof createPlayerPanel>;
   private factionPanel?: ReturnType<typeof createFactionPanel>;
+  private lastBeatChip?: Phaser.GameObjects.Text;
   private actionGrid?: ReturnType<typeof createActionGrid>;
   private preview?: ReturnType<typeof createNodePreview>;
   private diceRoller?: ReturnType<typeof createDiceRoller>;
@@ -374,14 +388,17 @@ export class BoardScene extends Phaser.Scene {
 
     this.factionPanel = createFactionPanel(this, COL2_X, FACTION_PANEL_Y, COL_W);
     this.factionPanel.update(player.faction);
+    this.flushPendingFx();
 
     const journal = createPanel(this, { x: COL2_X + COL_W / 2, y: LOG_PANEL_Y + LOG_PANEL_H / 2, width: COL_W, height: LOG_PANEL_H, variant: 'stone', title: 'Journal', depth: 1 });
     void journal;
     this.logLines = [];
     const startChapter = chapterForNode(Math.max(1, game.currentNodeIndex));
     this.pushLog(startChapter, game.currentNodeIndex, this.chapterFlavor(startChapter));
+    this.updateLastBeatChip(player);
 
     this.updateBoardTitle(startChapter);
+    this.spawnMapDust();
 
     if (game.currentNodeIndex >= TOTAL_NODES) {
       this.rollBtn.setEnabled(false);
@@ -411,7 +428,7 @@ export class BoardScene extends Phaser.Scene {
 
   private updateBoardTitle(chapter: number) {
     this.titleText?.setText(CHAPTER_NAMES[chapter] ?? 'The Threshold');
-    this.titleSub?.setText(`Chapter ${chapter} / ${CHAPTERS}`);
+    this.titleSub?.setText(`Chapter ${chapter} / ${CHAPTERS}  ·  ${CHAPTER_QUESTIONS[chapter] ?? ''}`);
 
     // Chapter progress pips — five diamonds along the title bar's right edge.
     if (this.chapterPips.length === 0) {
@@ -551,6 +568,19 @@ export class BoardScene extends Phaser.Scene {
         this.boardNodeLayer.add(cpRing);
         if (EDIT_PATH_ENABLED && isStagePath) icon.setData('cpRing', cpRing);
       }
+
+      // Ambient node tells: unresolved story beats breathe gold; traps smolder.
+      if (!node.resolved && !isCurrent) {
+        if (node.subtype.startsWith('story:')) {
+          const halo = this.add.circle(x, y, size / 2 + 4, 0x000000, 0).setStrokeStyle(2, 0xe9c876, 0.5);
+          this.boardNodeLayer.add(halo);
+          this.tweens.add({ targets: halo, alpha: { from: 0.25, to: 0.95 }, scale: { from: 1, to: 1.14 }, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        } else if (node.type === 'trap') {
+          const ember = this.add.circle(x, y, size / 2 + 3, 0xb0453f, 0.16);
+          this.boardNodeLayer.add(ember);
+          this.tweens.add({ targets: ember, alpha: { from: 0.08, to: 0.34 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+        }
+      }
     }
 
     if (this.ghostToken) { this.ghostToken.destroy(); this.ghostToken = undefined; }
@@ -668,28 +698,53 @@ export class BoardScene extends Phaser.Scene {
     this.pushLog(chapterForNode(Math.max(1, game?.currentNodeIndex ?? 1)), Math.max(1, game?.currentNodeIndex ?? 1), msg);
   }
 
-  /** Journal feed — newest entry on top with a node marker; older lines fade below. */
+  /** Journal feed — newest entry on top with a node marker; older lines glide down. */
   private pushLog(_chapter: number, nodeIndex: number, msg: string) {
     const entry = `N${nodeIndex} · ${msg}`;
-    // Move existing lines down.
+    // Move existing lines down (animated).
     for (let i = this.logLines.length - 1; i >= 0; i--) {
       const line = this.logLines[i];
       const slot = i + 1;
       if (slot >= 3) { line.destroy(); continue; }
-      line.setY(line.y + (LOG_PANEL_H - 28) / 3);
-      line.setAlpha(slot === 2 ? 0.65 : 0.4);
+      this.tweens.add({ targets: line, y: line.y + (LOG_PANEL_H - 28) / 3, alpha: slot === 2 ? 0.65 : 0.4, duration: 180, ease: 'Sine.easeOut' });
     }
     const line = this.add.text(COL2_X + 14, LOG_PANEL_Y + 26, entry, {
       fontFamily: FONT_BODY,
       fontSize: '13px',
       color: PALETTE_HEX.bone,
       wordWrap: { width: COL_W - 28 },
-    }).setDepth(6);
+    }).setDepth(6).setAlpha(0);
+    this.tweens.add({ targets: line, alpha: 1, x: { from: COL2_X - 8 }, duration: 200, ease: 'Sine.easeOut' });
     this.logLines.unshift(line);
     if (this.logLines.length > 3) {
       const dropped = this.logLines.pop();
       dropped?.destroy();
     }
+  }
+
+  /**
+   * Persistent context anchor under the Journal title: the most recent story
+   * beat and its signature line, so the thread survives long node stretches.
+   */
+  private updateLastBeatChip(player: NonNullable<ReturnType<typeof useGameStore.getState>['player']>): void {
+    let lastId: string | null = null;
+    for (let i = player.history.length - 1; i >= 0; i--) {
+      const h = player.history[i];
+      if (!h.startsWith('event_seen:')) continue;
+      const id = h.slice('event_seen:'.length);
+      if (STORY_EVENTS[id]) { lastId = id; break; }
+    }
+    if (this.lastBeatChip) { this.lastBeatChip.destroy(); this.lastBeatChip = undefined; }
+    if (!lastId) return;
+    const title = STORY_EVENTS[lastId].title;
+    const line = STORY_BEAT_REMINDERS[lastId] ?? '';
+    this.lastBeatChip = this.add.text(COL2_X + 14, LOG_PANEL_Y + 10, `✦ ${title} — ${line}`, {
+      fontFamily: FONT_BODY,
+      fontSize: '11px',
+      color: PALETTE_HEX.gold,
+      fontStyle: 'italic',
+      wordWrap: { width: COL_W - 28 },
+    }).setDepth(6).setAlpha(0.9);
   }
 
   private handleRoll() {
@@ -719,6 +774,9 @@ export class BoardScene extends Phaser.Scene {
     }
 
     this.diceRoller?.roll(roll, () => {
+      // Result slam: gold ring + micro-shake sell the throw before the walk.
+      pulseOnce(this, COL2_X + COL_W / 2, DICE_PANEL_Y + 70, 46, 0xe9c876, { depth: 50, duration: 320 });
+      shake(this, 0.0025, 90);
       try {
         if (this.tryAmbush(target)) return;
         this.moveTo(target);
@@ -764,9 +822,30 @@ export class BoardScene extends Phaser.Scene {
     const dest = node ? positionForNode(node) : caveCenter();
     audio.moveStep();
     if (this.playerToken) {
+      const token = this.playerToken;
+      const fromX = token.x;
+      const fromY = token.y;
+      const baseScale = 0.24;
+      const proxy = { t: 0 };
+      const dur = 300;
       this.tweens.add({
-        targets: this.playerToken, x: dest.x, y: dest.y, duration: 260, ease: 'Sine.easeInOut',
-        onComplete: () => this.finishMove(target),
+        targets: proxy,
+        t: 1,
+        duration: dur,
+        ease: 'Sine.easeInOut',
+        onUpdate: () => {
+          const t = proxy.t;
+          token.x = Phaser.Math.Linear(fromX, dest.x, t);
+          const hop = reducedMotion() ? 0 : Math.sin(t * Math.PI);
+          token.y = Phaser.Math.Linear(fromY, dest.y, t) - hop * 10;
+          const squash = 1 + hop * 0.18 - Math.max(0, t - 0.92) * 1.2;
+          token.setScale(baseScale * squash, baseScale * (2 - squash));
+        },
+        onComplete: () => {
+          token.setScale(baseScale);
+          spawnHitParticles(this, dest.x, dest.y + 6, 0x9a9488);
+          this.finishMove(target);
+        },
       });
     } else {
       this.finishMove(target);
@@ -779,6 +858,11 @@ export class BoardScene extends Phaser.Scene {
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
     const depth = 200;
+
+    // The map pushes toward you as the chapter announces itself.
+    if (!reducedMotion()) {
+      this.tweens.add({ targets: this.cameras.main, zoom: { from: 1, to: 1.045 }, duration: 520, yoyo: true, ease: 'Sine.easeInOut' });
+    }
 
     const container = this.add.container(0, 0).setDepth(depth);
     const bg = this.add.rectangle(cx, cy, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.85).setDepth(depth).setAlpha(0);
@@ -794,7 +878,12 @@ export class BoardScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
     container.add(nameText);
 
-    const elements = [bg, chapterText, nameText];
+    const questionText = this.add.text(cx, cy + 62, CHAPTER_QUESTIONS[chapter] ?? '', {
+      fontFamily: FONT_SERIF, fontSize: '17px', color: PALETTE_HEX.gold, fontStyle: 'italic',
+    }).setOrigin(0.5).setDepth(depth + 1).setAlpha(0);
+    container.add(questionText);
+
+    const elements = [bg, chapterText, nameText, questionText];
     this.tweens.add({
       targets: elements,
       alpha: { from: 0, to: 1 },
@@ -979,9 +1068,14 @@ export class BoardScene extends Phaser.Scene {
       this.log('You look for somewhere to rest. The floor here remembers your last fall, and offers nothing.');
       return;
     }
-    let disrupted = false;
-    if (isAnyFactionHostile(player.faction) && Math.random() < REST_DISRUPT_CHANCE) {
-      disrupted = true;
+    const statusOf = (k: keyof typeof player.faction) => influenceStatus(player.faction[k]);
+    const hostileKey = (Object.keys(player.faction) as (keyof typeof player.faction)[])
+      .find((k) => influenceStatus(player.faction[k]) === 'Hostile');
+    let disrupted = !!hostileKey && Math.random() < REST_DISRUPT_CHANCE;
+    // Devoted Sable hunters announce themselves and stand down.
+    if (disrupted && statusOf('sable') === 'Devoted') {
+      disrupted = false;
+      this.log('Boots circle your fire once — Sable hunters. They mark the ash on your gear, bow, and melt back into the dark.');
     }
     let healPct = player.flags.next_rest_double ? 50 : 25;
     if (player.flags.next_rest_double) delete player.flags.next_rest_double;
@@ -991,12 +1085,21 @@ export class BoardScene extends Phaser.Scene {
     player.currentHP = Math.min(player.derived.maxHP, player.currentHP + heal);
     const mpRestore = disrupted ? Math.round(player.derived.maxMP * 0.15) : Math.round(player.derived.maxMP * 0.3);
     player.currentMP = Math.min(player.derived.maxMP, player.currentMP + mpRestore);
-    player.resonance = Math.max(0, player.resonance - 1);
+    let resonanceCalm = 1;
+    if (!disrupted && statusOf('covenant') === 'Devoted') resonanceCalm = 3; // the harmony settles around you
+    player.resonance = Math.max(0, player.resonance - resonanceCalm);
     audio.heal();
-    if (disrupted) {
-      this.log(`You wake to the sound of blades being drawn. Not enough rest. +${heal} HP, +${mpRestore} MP (-1 Resonance).`);
+    if (disrupted && hostileKey) {
+      const WHO: Record<string, string> = {
+        sable: 'Sable hunters',
+        archive: 'Archive custodians',
+        covenant: 'Covenant zealots',
+        caravan: 'Dust-Road knives',
+      };
+      this.log(`You wake to ${WHO[hostileKey]} circling your fire. Not enough rest. +${heal} HP, +${mpRestore} MP (-1 Resonance).`);
     } else {
-      this.log(`You rest a while. +${heal} HP, +${mpRestore} MP (-1 Resonance).`);
+      const calmNote = resonanceCalm > 1 ? ` (-${resonanceCalm} Resonance — the Covenant's calm)` : ` (-${resonanceCalm} Resonance)`;
+      this.log(`You rest a while. +${heal} HP, +${mpRestore} MP${calmNote}.`);
     }
   }
 
@@ -1036,6 +1139,7 @@ export class BoardScene extends Phaser.Scene {
     }
 
     const xpStore = useGameStore.getState();
+    const goldBeforeDiscovery = player.gold;
     switch (chosen) {
       case 'lost_supplies': {
         const gold = 3 + rollDie(6, Math.random);
@@ -1062,7 +1166,10 @@ export class BoardScene extends Phaser.Scene {
         player.gold += gold;
         if (!player.loreFragments.includes(id)) {
           player.loreFragments.push(id);
-          player.echoShards += applyShardBonus(player, 1);
+          player.echoShards += applyShardBonus(player, influenceStatus(player.faction.archive) === 'Devoted' ? 2 : 1);
+          // The presence has opinions about what you carry.
+          const voiceLine = maybeVoiceLine('lore_found');
+          if (voiceLine) showWhisper(this, GAME_WIDTH / 2, 178, voiceLine, 460);
         }
         xpStore.addXp(8);
         this.log(`Something written, worth reading twice. +${gold} gold, a lore fragment, +8 XP.`);
@@ -1132,6 +1239,13 @@ export class BoardScene extends Phaser.Scene {
         this.log(`You find something left behind by whoever came through last. +${gold} gold, +5 XP.`);
       }
     }
+    // Devoted Caravan perk: the Dust-Road takes care of its own.
+    const goldDelta = player.gold - goldBeforeDiscovery;
+    if (goldDelta > 0 && influenceStatus(player.faction.caravan) === 'Devoted') {
+      const bonus = Math.round(goldDelta * 0.5);
+      player.gold += bonus;
+      this.log(`Word of your standing travels the Dust Road. (+${bonus} gold — Caravan rates)`);
+    }
     audio.shardGain();
   }
 
@@ -1149,8 +1263,61 @@ export class BoardScene extends Phaser.Scene {
     }
   }
 
-  private markResolved(node: BoardNode) {
-    node.resolved = true;
+  /** Fine ash drifting through the map area — the Beneath is never still. */
+  private spawnMapDust(): void {
+    if (reducedMotion()) return;
+    for (let i = 0; i < 12; i++) {
+      const x = MAP_AREA_X + Math.random() * MAP_AREA_W;
+      const y = MAP_AREA_Y + Math.random() * MAP_AREA_H;
+      const mote = this.add.image(x, y, 'particle')
+        .setTint(0xc9a24b)
+        .setAlpha(0.04 + Math.random() * 0.07)
+        .setScale(0.3 + Math.random() * 0.5)
+        .setDepth(2);
+      this.tweens.add({
+        targets: mote,
+        y: y - 40 - Math.random() * 60,
+        x: x + (Math.random() - 0.5) * 30,
+        alpha: 0.01,
+        duration: 9000 + Math.random() * 8000,
+        repeat: -1,
+        delay: Math.random() * 5000,
+        onRepeat: () => mote.setPosition(MAP_AREA_X + Math.random() * MAP_AREA_W, MAP_AREA_Y + MAP_AREA_H + 8),
+      });
+    }
+  }
+
+  /** Plays back state changes that happened off-screen (events/combat) as floating chips. */  private flushPendingFx(): void {
+    const fx = takeBoardFx();
+    if (reducedMotion()) return;
+    const panelX = COL2_X + COL_W - 18;
+    let row = 0;
+    if (fx.faction) {
+      const FACTION_COLORS: Record<string, string> = {
+        sable: '#e06c6c', archive: '#7fb0c9', covenant: '#b08ae0', caravan: '#e0a45c',
+      };
+      for (const key of Object.keys(fx.faction)) {
+        const entry = fx.faction[key];
+        if (!entry) continue;
+        const delta = entry.to - entry.from;
+        floatDelta(this, panelX, FACTION_PANEL_Y + 26 + row * 22,
+          `${key} ${delta > 0 ? '+' : ''}${delta}`,
+          FACTION_COLORS[key] ?? '#e9c876', { depth: 60 });
+        row++;
+      }
+    }
+    if (fx.gold) {
+      const delta = fx.gold.to - fx.gold.from;
+      floatDelta(this, panelX, FACTION_PANEL_Y + 26 + row * 22 + 6,
+        `${delta > 0 ? '+' : ''}${delta} gold`, delta >= 0 ? '#e9c876' : '#e06c6c', { depth: 60 });
+    }
+  }
+
+  private markResolved(node: BoardNode) {    node.resolved = true;
+    // Resolution feedback: gold ring burst + spark puff at the node itself.
+    const pos = positionForNode(node);
+    pulseOnce(this, pos.x, pos.y, 26, 0xe9c876, { depth: 15, duration: 340 });
+    spawnHitParticles(this, pos.x, pos.y, 0xc9a24b);
   }
 
   private afterInlineResolution() {

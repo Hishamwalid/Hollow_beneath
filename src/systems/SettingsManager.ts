@@ -2,6 +2,8 @@ export interface GameSettings {
   masterVolume: number;
   textSpeed: number;
   screenShake: boolean;
+  /** Accessibility: gates shakes, large movements, and freeze-frame pulses. */
+  reduceMotion: boolean;
   /** Phase 6d: difficulty mode ('easy'|'normal'|'hard'|'ironman'). */
   difficulty: 'easy' | 'normal' | 'hard' | 'ironman';
 }
@@ -12,6 +14,7 @@ const DEFAULTS: GameSettings = {
   masterVolume: 100,
   textSpeed: 100,
   screenShake: true,
+  reduceMotion: false,
   difficulty: 'normal',
 };
 

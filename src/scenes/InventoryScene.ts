@@ -1,4 +1,4 @@
-ï»¿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { useGameStore } from '@store/gameStore';
 import { ITEMS } from '@data/items';
 import type { ItemDef, Equipment } from '@data/types';
@@ -6,6 +6,7 @@ import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { createTitle } from '@ui/headings';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { settleIn } from '@systems/motion';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 import { addResonanceEffects } from '@systems/ResonanceFX';
 
@@ -57,6 +58,7 @@ export class InventoryScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
+    settleIn(this);
     const cx = GAME_WIDTH / 2;
     const store = useGameStore.getState();
     const player = store.player;
@@ -111,7 +113,7 @@ export class InventoryScene extends Phaser.Scene {
           container.add([bg, slotLabel, nameText, bonusText]);
         }
       } else {
-        const emptyText = this.add.text(panelX + 140, y, 'â€” empty â€”', {
+        const emptyText = this.add.text(panelX + 140, y, '— empty —', {
           fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.boneMuted, fontStyle: 'italic',
         }).setOrigin(0, 0.5);
         container.add([bg, slotLabel, emptyText]);
@@ -134,7 +136,7 @@ export class InventoryScene extends Phaser.Scene {
         const itemName = def?.name ?? entry.id;
         const desc = def?.description ?? '';
         const kind = def?.kind ?? '';
-        this.add.text(panelX + 20, y, `Ã—${entry.qty}`, { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold });
+        this.add.text(panelX + 20, y, `×${entry.qty}`, { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.gold });
         this.add.text(panelX + 60, y, itemName, { fontFamily: FONT_SERIF, fontSize: '15px', color: PALETTE_HEX.bone, wordWrap: { width: 200 } });
         this.add.text(panelX + 280, y, desc, { fontFamily: FONT_BODY, fontSize: '14px', color: PALETTE_HEX.boneMuted, wordWrap: { width: 280 } });
         this.add.text(panelX + 600, y, kind, { fontFamily: FONT_MONO, fontSize: '13px', color: PALETTE_HEX.boneMuted });
@@ -263,7 +265,7 @@ const nameText = scene.add.text(cx - panelW / 2 + 30, y, label, {
     }
 
     if (slot === 'accessory' && currentId !== null) {
-      makeRow(this, 'â€” Remove accessory â€”', '', '', false, true, rowIndex++, null);
+      makeRow(this, '— Remove accessory —', '', '', false, true, rowIndex++, null);
     }
 
     compatibleItems.forEach((entry) => {

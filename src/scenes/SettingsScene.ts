@@ -73,6 +73,7 @@ export class SettingsScene extends Phaser.Scene {
     this.buildVolumeSlider(cx, settings);
     this.buildTextSpeedSlider(cx, settings);
     this.buildScreenShakeToggle(cx, settings);
+    this.buildReduceMotionToggle(cx, settings);
     this.buildDifficulty(cx);
     this.buildCredits(cx);
     this.buildClearData(cx);
@@ -127,9 +128,23 @@ export class SettingsScene extends Phaser.Scene {
     }, { width: 80, height: 36, fontSize: '14px' });
   }
 
+  private buildReduceMotionToggle(cx: number, settings: GameSettings) {
+    const y = 340;
+    this.addSettingsLabel(cx - 300, y, 'Reduce Motion');
+    this.add.text(cx + 140, y, 'calms shakes & large movement', {
+      fontFamily: FONT_MONO, fontSize: '11px', color: PALETTE_HEX.boneMuted,
+    }).setOrigin(0, 0.5);
+    const toggle = createButton(this, cx + 40, y, settings.reduceMotion ? 'ON' : 'OFF', () => {
+      const next = !settingsManager.get().reduceMotion;
+      settingsManager.set({ reduceMotion: next });
+      toggle.container.destroy();
+      this.scene.restart();
+    }, { width: 80, height: 36, fontSize: '14px' });
+  }
+
   private buildDifficulty(cx: number) {
     const modes = ['easy', 'normal', 'hard', 'ironman'] as const;
-    const y = 330;
+    const y = 385;
     const current = settingsManager.get().difficulty;
 
     this.addSettingsLabel(cx - 300, y, 'Difficulty');

@@ -1,6 +1,7 @@
 ﻿import Phaser from 'phaser';
 import { FONT_BODY, FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
+import { settingsManager } from '@systems/SettingsManager';
 import { GAME_HEIGHT } from '@/config';
 
 export interface ChoiceMenuItem {
@@ -81,6 +82,16 @@ export function createChoiceMenu(
       row.card.clearTint();
       row.card.setAlpha(1);
       row.root.setScale(active ? 1.02 : 1);
+      // Hover nudge: the chosen card leans forward out of the stack.
+      try {
+        if (!settingsManager.get().reduceMotion) {
+          scene.tweens.add({ targets: row.root, x: active ? 8 : 0, duration: 120, ease: 'Sine.easeOut' });
+        } else {
+          row.root.x = active ? 8 : 0;
+        }
+      } catch {
+        row.root.x = active ? 8 : 0;
+      }
     }
   };
 

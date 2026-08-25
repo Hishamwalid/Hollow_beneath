@@ -11,6 +11,8 @@ const BATTLEFIELD_STATES: Record<string, { label: string; turns?: number }> = {}
 const BRAVERY_ACTIONS: Array<{ id: string; label: string; detail?: string; apCost?: number }> = [];
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { maybePickWhisper } from '@systems/WhisperSystem';
+import { maybeVoiceLine } from '@systems/VoiceSystem';
+import { pulseOnce, dimPulse, shake, reducedMotion } from '@systems/motion';
 import { showWhisper } from '@ui/WhisperOverlay';
 import { addResonanceEffects } from '@systems/ResonanceFX';
 import { createStatPanel } from '@ui/StatPanel';
@@ -196,6 +198,7 @@ export class CombatScene extends Phaser.Scene {
   private targetingMode = false;
   private pendingTargeted?: { type: string; fn: () => CombatSnapshot; hpCost: number };
   private resultShown = false;
+  private lowHpVoiced = false;
   private fxAnchor = { ...FX_ANCHOR_BASE };
   private playerShadow?: Phaser.GameObjects.Ellipse;
   private allyDisplay?: AllyDisplay;
@@ -258,6 +261,7 @@ export class CombatScene extends Phaser.Scene {
     const player = store.player;
     this.lastPlayerHP = player?.currentHP ?? 0;
     this.displayedPlayerHP = this.lastPlayerHP;
+    this.lowHpVoiced = false;
     this.pendingBeginRound = false;
     this.afterEnemyPhase = undefined;
     this.lastFatigue = player?.fatigue ?? 0;
@@ -449,6 +453,19 @@ export class CombatScene extends Phaser.Scene {
       this.lastEnemyViews.set(e.key, e);
       this.enemyDisplays.push(disp);
       this.enemyKeyMap.set(e.key, disp);
+      // Spawn entrance: foes drop in from above and land with a puff.
+      if (!this.transformCutscene) {
+        const c = disp.container;
+        const targetY = c.y;
+        if (!reducedMotion()) {
+          c.y = targetY - 46;
+          c.setAlpha(0);
+          this.tweens.add({
+            targets: c, y: targetY, alpha: 1, duration: 300, delay: 80 + i * 70, ease: 'Cubic.easeIn',
+            onComplete: () => spawnHitParticles(this, c.x, targetY + 30, 0x9a9488),
+          });
+        }
+      }
     });
     if (!this.selectedTarget && snap.enemies[0]) this.selectedTarget = null;
     this.updateEnemyMarkers();
@@ -676,14 +693,18 @@ export class CombatScene extends Phaser.Scene {
         const isBoss = this.sceneData.mode === 'boss' && this.sceneData.bossId === view.defId;
         disp.update({ ...view, hp: 0, alive: true });
         if (isBoss) continue; // bosses stay for their defeat sequence
-        // Regular foes drain, then dissolve away before the result shows.
+        // Regular foes drain, gray out, slump, and dissolve before the result shows.
+        if (!reducedMotion()) {
+          this.tweens.add({ targets: disp.container, delay: 250, duration: 380, angle: { from: 0, to: -6 }, y: '+=10', ease: 'Quad.easeIn' });
+        }
         this.tweens.add({
           targets: disp.container,
           alpha: 0,
-          delay: 250,
+          delay: reducedMotion() ? 250 : 700,
           duration: 450,
           onComplete: () => disp.container.setVisible(false),
         });
+        spawnHitParticles(this, disp.container.x, disp.container.y, 0x9a9488);
       }
       this.updateTargetHighlight(snap);
     } else {
@@ -742,8 +763,20 @@ export class CombatScene extends Phaser.Scene {
     }
     if ((snap.phase === 'victory' || snap.phase === 'defeat' || snap.phase === 'fled') && !this.resultShown) {
       this.resultShown = true;
+      // The presence reacts to a won fight — once, briefly, after the kill lands.
+      if (snap.phase === 'victory') {
+        const line = maybeVoiceLine('victory');
+        if (line) this.time.delayedCall(1400, () => showWhisper(this, GAME_WIDTH / 2, 96, line, 600));
+      }
       // Let the killing blow land, the HP bar drain, and the foe dissolve — then show the result.
       this.time.delayedCall(850, () => this.handleCombatEnd(snap.phase));
+    }
+    // Near-death reaction — fires at most once per fight.
+    if (player && !this.lowHpVoiced && snap.phase === 'player' && snap.playerHP > 0
+        && snap.playerHP / Math.max(1, player.derived.maxHP) < 0.25) {
+      this.lowHpVoiced = true;
+      const line = maybeVoiceLine('low_hp');
+      if (line) showWhisper(this, GAME_WIDTH / 2, 96, line, 600);
     }
   }
 
@@ -1315,6 +1348,7 @@ export class CombatScene extends Phaser.Scene {
     const display = targetKey ? this.enemyKeyMap.get(targetKey) : undefined;
     let dealtAny = false;
     const showAllEnemyDamage = () => {
+      let heavyLanded = false;
       for (const e of snap.enemies) {
         const before = prevEnemyHP.get(e.key);
         if (before === undefined || before === e.hp) continue;
@@ -1326,7 +1360,10 @@ export class CombatScene extends Phaser.Scene {
           this.floatingText(ed.container.x, ed.container.y - 55, `-${before - e.hp}`, dmgColor);
           this.setEnemyPose(ed, 'hit');
           this.shakeTarget(ed.container);
+          pulseOnce(this, ed.container.x, ed.container.y, 46, parseInt(String(dmgColor).replace('#', ''), 16) || 0xb0453f, { depth: 30, duration: 260 });
           spawnHitParticles(this, ed.container.x, ed.container.y, 0xb0453f);
+          // A blow that took a real chunk out of the foe earns a beat of weight.
+          if (before - e.hp >= Math.max(18, e.maxHp * 0.22)) heavyLanded = true;
         } else {
           this.floatingText(ed.container.x, ed.container.y - 55, `+${e.hp - before}`, PALETTE_HEX.ok);
         }
@@ -1338,6 +1375,16 @@ export class CombatScene extends Phaser.Scene {
         else audio.hit();
       } else if (qte === 'miss') {
         audio.miss();
+      }
+      if (heavyLanded || qte === 'perfect') {
+        dimPulse(this, qte === 'perfect' ? 0.34 : 0.24, 60);
+        shake(this, qte === 'perfect' ? 0.005 : 0.0035, 110);
+      }
+      // PERFECT timing paints the frame's edge gold for a breath.
+      if (qte === 'perfect' && !reducedMotion()) {
+        const frame = this.add.rectangle(FRAME_X + FRAME_W / 2, FRAME_Y + FRAME_H / 2, FRAME_W + 8, FRAME_H + 8)
+          .setStrokeStyle(6, 0xe9c876, 0).setDepth(45);
+        this.tweens.add({ targets: frame, strokeAlpha: 0.85, duration: 70, yoyo: true, hold: 40, onComplete: () => frame.destroy() });
       }
     };
     this.showBanners(snap);

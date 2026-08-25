@@ -6,7 +6,7 @@ import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
 /**
- * Credits sequence — over black, Eve's voice, wind over stone.
+ * Credits sequence — over black, the voice, wind over stone.
  * "But freedom isn't the same as escape."
  */
 export class CreditsScene extends Phaser.Scene {

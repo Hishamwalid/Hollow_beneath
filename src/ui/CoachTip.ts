@@ -37,13 +37,20 @@ export function createCoachTip(
 
   container.add([shadow, card, label]);
   container.setAlpha(0);
-  container.setScale(0.96);
+  // Spring entrance: overshoot past full size, then settle.
+  container.setScale(0.82);
   scene.tweens.add({
     targets: [container, pin],
     alpha: { from: 0, to: 1 },
-    scale: { from: 0.96, to: 1 },
-    duration: 260,
+    duration: 220,
     ease: 'Sine.easeOut',
+  });
+  scene.tweens.add({
+    targets: container,
+    scale: { from: 0.82, to: 1 },
+    duration: 340,
+    delay: 40,
+    ease: 'Back.easeOut',
   });
 
   let destroyed = false;

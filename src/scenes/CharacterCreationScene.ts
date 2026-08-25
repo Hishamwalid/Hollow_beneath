@@ -6,6 +6,7 @@ import { createButton } from '@ui/Button';
 import { createPanel } from '@ui/Panel';
 import { createDivider } from '@ui/headings';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { settleIn, reducedMotion } from '@systems/motion';
 import { audio } from '@placeholder/PlaceholderAudio';
 import { GAME_WIDTH, GAME_HEIGHT } from '@/config';
 
@@ -29,19 +30,20 @@ export class CharacterCreationScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
+    settleIn(this);
     const cx = GAME_WIDTH / 2;
 
-    this.add.text(cx, 64, 'Before You Descend', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
-    this.add
+    const header = this.add.text(cx, 64, 'Before You Descend', { fontFamily: FONT_SERIF, fontSize: '34px', color: PALETTE_HEX.gold }).setOrigin(0.5);
+    const intro = this.add
       .text(
         cx,
         130,
-        "Eve's child stands at the mouth of the sinkhole.\n\nThe journal is heavy in your hands. The desert wind is loud.\nSeven hundred years of Seekers have climbed down before you.\nYou never dreamed their dream.",
+        "You stand at the mouth of the sinkhole.\n\nThe journal is heavy in your hands. The desert wind is loud.\nSeven hundred years of Seekers have climbed down before you.\nYou never dreamed their dream.",
         { fontFamily: FONT_BODY, fontSize: '17px', color: PALETTE_HEX.boneMuted, align: 'center', lineSpacing: 6 },
       )
       .setOrigin(0.5);
 
-    this.add.text(cx, 288, 'Write your name.', { fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.bone }).setOrigin(0.5);
+    const nameLabel = this.add.text(cx, 288, 'Write your name.', { fontFamily: FONT_SERIF, fontSize: '22px', color: PALETTE_HEX.bone }).setOrigin(0.5);
 
     const namePanel = createPanel(this, { x: cx, y: 344, width: 520, height: 96, variant: 'parchment' });
     void namePanel;
@@ -49,7 +51,7 @@ export class CharacterCreationScene extends Phaser.Scene {
     this.mountNameInput(cx - 220, 318, 440, 52);
 
     const derived = computeDerivedStats(STARTING_STATS, STARTING_EQUIPMENT_BONUSES);
-    this.add
+    const statsBlock = this.add
       .text(cx, 452,
         [
           'You carry:',
@@ -59,6 +61,16 @@ export class CharacterCreationScene extends Phaser.Scene {
         { fontFamily: FONT_MONO, fontSize: '14px', color: PALETTE_HEX.boneMuted, align: 'center', lineSpacing: 6 },
       )
       .setOrigin(0.5);
+
+    // Staggered arrival: title → prose → prompt → stats.
+    if (!reducedMotion()) {
+      [header, intro, nameLabel, statsBlock].forEach((t, i) => {
+        const ty = t.y;
+        t.y = ty + (i === 0 ? -14 : 18);
+        t.setAlpha(0);
+        this.tweens.add({ targets: t, y: ty, alpha: 1, duration: 420, delay: i * 130, ease: 'Sine.easeOut' });
+      });
+    }
 
     this.hint = this.add
       .text(cx, GAME_HEIGHT - 96, '', { fontFamily: FONT_BODY, fontSize: '13px', color: PALETTE_HEX.danger })

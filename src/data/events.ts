@@ -7,7 +7,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'The Half-Eaten Meal',
     chapterRange: [1, 1],
     flavorText:
-      'A Venn common-house. Five thousand years old. The bread on the table still looks fresh. A cup sits beside it, untouched. The chair is pulled back, as if someone stood up mid-bite and simply... never sat down again.\n\n"This is how the Venn left," you think. "Mid-bite."\n\nOn the wall: "The meal is finished when the guest departs." But no one departed.',
+      'A Venn common-house, five thousand years old. The bread still looks fresh. A cup sits untouched. One chair is pulled back, as if someone stood up mid-bite and never sat down again.\n\nOn the wall: "The meal is finished when the guest departs." No one departed.',
     choices: [
       {
         id: 'eat',
@@ -126,7 +126,7 @@ export const EVENTS: Record<string, EventDef> = {
           player.faction.sable += 10;
           player.resonance = Math.min(100, player.resonance + 3);
           ctx.setFlag('sable_scripture_unlocked');
-          return 'You recite the verse correctly, in the old cadence. Something in their posture changes.\n\n"The Sentinel asked my mother the same question," one of them says, before they wave you through. You do not tell them she was not answering it. (+10 Sable, +3 Resonance)';
+          return 'You recite the verse correctly, in the old cadence. Something in their posture changes.\n\n"Someone asked the Sentinel that same question once," one of them says, before they wave you through. You do not ask what became of them. (+10 Sable, +3 Resonance)';
         },
       },
       {
@@ -148,7 +148,7 @@ export const EVENTS: Record<string, EventDef> = {
     chapterRange: [1, 1],
     maxResonance: 24,
     flavorText:
-      'A section of Venn wall hums at a frequency you feel in your sternum. You hear your own voice — speaking words you haven\'t said yet.\n\nAnd beneath it, thinner, older, unmistakable:\n\nEVE (V.O.): "Don\'t answer it."',
+      'A section of Venn wall hums at a frequency you feel in your sternum. You hear your own voice — speaking words you haven\'t said yet.\n\nAnd beneath it, thinner, older:\n\nTHE VOICE: "Don\'t answer it."',
     choices: [
       {
         id: 'touch',
@@ -421,7 +421,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: "Mira Tol's Ledger",
     chapterRange: [1, 1],
     flavorText:
-      'A woman in a pale blue coat sits cross-legged on a fallen column, ink-stained fingers turning a brass-hinged ledger. "Archivist Mira Tol," she says, without looking up. "You\'re carrying more Resonance than your face admits. Sit. Talk to me. I catalogue everything. Including you, now."\n\nShe glances up — and for the first time actually sees you. Her quill stops.\n\n"Wait. I know that face. You have her jaw." She closes the ledger slowly. "Eve\'s child. Something down here remembers her. Whatever you do, don\'t assume it remembers her kindly."',
+      'A woman in a pale blue coat sits cross-legged on a fallen column, ink-stained fingers turning a brass-hinged ledger. "Archivist Mira Tol," she says, without looking up. "You\'re carrying more Resonance than your face admits. Sit. Talk to me. I catalogue everything. Including you, now."\n\nShe glances up — and her quill stops.\n\n"Wait. I know that face." She closes the ledger slowly. "Someone down here remembers your face too. Don\'t assume it remembers you kindly."',
     choices: [
       {
         id: 'answer_her_question',
@@ -482,7 +482,7 @@ export const EVENTS: Record<string, EventDef> = {
           player.faction.caravan += 10;
           player.inventory.push({ id: 'ash_marked_wrap', qty: 1 });
           ctx.setFlag('saved_marked_child');
-          return "The patrol passes without slowing. The child exhales like they've been holding it for days, then presses their marked wrap into your hands before running. \"Don't need it now,\" they say. Then, over their shoulder, words you will carry the rest of the way down: \"The Hollowed Man told me — she said her child would come.\" (-15 Sable, +10 Caravan, Ash-Marked Wrap)";
+          return "The patrol passes without slowing. The child exhales like they've been holding it for days, then presses their marked wrap into your hands before running. \"Don't need it now,\" they say. Then, over their shoulder, words you will carry the rest of the way down: \"The Hollowed Man told me — she said the next one would come.\" (-15 Sable, +10 Caravan, Ash-Marked Wrap)";
         },
         onFailure: () => 'The patrol rounds the corner before you can do anything but stand between them and the wall.',
         combat: { enemyIds: ['sable_zealot', 'sable_zealot'] },
@@ -634,7 +634,7 @@ export const EVENTS: Record<string, EventDef> = {
     chapterRange: [1, 1],
     requiresAnyFlag: ['sentinel_defeated'],
     flavorText:
-      "A single sheet, pinned to the wall with what looks like one of the Sentinel's own broken components. The handwriting is careful, deliberate — the writing of something that had a great deal of time and finally decided to use some of it.",
+      "A single sheet pinned to the wall with one of the Sentinel's own broken components. The handwriting is careful — the writing of something that had a great deal of time, and finally decided to spend some.",
     choices: [
       {
         id: 'read_it',
@@ -743,7 +743,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: "The Choir's Understudy",
     chapterRange: [2, 2],
     flavorText:
-      'An Ash Covenant convert kneels alone, one crystal only half-formed at their temple, tears running clear instead of the strange light the fully-changed ones show. "It isn\'t supposed to hurt this long," they say. "Please. Make it stop, or make it finish. I don\'t care which anymore."',
+      'An Ash Covenant convert kneels alone, one crystal only half-formed at their temple, tears running clear instead of the strange light the fully-changed ones show. "It isn\'t supposed to hurt this long," they say. "Make it stop, or make it finish. I don\'t care which anymore."',
     choices: [
       {
         id: 'help_it_finish',
@@ -875,7 +875,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'A Kindness, Poorly Timed',
     chapterRange: [2, 3],
     flavorText:
-      'A Dominion soldier, ancient beyond reckoning, sits propped against a wall with one arm no longer attached. It is still, technically, holding its post. It looks up at you with something that might be hope, or might just be a targeting routine finally finding a use.',
+      'A Dominion soldier, ancient beyond reckoning, sits propped against a wall with one arm no longer attached — still, technically, holding its post. It looks up at you with something like hope, or a targeting routine finally finding a use.',
     choices: [
       {
         id: 'end_it',
@@ -914,7 +914,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'The Last Page',
     chapterRange: [4, 5],
     flavorText:
-      "The corridor widens into something almost peaceful. No threat here, no puzzle, no wall that hums. Just quiet, and the sense that whatever comes next is close enough now to stop pretending you're not thinking about it.",
+      "The corridor widens into something almost peaceful. No threat, no puzzle, no wall that hums. Just quiet — and the sense that you're close enough to the end now that pretending not to think about it has stopped working.",
     choices: [
       {
         id: 'take_stock',
@@ -1064,7 +1064,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'The Half-Packed Bag',
     chapterRange: [2, 3],
     flavorText:
-      'A Venn sleeping quarter. Clothes folded on a cot. A travel bag, half-packed, its owner interrupted mid-decision. The bed is made with military precision — the first fold is the only one that matters, because after that you are committed.',
+      'A Venn sleeping quarter. Clothes folded on a cot; a travel bag half-packed, its owner interrupted mid-decision.',
     choices: [
       {
         id: 'search_bag',
@@ -1204,7 +1204,7 @@ export const EVENTS: Record<string, EventDef> = {
     title: 'The Echoing Hallway',
     chapterRange: [1, 2],
     flavorText:
-      'Every step echoes twice. Once forward, once backward. One of them is not your step — it comes a fraction too late, and from slightly closer than it should.\n\nSomewhere in the doubled footsteps, a thought arrives that does not feel like yours:\n\n"I remember Mom teaching me this. Wait. Did she?"',
+      'Every step echoes twice. Once forward, once backward. One of them is not your step — it comes a fraction too late, and from slightly closer than it should.\n\nSomewhere in the doubled footsteps, a thought arrives that does not feel like yours:\n\n"I remember someone teaching me this. Warm hands. A low room. Wait. Did that happen?"',
     choices: [
       {
         id: 'walk_through',
@@ -1366,7 +1366,7 @@ export const EVENTS: Record<string, EventDef> = {
     chapterRange: [1, 1],
     minResonance: 20,
     flavorText:
-      'The song is not celebration. It is grief. A circle of Ash Covenant novices sings a slow, aching hymn, tears cutting tracks through the ash on their cheeks. They are singing for someone they lost into the Loom.\n\nAs you pass, one novice turns to you, eyes wet, and says: "Eve almost joined us. She took a fragment when she left. We still sing to it."',
+      'The song is not celebration. It is grief. A circle of Ash Covenant novices sings a slow, aching hymn, tears cutting tracks through the ash on their cheeks. They are singing for someone they lost into the Loom.\n\nAs you pass, one novice turns to you, eyes wet, and says: "One almost joined us, long ago. She took a fragment when she left. We still sing to it."',
     choices: [
       {
         id: 'join_lament',
@@ -1517,6 +1517,126 @@ export const EVENTS: Record<string, EventDef> = {
           player.resonance = Math.max(0, player.resonance - 4);
           ctx.setFlag('loom_silenced');
           return 'You force yourself awake, gasping. The dream-scene crumbles. The Loom is still there, waiting, but it will not approach you in sleep again this run. (+8 Sable, -4 Resonance)';
+        },
+      },
+    ],
+  },
+  // ---- Faction callbacks — they remember you ---------------------------------
+
+  mara_returns: {
+    id: 'mara_returns',
+    title: 'A Regular Customer',
+    chapterRange: [2, 4],
+    repeatable: false,
+    requiresAnyFlag: ['merchant_backstory_known'],
+    flavorText:
+      'A fire burns where no road should run. Mara, Dust-Road Caravan, does not look up from it. "Heard you were coming. Down here, the dust talks."\n\nShe kicks a crate toward your side of the flames. "Sit. You\'re the closest thing I\'ve got to a regular."',
+    choices: [
+      {
+        id: 'trade_stories',
+        label: 'Trade stories of the roads.',
+        onSuccess: (player) => {
+          player.faction.caravan += 8;
+          player.resonance = Math.max(0, player.resonance - 2);
+          player.currentHP = Math.min(player.derived.maxHP, player.currentHP + Math.round(player.derived.maxHP * 0.1));
+          return '"Everything up top is priced," she says again, softer this time, like a refrain. "Down here you learn what things cost for free." For a while the dark is almost company. (+8 Caravan, -2 Resonance, +10% HP)';
+        },
+      },
+      {
+        id: 'buy_map_corrections',
+        label: 'Buy her map corrections. (25 gold)',
+        requirement: (p) => p.gold >= 25,
+        onSuccess: (player, ctx) => {
+          player.gold -= 25;
+          ctx.setFlag('next_rest_double');
+          return 'She redraws three routes in the dirt and burns the old ones. "Sleep deeper tonight," she says. "You\'ve earned a real rest." (-25 gold, next Rest heals 50%)';
+        },
+      },
+    ],
+  },
+
+  mira_follow_up: {
+    id: 'mira_follow_up',
+    title: 'Filed Under: You',
+    chapterRange: [2, 4],
+    requiresAnyFlag: ['mira_tol_met'],
+    flavorText:
+      'A ledger page weighted flat with a stone, left exactly where only you would pass. The handwriting is unmistakable.\n\n"You are difficult to catalogue," it reads. "You keep changing. Return for a full entry when this is over — if there is an after."',
+    choices: [
+      {
+        id: 'leave_your_page',
+        label: 'Leave your own page under hers.',
+        onSuccess: (player) => {
+          player.faction.archive += 8;
+          player.resonance = Math.min(100, player.resonance + 1);
+          return 'You write three honest lines and slide them beneath her stone. Somewhere above, a quill you cannot hear stops mid-word. (+8 Archive, +1 Resonance)';
+        },
+      },
+      {
+        id: 'take_the_page',
+        label: 'Keep the page. Proof someone kept track.',
+        onSuccess: (player) => {
+          player.faction.archive += 6;
+          player.gold += 20;
+          return 'Folded into your journal, it weighs more than paper should. She left payment folded inside it, which tells you something about how Archive people say goodbye. (+6 Archive, +20 gold)';
+        },
+      },
+    ],
+  },
+
+  covenant_blessing: {
+    id: 'covenant_blessing',
+    title: 'The Harmony Knows You',
+    chapterRange: [3, 5],
+    requiresAnyFlag: ['joined_hymn', 'joined_whisper'],
+    flavorText:
+      'Crystals hum as you pass the Covenant camp — recognizing you now. A novice presses her palm to your shoulder without asking. "The harmony knows you," she says. "It settles around you like weather."',
+    choices: [
+      {
+        id: 'accept_blessing',
+        label: 'Accept the blessing.',
+        onSuccess: (player) => {
+          player.faction.covenant += 6;
+          player.resonance = Math.max(0, player.resonance - 4);
+          return 'For a moment the Beneath goes quiet — not silent, quiet. Held. The noise comes back, but slower, like it has learned manners. (+6 Covenant, -4 Resonance)';
+        },
+      },
+      {
+        id: 'ask_about_her',
+        label: '"The one who almost joined you — tell me more."',
+        onSuccess: (player, ctx) => {
+          player.faction.covenant += 6;
+          player.faction.archive += 3;
+          ctx.addXp(10);
+          return 'They sing you what they remember, which is not much and is therefore trustworthy. "She chose solitude," the novice says, wondering. "We have never managed it since." (+6 Covenant, +3 Archive, +10 XP)';
+        },
+      },
+    ],
+  },
+
+  sable_escort: {
+    id: 'sable_escort',
+    title: 'An Honor Guard',
+    chapterRange: [2, 4],
+    requiresAnyFlag: ['interrogated_full', 'sable_scripture_unlocked'],
+    flavorText:
+      'Two crimson figures fall into step behind you and stay there. Not threats — escorts.\n\n"The Order protects its own," one says. "Even the ones who have not yet taken the ash."',
+    choices: [
+      {
+        id: 'walk_with_them',
+        label: 'Walk with the escort through hostile ground.',
+        onSuccess: (player) => {
+          player.faction.sable += 6;
+          player.resonance = Math.max(0, player.resonance - 3);
+          return 'Nothing attacks while they flank you. Word travels faster than blades down here. At a junction, they stop as one. "This is where we watch from." (+6 Sable, -3 Resonance)';
+        },
+      },
+      {
+        id: 'decline_kindly',
+        label: 'Decline. Walk alone.',
+        onSuccess: (player) => {
+          player.faction.sable += 3;
+          return '"As you like." They bow — actually bow — and vanish into the ashfall you had stopped noticing. (+3 Sable)';
         },
       },
     ],

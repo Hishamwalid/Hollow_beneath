@@ -119,7 +119,7 @@ export class EndingScene extends Phaser.Scene {
       const isBeatBreak = line.trim() === '';
       label = this.add
         .text(GAME_WIDTH / 2, isBeatBreak ? GAME_HEIGHT / 2 : GAME_HEIGHT / 2, line || '. . .', {
-          fontFamily: line.startsWith('EVE') || line.startsWith('THE LOOM') || line.includes('(V.O.)') ? FONT_SERIF : FONT_BODY,
+          fontFamily: line.startsWith('EVE') || line.startsWith('THE LOOM') ? FONT_SERIF : FONT_BODY,
           fontSize: line.startsWith('EVE') || line.startsWith('THE LOOM') ? '20px' : '18px',
           color: line.startsWith('EVE') || line.startsWith('THE LOOM') ? PALETTE_HEX.gold : PALETTE_HEX.bone,
           wordWrap: { width: 900 },

@@ -10,6 +10,9 @@ import { createChoiceMenu, type ChoiceMenu } from '@ui/ChoiceMenu';
 import { createButton } from '@ui/Button';
 import { applyShardBonus } from '@systems/EchoShardSystem';
 import { spawnCelebrationParticles } from '@systems/particles';
+import { maybeVoiceLine } from '@systems/VoiceSystem';
+import { reducedMotion } from '@systems/motion';
+import { showWhisper } from '@ui/WhisperOverlay';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
 import { FONT_BODY, FONT_SERIF, PALETTE_HEX } from '@ui/uiTheme';
 import { audio } from '@placeholder/PlaceholderAudio';
@@ -56,6 +59,13 @@ export class LandmarkScene extends Phaser.Scene {
 
     const overlay = this.add.rectangle(cx, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.95).setDepth(depth).setAlpha(0);
     this.tweens.add({ targets: overlay, alpha: 1, duration: 300, ease: 'Sine.easeOut' });
+    // Iris opens around the guardian's name.
+    if (!reducedMotion()) {
+      const iris = this.add.rectangle(cx, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT)
+        .setStrokeStyle(300, 0x000000, 1).setDepth(depth + 2).setScale(1.4);
+      this.tweens.add({ targets: iris, scale: 1, duration: 900, ease: 'Sine.easeOut' });
+      this.time.delayedCall(1400, () => iris.destroy());
+    }
 
     const nameText = this.add.text(cx, GAME_HEIGHT / 2 - 50, '', {
       fontFamily: FONT_SERIF, fontSize: '48px', color: PALETTE_HEX.gold,
@@ -68,6 +78,11 @@ export class LandmarkScene extends Phaser.Scene {
         nameText.setText(boss.name.slice(0, charIndex));
         if (charIndex <= boss.name.length) audio.confirm();
         if (charIndex >= boss.name.length) {
+          // The name lands with weight: settle from a slight overshoot.
+          if (!reducedMotion()) {
+            nameText.setScale(1.06);
+            scene.tweens.add({ targets: nameText, scale: 1, duration: 220, ease: 'Back.easeOut' });
+          }
           nameTimer.remove();
           scene.showSubtitleElements(boss, cx, depth, overlay, nameText, bossId);
         }
@@ -238,6 +253,9 @@ export class LandmarkScene extends Phaser.Scene {
     const dialog = createDialogBox(this, GAME_WIDTH / 2, 280, 860, 220);
     this.dialog = dialog;
     dialog.setText(boss.aftermathText(flags), () => {
+      // The presence reacts to a guardian falling — once, briefly.
+      const voiceLine = bossId === 'reflection' ? null : maybeVoiceLine('boss_fall');
+      if (voiceLine) showWhisper(this, GAME_WIDTH / 2, 130, voiceLine, 640);
       this.showRewardNotes(notes, () => {
         this.continueBtn?.destroy();
         this.continueBtn = createButton(

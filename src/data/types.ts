@@ -348,6 +348,18 @@ export interface EventChoice {
   onSuccess: (player: PlayerState, ctx: EventApplyCtx) => string;
   onFailure?: (player: PlayerState, ctx: EventApplyCtx) => string;
   combat?: { enemyIds: string[]; onVictory?: (player: PlayerState, ctx: EventApplyCtx) => string };
+  /**
+   * Staged storytelling: instead of ending the scene after this choice's
+   * resolution text, continue into another narration stage with its own
+   * choices. Depth is capped by the presenter; mechanics are unchanged.
+   */
+  then?: EventStage;
+}
+
+/** One interactive stage of a multi-beat event (flavor + follow-up choices). */
+export interface EventStage {
+  flavorText: string;
+  choices: EventChoice[];
 }
 
 export interface EventApplyCtx {

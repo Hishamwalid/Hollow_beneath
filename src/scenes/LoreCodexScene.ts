@@ -1,7 +1,8 @@
-ï»¿import Phaser from 'phaser';
+import Phaser from 'phaser';
 import { LORE_FRAGMENTS, TOTAL_LORE_FRAGMENTS } from '@data/loreFragments';
 import { useGameStore } from '@store/gameStore';
 import { fadeToScene, fadeIn } from '@systems/sceneTransition';
+import { settleIn } from '@systems/motion';
 import { FONT_BODY, FONT_SERIF, FONT_MONO, PALETTE_HEX, DAMAGE_TYPE_HEX } from '@ui/uiTheme';
 import { createButton } from '@ui/Button';
 import { createTitle } from '@ui/headings';
@@ -53,6 +54,7 @@ export class LoreCodexScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor(0x0b0d10);
     fadeIn(this);
+    settleIn(this);
     this.page = 0;
     this.tab = 'lore';
     const cx = GAME_WIDTH / 2;
@@ -171,7 +173,7 @@ export class LoreCodexScene extends Phaser.Scene {
         const rowY = LIST_TOP + i * ROW_H + ROW_H / 2 - 8;
 
         const bg = this.add.rectangle(cx, rowY, 960, ROW_H - 14, 0x16191d).setStrokeStyle(1, known ? 0x3a3226 : 0x2a2e33);
-        const title = this.add.text(cx - 440, rowY - ROW_H / 2 + 18, known ? frag.title : '??? â€” Undiscovered', {
+        const title = this.add.text(cx - 440, rowY - ROW_H / 2 + 18, known ? frag.title : '??? — Undiscovered', {
           fontFamily: FONT_SERIF,
           fontSize: '17px',
           color: known ? PALETTE_HEX.gold : PALETTE_HEX.boneMuted,
@@ -200,7 +202,7 @@ export class LoreCodexScene extends Phaser.Scene {
           .setStrokeStyle(1, knownCount >= 6 ? 0x3a3226 : 0x2a2e33);
 
         const lv = entry.level != null ? `   Lv ${entry.level}` : '';
-        const kills = entry.kills > 0 ? `   â€” slain Ã—${entry.kills}` : '';
+        const kills = entry.kills > 0 ? `   — slain ×${entry.kills}` : '';
         const name = this.add.text(cx - 440, rowY - ROW_H / 2 + 16, `${entry.name}${lv}${kills}`, {
           fontFamily: FONT_SERIF,
           fontSize: '17px',

@@ -51,7 +51,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
     title: 'The Third Marker',
     chapterRange: [1, 1],
     flavorText:
-      'This waystone carries more than one hand\'s work — Sable ash, Archive chalk, a Caravan trail-glyph, all layered on the same stone, none of them addressed to each other. Whoever passes here, they at least agree the road exists.',
+      'This waystone carries more than one hand\'s work — Sable ash, Archive chalk, a Caravan trail-glyph, all layered on the same stone, none of them addressed to each other. Whoever passes here, they at least agree the road exists.\n\nAhead, past the last stretch of corridor: gold light. A door — and something standing before it that has been asking travelers a question for a very long time.',
     choices: [
       {
         id: 'keep_moving',
@@ -118,7 +118,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
     title: 'The Seventh Marker',
     chapterRange: [2, 2],
     flavorText:
-      'A Dominion boundary post, still upright, marking a border for an empire with no remaining side to defend it. Something recent has been left propped against its base — food, long gone to dust, left there anyway.',
+      'A Dominion boundary post, still upright, marking a border for an empire with no remaining side to defend it. Something recent has been left propped against its base — food, long gone to dust, left there anyway.\n\nBeyond the post: incense, drifting up from below. Someone keeps a chapel down there. Someone who talks to everyone who passes.',
     choices: [
       {
         id: 'keep_moving',
@@ -183,7 +183,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
     title: 'The Eleventh Marker',
     chapterRange: [3, 3],
     flavorText:
-      'The stone here is cracked clean through, split by a root that should not grow this deep. The fracture is deliberate — this marker was placed on a fault, as if the Venn wanted it to break.',
+      'The stone here is cracked clean through, split by a root that should not grow this deep. The fracture is deliberate — this marker was placed on a fault, as if the Venn wanted it to break.\n\nFarther down, faintly, many voices hold a chord no single throat could. They have been holding it a long time.',
     choices: [
       {
         id: 'keep_moving',
@@ -247,7 +247,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
     title: 'The Fifteenth Marker',
     chapterRange: [4, 4],
     flavorText:
-      'Three paths converge on this marker, each from a different direction, each worn to a different depth. The marker itself bears only one word, carved in Venn: "Choose."',
+      'Three paths converge on this marker, each from a different direction, each worn to a different depth. The marker itself bears only one word, carved in Venn: "Choose."\n\nOne of the three paths is newer than the others — worn by a single traveler, not so long ago, headed the way you are headed.',
     choices: [
       {
         id: 'keep_moving',
@@ -314,7 +314,7 @@ export const MINOR_LANDMARKS: Record<number, EventDef> = {
     title: 'The Nineteenth Marker',
     chapterRange: [5, 5],
     flavorText:
-      'The penultimate marker. It is smaller than the others — almost an afterthought. The carving is hurried, as if whoever placed it was running out of time. "Almost," it says. "Almost."',
+      'The penultimate marker. It is smaller than the others — almost an afterthought. The carving is hurried, as if whoever placed it was running out of time. "Almost," it says. "Almost."\n\nThere is nothing after this marker but the door — and whatever behind it wears your face.',
     choices: [
       {
         id: 'keep_moving',

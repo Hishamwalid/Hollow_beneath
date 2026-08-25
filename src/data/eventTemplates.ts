@@ -77,7 +77,7 @@ const TEMPLATES: TemplateDef[] = [
     entries: [
       { id: 'personal_0', text: 'You find a footprint that matches your boot. You haven\'t been this way before.' },
       { id: 'personal_1', text: 'Your tablet displays a sentence in Venn. You have not seen this word before, but you understand it: \'Lonely.\'' },
-      { id: 'personal_2', text: 'A whisper, so quiet you almost miss it: "Mom?" Your own voice, returned to you from somewhere it should not have reached.' },
+      { id: 'personal_2', text: 'A whisper, so quiet you almost miss it: "Is someone there?" Your own voice, returned to you from somewhere it should not have reached.' },
     ],
   },
 ];

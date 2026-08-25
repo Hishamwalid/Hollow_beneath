@@ -4,6 +4,7 @@ import type { EventDef } from './types';
 // THE HOLLOW BENEATH — Definitive Edition story events
 // Pinned to exact board nodes (see PINNED_STORY_EVENTS below). These are
 // unskippable narrative beats from the Definitive Narrative Script.
+// Beats are STAGED: short narration, then a reaction — never a wall of prose.
 // Boss pre-combat scenes (nodes 40/80/120/160/200) live in bosses.ts.
 // ============================================================================
 
@@ -22,6 +23,24 @@ export const PINNED_STORY_EVENTS: Record<number, string> = {
   185: 'eve_reveal',
 };
 
+/**
+ * One-line context anchors shown on the board after each beat, so the thread
+ * of the descent survives the long stretches between story nodes.
+ */
+export const STORY_BEAT_REMINDERS: Record<string, string> = {
+  prologue_descent: 'The Hollow reads like a question.',
+  eves_first_voice: '"Keep walking."',
+  first_blood: 'A name in the sand, almost legible.',
+  the_hollowed_man: '"She said the next one would come."',
+  the_deep_pages: 'An echo. Someone who said no.',
+  false_memories: 'Warm hands. Did that happen?',
+  the_memory_room: '"Don\'t look."',
+  the_venn_truth: '"We have finished the question."',
+  eves_first_journal: '"I am afraid that I already said yes."',
+  ashen_tunnels: '"Does it matter?"',
+  eve_reveal: '"My name is Eve."',
+};
+
 export const STORY_EVENTS: Record<string, EventDef> = {
   // ---- SCENE 1.1 — THE DESCENT (Node 1) ------------------------------------
   prologue_descent: {
@@ -29,50 +48,142 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'The Descent',
     chapterRange: [1, 1],
     flavorText: [
-      'You descend through a collapsed sinkhole. Rope creaks. Expedition rope and rusted pitons give way to ashfall corridors ribbed with Venn masonry. Gold light pulses at the far end.',
+      'Rope creaks. Three days down a collapsed sinkhole, past rusted pitons, into corridors ribbed with bone-white masonry.',
       '',
-      'Three days into the Keth-7 survey. A cave-in at the Chalk Doorway cost the expedition half its supplies and its best geologist. Expedition leader Anya Korr extended the timeline by a week. Then she went silent. Contact with the surface failed yesterday.',
+      'The Keth-7 survey went silent here. Leader, geologist, supplies — gone into the gold light at the far end of this hallway.',
       '',
-      'You reach the bottom. A corridor stretches ahead. Bone-white inscriptions almost resolve into words.',
-      '',
-      'The Hollow is not a dungeon. It is a dead city preserved in cold stone and warm bone. Its architecture is syntax. Corridors form sentences. Rooms are paragraphs. The deeper you descend, the more the structure reads like a question you are walking toward the answer of.',
-    ].join('\n'),
-    choices: [],
-  },
-
-  // ---- SCENE 1.2 — EVE'S FIRST VOICE (Node 8) -------------------------------
-  eves_first_voice: {
-    id: 'eves_first_voice',
-    title: "Eve's First Voice",
-    chapterRange: [1, 1],
-    flavorText: [
-      'An old expedition camp. Broken equipment. Dried blood. A journal lies open on a crate. You approach.',
-      '',
-      '"Mom?"',
-      '',
-      'Silence. You pick up the journal. A sketch of the First Door.',
-      '',
-      'EVE (V.O.): "You shouldn\'t have come here."',
-      '',
-      'You freeze. "Mom?"',
-      '',
-      'EVE (V.O.): "Keep walking."',
-      '',
-      '"Where are you?"',
-      '',
-      'Long silence. Wind through stone.',
-      '',
-      'EVE (V.O.): "I don\'t know."',
-      '',
-      'You look around. The camp is empty. The voice came from everywhere and nowhere.',
+      'The walls are carved edge to edge in a script that almost resolves into words. The deeper you go, the more it reads like a question.',
     ].join('\n'),
     choices: [
       {
-        id: 'keep_walking',
-        label: 'Keep walking.',
+        id: 'walk_to_light',
+        label: 'Walk toward the gold light.',
+        onSuccess: () => 'You walk. Behind you, the corridor reads you back.',
+      },
+      {
+        id: 'speak_to_dark',
+        label: 'Say something to the dark.',
         onSuccess: (player) => {
-          player.story.eveVoiceHeard += 1;
-          return 'You keep walking. Her voice goes with you.';
+          player.resonance = Math.min(100, player.resonance + 2);
+          return '"Hello?"\n\nNothing answers. But the echo comes back a half-second late. (+2 Resonance)';
+        },
+      },
+    ],
+  },
+
+  // ---- SCENE 1.2 — THE FIRST VOICE (Node 8) ---------------------------------
+  eves_first_voice: {
+    id: 'eves_first_voice',
+    title: 'The First Voice',
+    chapterRange: [1, 1],
+    flavorText: [
+      'An old expedition camp. Broken equipment. Dried blood.',
+      '',
+      'A journal lies open on a crate — a sketch of a door, drawn and redrawn until the paper wore through.',
+    ].join('\n'),
+    choices: [
+      {
+        id: 'take_journal',
+        label: 'Take the journal.',
+        onSuccess: () => '',
+        then: {
+          flavorText: [
+            'The pages shift under your thumb.',
+            '',
+            'THE VOICE: "You shouldn\'t have come here."',
+            '',
+            'Close. Closer than a voice has any right to be — and familiar in a way you cannot place.',
+          ].join('\n'),
+          choices: [
+            {
+              id: 'ask_who',
+              label: '"Who are you?"',
+              onSuccess: () => 'THE VOICE: "Keep walking."',
+              then: {
+                flavorText: 'You turn. The camp is empty.\n\nThe voice came from everywhere and nowhere.',
+                choices: [
+                  {
+                    id: 'keep_walking',
+                    label: 'Keep walking.',
+                    onSuccess: (player) => {
+                      player.story.eveVoiceHeard += 1;
+                      return 'You keep walking. The voice goes with you.';
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              id: 'ask_where',
+              label: '"Where are you?"',
+              onSuccess: () => 'Wind through stone. A long silence.\n\nTHE VOICE: "I don\'t know."',
+              then: {
+                flavorText: 'You turn. The camp is empty.\n\nThe voice came from everywhere and nowhere.',
+                choices: [
+                  {
+                    id: 'keep_walking',
+                    label: 'Keep walking.',
+                    onSuccess: (player) => {
+                      player.story.eveVoiceHeard += 1;
+                      return 'You keep walking. The voice goes with you.';
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      {
+        id: 'call_out',
+        label: '"Hello? Is someone there?"',
+        onSuccess: () => '',
+        then: {
+          flavorText: [
+            'Your own words come back to you wrong — doubled, arriving a half-second late.',
+            '',
+            'Then, underneath your echo, thinner and older:',
+            '',
+            'THE VOICE: "You shouldn\'t have come here."',
+          ].join('\n'),
+          choices: [
+            {
+              id: 'ask_who',
+              label: '"Who are you?"',
+              onSuccess: () => 'THE VOICE: "Keep walking."',
+              then: {
+                flavorText: 'You turn. The camp is empty.\n\nThe voice came from everywhere and nowhere.',
+                choices: [
+                  {
+                    id: 'keep_walking',
+                    label: 'Keep walking.',
+                    onSuccess: (player) => {
+                      player.story.eveVoiceHeard += 1;
+                      return 'You keep walking. The voice goes with you.';
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              id: 'ask_where',
+              label: '"Where are you?"',
+              onSuccess: () => 'Wind through stone. A long silence.\n\nTHE VOICE: "I don\'t know."',
+              then: {
+                flavorText: 'You turn. The camp is empty.\n\nThe voice came from everywhere and nowhere.',
+                choices: [
+                  {
+                    id: 'keep_walking',
+                    label: 'Keep walking.',
+                    onSuccess: (player) => {
+                      player.story.eveVoiceHeard += 1;
+                      return 'You keep walking. The voice goes with you.';
+                    },
+                  },
+                ],
+              },
+            },
+          ],
         },
       },
     ],
@@ -84,9 +195,9 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'First Blood',
     chapterRange: [1, 1],
     flavorText: [
-      'Pale sand. A DUST WIGHT rises from the ground — a desert-dusted remnant wrapped in funerary linen. It does not attack until looked at too long.',
+      'Pale sand shifts ahead. Something rises out of it — a desert-dusted remnant wrapped in funerary linen. A Dust Wight.',
       '',
-      'The dust-caked dead do not mind being dead. They mind being watched.',
+      'It does not attack. It waits to be watched too long.',
     ].join('\n'),
     choices: [
       {
@@ -97,7 +208,7 @@ export const STORY_EVENTS: Record<string, EventDef> = {
           enemyIds: ['dust_wight'],
           onVictory: (_player, ctx) => {
             ctx.setFlag('first_blood_done');
-            return 'After combat, the Wight crumbles. Beneath it: a Sable ash-mark, half-burned. And a name scratched in the sand — "EVE."';
+            return 'After combat, the Wight crumbles. Beneath it: a Sable ash-mark, half-burned. And a word scratched into the sand that the wind is already taking apart.';
           },
         },
       },
@@ -110,38 +221,55 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'The Hollowed Man',
     chapterRange: [1, 5],
     flavorText: [
-      'A Sable shelter — rough stone reinforced with iron. An old man sits inside, wrapped in blankets. His eyes are clear but empty. He is Hollow.',
+      'A Sable shelter — rough stone reinforced with iron. An old man sits wrapped in blankets. His eyes are clear, and empty. Hollow.',
       '',
-      '"Are you with the expedition?" you ask.',
-      '',
-      'HOLLOWED MAN: "I was... something. I came down here for the same reason everyone does."',
-      '',
-      '"The dream?"',
-      '',
-      'He shakes his head. "No. I came because of a woman."',
-      '',
-      'You go still.',
-      '',
-      '"She told me to go home. She said the Deep wasn\'t what I thought. She said..." He looks directly at you. "She said her child would come eventually. And that I should tell them..."',
-      '',
-      'He frowns. The memory slips away like water.',
-      '',
-      '"I don\'t remember what I was supposed to tell them."',
+      'HOLLOWED MAN: "Are you with the expedition? No. Of course not. You\'re one of the ones who keeps walking."',
     ].join('\n'),
     choices: [
       {
+        id: 'ask_about_her',
+        label: '"Who did you come down here for?"',
+        onSuccess: () =>
+          '"A woman," he says. "She told me to go home. She said the Deep wasn\'t what I thought."\n\nHe looks directly at you. "She said the next one would come eventually. And that I should tell them—"',
+        then: {
+          flavorText: [
+            'His hand stops mid-gesture. The sentence dies in it.',
+            '',
+            'HOLLOWED MAN: "...Tell them. Tell them. I had it a moment ago."',
+            '',
+            'The memory slips away like water. Whatever message he carried, it left before he could deliver it.',
+          ].join('\n'),
+          choices: [
+            {
+              id: 'stay_awhile',
+              label: 'Sit with him a while.',
+              onSuccess: (player, ctx) => {
+                ctx.setFlag('met_hollowed_man');
+                player.resonance = Math.min(100, player.resonance + 2);
+                return 'He does not speak again. But when you rise to leave, his empty eyes follow you with something almost like purpose. (+2 Resonance)';
+              },
+            },
+            {
+              id: 'leave_message_be',
+              label: 'Let the message go. Leave in peace.',
+              onSuccess: () => 'Some messages arrive broken. It is not your fault the messenger forgot.',
+            },
+          ],
+        },
+      },
+      {
         id: 'sit_with_him',
-        label: 'Sit with him a while.',
+        label: 'Sit with him without a word.',
         onSuccess: (player, ctx) => {
           ctx.setFlag('met_hollowed_man');
           player.resonance = Math.min(100, player.resonance + 2);
-          return 'He does not speak again. But when you rise to leave, his empty eyes follow you with something almost like purpose.';
+          return 'You share his fire in silence. When you rise to leave, his empty eyes follow you with something almost like purpose. (+2 Resonance)';
         },
       },
       {
         id: 'leave_quietly',
-        label: 'Leave him in peace.',
-        onSuccess: () => 'Some messages arrive broken. It is not your fault the messenger forgot.',
+        label: 'Leave him be.',
+        onSuccess: () => 'Some doors are kinder unopened. You move on.',
       },
     ],
   },
@@ -152,22 +280,16 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'The Deep Pages',
     chapterRange: [1, 5],
     flavorText: [
-      'The Resonant Hall. Shelves of books written in ink that has not dried in five millennia. You touch one.',
+      'The Resonant Hall. Shelves of books written in ink that has not dried in five millennia. You touch one spine — the pages are warm.',
       '',
-      'The pages are warm. The ink shifts when unobserved. The books are not records. They are invitations.',
+      'An ASH COVENANT SEER steps out from between the shelves, crystalline growths refracting your face wrong.',
       '',
-      'An ASH COVENANT SEER appears — crystalline growths refracting your face wrong.',
-      '',
-      'ASH COVENANT SEER: "You carry her echo. The woman who said no."',
-      '',
-      '"What do you know about Eve?"',
-      '',
-      '"She reached the Deep. She saw the Loom. And she chose solitude over translation. A strange choice. A selfish one."',
+      'ASH COVENANT SEER: "You carry an echo. Someone who said no. She reached the Deep. She saw the Loom. She chose solitude over translation — a selfish choice. Ask me what you actually want to ask, or draw."',
     ].join('\n'),
     choices: [
       {
         id: 'demand_answers',
-        label: '"Tell me everything. Now."',
+        label: '"What did she see?" (draw steel)',
         onSuccess: () => 'The Seer\'s crystals flare. It answers with light, and light answers back.',
         combat: {
           enemyIds: ['ash_seer'],
@@ -176,6 +298,11 @@ export const STORY_EVENTS: Record<string, EventDef> = {
             return 'When defeated, the Seer shatters into glass and dust. The warm pages close themselves, as if satisfied.';
           },
         },
+      },
+      {
+        id: 'withdraw',
+        label: 'Back out of the hall slowly.',
+        onSuccess: () => 'The Seer does not stop you. The books do not cool. The whole way out, the shelves read like held breath.',
       },
     ],
   },
@@ -186,25 +313,24 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'False Memories',
     chapterRange: [1, 5],
     flavorText: [
-      'You find a Venn inscription that almost resolves into words. As you read it, your vision blurs.',
+      'A Venn inscription almost resolves into words. As you read, your vision blurs —',
       '',
-      '"I remember Mom teaching me this," you say to yourself.',
+      '— and a thought arrives that does not feel borrowed: warm hands. A low room. Someone counting brush-strokes while they teach you.',
       '',
-      'A pause.',
-      '',
-      '"Wait."',
-      '',
-      'The memory slips. Did she? Or did the stone teach you to remember it that way?',
-      '',
-      'The deeper you go, the less certain reality becomes. The Loom is not just below you. It is around you. Reading.',
+      'Wait. Did that happen?',
     ].join('\n'),
     choices: [
       {
         id: 'let_it_slide',
-        label: 'Let the memory stay, even if it is false.',
+        label: 'Keep the memory, even if it is false.',
+        onSuccess: () => 'It is a warm lie in a cold place. You keep it.',
+      },
+      {
+        id: 'let_it_go',
+        label: 'Give the memory back.',
         onSuccess: (player) => {
-          player.story.eveVoiceHeard += 0;
-          return 'It is a warm lie in a cold place. You keep it.';
+          player.resonance = Math.max(0, player.resonance - 2);
+          return 'The stone takes it back. It leaves the ache it came with. (-2 Resonance)';
         },
       },
     ],
@@ -216,32 +342,65 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'The Memory Room',
     chapterRange: [1, 5],
     flavorText: [
-      'You enter a chamber that should not exist. A childhood bed. Old toys. Eve\'s chair. Family photographs. Everything looks normal.',
+      'A chamber that should not exist: a childhood bed, old toys, a reading chair worn smooth by one person, over and over, in the same spot.',
       '',
-      'You approach the photographs.',
-      '',
-      'Every single one has Eve\'s face scratched out. Not torn — carefully, deliberately scratched away with something sharp.',
-      '',
-      'EVE (V.O.): "Don\'t look."',
-      '',
-      '"Why?"',
-      '',
-      '"Because you\'ll remember."',
-      '',
-      '"Remember what?"',
-      '',
-      'EVE (V.O.), softer, almost pleading: "That I wasn\'t always your mother."',
-      '',
-      'You turn. For a fraction of a second, you see a figure in the corner — Eve, young, wearing expedition gear, holding a journal. Then she is gone.',
+      'On the desk: family photographs, face-down. Every one of them.',
     ].join('\n'),
     choices: [
       {
-        id: 'look_anyway',
-        label: 'Look at the photographs anyway.',
-        onSuccess: (player) => {
-          player.story.eveVoiceHeard += 1;
-          player.resonance = Math.min(100, player.resonance + 3);
-          return 'The scratched faces tell you nothing. The scratch marks tell you everything: someone wanted to forget her on purpose.';
+        id: 'turn_photos',
+        label: 'Turn over the photographs.',
+        onSuccess: () => '',
+        then: {
+          flavorText: [
+            'Every single one has the same face scratched out. Not torn — carefully, deliberately scratched away with something sharp.',
+            '',
+            'THE VOICE: "Don\'t look."',
+          ].join('\n'),
+          choices: [
+            {
+              id: 'look_anyway',
+              label: 'Look anyway.',
+              onSuccess: (player) => {
+                player.story.eveVoiceHeard += 1;
+                player.resonance = Math.min(100, player.resonance + 3);
+                return 'You lift the last photograph anyway. The scratched faces tell you nothing. The scratch marks tell you everything: someone wanted to forget her on purpose. (+3 Resonance)';
+              },
+            },
+            {
+              id: 'step_back',
+              label: 'Put the photographs down.',
+              onSuccess: () => 'You set them face-down again, exactly as they lay.\n\nTHE VOICE, softer: "Thank you."',
+            },
+          ],
+        },
+      },
+      {
+        id: 'call_out',
+        label: '"Is someone there?"',
+        onSuccess: () => 'For a moment — nothing. Then the room itself seems to hold its breath.',
+        then: {
+          flavorText: [
+            'THE VOICE: "Don\'t look at the photographs."',
+            '',
+            'They are still face-down. Waiting to be turned or left alone — the choice sits in your hands either way.',
+          ].join('\n'),
+          choices: [
+            {
+              id: 'look_anyway',
+              label: 'Turn them over anyway.',
+              onSuccess: (player) => {
+                player.story.eveVoiceHeard += 1;
+                player.resonance = Math.min(100, player.resonance + 3);
+                return 'Every single one has the same face scratched out — carefully, deliberately. The scratch marks tell you everything: someone wanted to forget her on purpose. (+3 Resonance)';
+              },
+            },
+            {
+              id: 'step_back',
+              label: 'Leave them face-down.',
+              onSuccess: () => 'You leave the room exactly as you found it.\n\nTHE VOICE, softer: "Thank you."',
+            },
+          ],
         },
       },
     ],
@@ -253,11 +412,11 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'The Venn Truth',
     chapterRange: [1, 5],
     flavorText: [
-      'The Crystal Veins. Light fractures into prophecy. You find a Venn inscription, intact.',
+      'The Crystal Veins. Light fractures into prophecy. On the wall, one inscription survives intact:',
       '',
-      'The Venn were not destroyed. They did not fall. They walked into the Loom deliberately, systematically. They set down their cups. They left their bread uneaten. And they did not return.',
+      '"We go not because we are called, but because we have finished the question."',
       '',
-      'You read aloud: "We go not because we are called, but because we have finished the question."',
+      'The tables around it are set for meals nobody finished eating.',
     ].join('\n'),
     choices: [
       {
@@ -266,47 +425,59 @@ export const STORY_EVENTS: Record<string, EventDef> = {
         onSuccess: (_player, ctx) => {
           ctx.addLoreFragment('the_departure_feast');
           ctx.addXp(10);
-          return 'Finished the question. You write it down twice, in case one copy stops being true.';
+          return 'Finished the question. You write it down twice, in case one copy stops being true. (+10 XP, a lore fragment)';
         },
+      },
+      {
+        id: 'leave_unread',
+        label: 'Leave it unread.',
+        onSuccess: () => 'Some questions finish themselves. You keep yours moving.',
       },
     ],
   },
 
-  // ---- SCENE 4.2 — EVE'S FIRST JOURNAL (Node 155) ----------------------------
+  // ---- SCENE 4.2 — THE FIRST JOURNAL (Node 155) ------------------------------
   eves_first_journal: {
     id: 'eves_first_journal',
-    title: "Eve's First Journal",
+    title: 'The First Journal',
     chapterRange: [1, 5],
     flavorText: [
-      'The Archive Depths. You find a locked case. Inside: not the journal you inherited, but Eve\'s FIRST journal. Written before the surface. Before the forgetting.',
+      'The Archive Depths. A locked case rests where no case should rest — centered, dusted, waiting.',
       '',
-      'You open it.',
-      '',
-      'EVE (V.O., reading): "I found the Loom."',
-      '',
-      'Next page.',
-      '',
-      '"It showed me myself. It showed me the person I could become. I understood."',
-      '',
-      'Next page.',
-      '',
-      '"The thing in the Deep isn\'t promising us power. It\'s showing us what we are willing to sacrifice for it."',
-      '',
-      'Final page. The handwriting is shaky.',
-      '',
-      '"And I am afraid that I already said yes."',
-      '',
-      'You close the journal. Your hands are trembling.',
+      'Inside: not the journal you inherited, but another — older, its spine cracked from a descent that happened before yours.',
     ].join('\n'),
     choices: [
       {
-        id: 'take_it',
-        label: 'Take the journal.',
-        onSuccess: (player, ctx) => {
-          player.story.motherJournalFound = true;
-          ctx.addLoreFragment('cass_unburnt_memory');
-          ctx.addXp(15);
-          return 'You take it. Somewhere far below, something that wears your mother\'s voice feels the pages move.';
+        id: 'open_case',
+        label: 'Open the case.',
+        onSuccess: () => '',
+        then: {
+          flavorText: [
+            'THE VOICE, reading aloud over your shoulder: "I found the Loom."',
+            '',
+            'Next page. "It showed me myself. What I could become. I understood."',
+            '',
+            'Final page. The handwriting shakes. "The thing in the Deep isn\'t promising us power. It\'s showing us what we are willing to sacrifice for it. And I am afraid that I already said yes."',
+            '',
+            'Your hands are trembling. They are not your tremors.',
+          ].join('\n'),
+          choices: [
+            {
+              id: 'take_it',
+              label: 'Take the journal.',
+              onSuccess: (player, ctx) => {
+                player.story.motherJournalFound = true;
+                ctx.addLoreFragment('cass_unburnt_memory');
+                ctx.addXp(15);
+                return 'You take it. Somewhere far below, the voice pauses — mid-breath, mid-word — as if it felt the pages move. (+15 XP, a lore fragment)';
+              },
+            },
+            {
+              id: 'close_it',
+              label: 'Close the case gently.',
+              onSuccess: () => 'You shut it like a lid on a well.\n\nThis time, the voice does not pause. Somehow that is worse.',
+            },
+          ],
         },
       },
     ],
@@ -318,27 +489,36 @@ export const STORY_EVENTS: Record<string, EventDef> = {
     title: 'The Ashen Tunnels',
     chapterRange: [1, 5],
     flavorText: [
-      'The tunnels breathe. The walls whisper in Venn. You can almost understand it now.',
+      'The tunnels breathe. Warm air, in and out, slow as sleep. The walls whisper in Venn — and you can almost understand them now.',
       '',
-      'EVE (V.O.): "You\'re close."',
-      '',
-      'You stop. "Mom. I need to know. Are you really my mother?"',
-      '',
-      'Silence. Then:',
-      '',
-      'EVE (V.O.): "Does it matter?"',
-      '',
-      '"Yes."',
-      '',
-      'EVE (V.O.), softer: "That\'s what I said too."',
+      'THE VOICE: "You\'re close."',
     ].join('\n'),
     choices: [
       {
-        id: 'keep_descending',
-        label: 'Keep descending.',
+        id: 'ask_who_you_are',
+        label: '"I need to know who you are."',
+        onSuccess: () =>
+          'Silence. Then:\n\nTHE VOICE: "Does it matter?"\n\n"Yes."\n\nSofter: "That\'s what I said too."',
+        then: {
+          flavorText: 'The tunnels wait for you to choose a direction. Only one of them leads down.',
+          choices: [
+            {
+              id: 'keep_descending',
+              label: 'Keep descending.',
+              onSuccess: (player) => {
+                player.story.eveVoiceHeard += 1;
+                return 'The tunnels exhale behind you. Warm air that no cave should breathe follows you down.';
+              },
+            },
+          ],
+        },
+      },
+      {
+        id: 'say_nothing',
+        label: 'Say nothing. Keep walking.',
         onSuccess: (player) => {
           player.story.eveVoiceHeard += 1;
-          return 'The tunnels exhale behind you. Warm air that no cave should breathe follows you down.';
+          return 'The silence walks with you. It weighs more than any question would have.';
         },
       },
     ],
@@ -347,32 +527,20 @@ export const STORY_EVENTS: Record<string, EventDef> = {
   // ---- SCENE 5.2 — THE EVE REVEAL (Node 185) ----------------------------------
   eve_reveal: {
     id: 'eve_reveal',
-    title: 'The Eve Reveal',
+    title: 'The Voice, Given a Face',
     chapterRange: [1, 5],
     flavorText: [
-      'The Covenant Spire — a temple built toward rather than away. At its heart, Eve stands. Not young, not old. The age she was when she died, but clear-eyed, present. She is translucent — a projection, a memory, a fragment of the Loom. But her expression is real.',
+      'The Covenant Spire — a temple built toward rather than away. At its heart stands a woman. Not young, not old. Translucent: a projection, a memory, a fragment of the Loom. Her expression is real.',
       '',
-      'EVE: "I reached the Deep. I became Hollow. Then I tried to stop the next Seeker. I defeated them. They lost themselves. That was the cycle."',
+      'She speaks, and the floor drops out of you. That voice. The empty camp. The scratched photographs. The breathing tunnels. Everywhere and nowhere, the whole way down.',
       '',
-      '"You killed them?"',
+      '"It was you. Every time. It was always you."',
       '',
-      '"No. I saved them from becoming what I became. But saving them meant... becoming part of the mechanism. The Hollow doesn\'t just wait. It maintains. It keeps the door open. It keeps the promise alive."',
+      'EVE: "Every time. From the first camp onward. I couldn\'t come closer than this — not without becoming part of what holds you here."',
       '',
-      '"You became part of the Loom."',
+      '"Who are you?"',
       '',
-      '"I thought saving someone meant keeping them away from the Deep. I was wrong. The only way to save someone is to let them choose. Even if they choose wrong."',
-      '',
-      'She steps closer.',
-      '',
-      '"The Loom has been reading you since you entered. It knows your techniques. It knows your fears. It knows what you want to become."',
-      '',
-      '"And what do I want to become?"',
-      '',
-      'She smiles, sad. "You want to become someone who understands. That\'s the most dangerous thing to want down here."',
-      '',
-      'She fades.',
-      '',
-      'EVE, fading: "The thing waiting at the end of the journey... is you."',
+      'EVE: "My name is Eve. And I am your mother."',
     ].join('\n'),
     choices: [
       {
@@ -381,7 +549,52 @@ export const STORY_EVENTS: Record<string, EventDef> = {
         onSuccess: (player) => {
           player.story.eveVoiceHeard += 1;
           player.resonance = Math.min(100, player.resonance + 5);
-          return 'Your hand closes on nothing. But the shape of her stays in it the whole rest of the way down.';
+          return 'Your hand closes on nothing. But the shape of her stays in it the whole rest of the way down. (+5 Resonance)';
+        },
+        then: {
+          flavorText: [
+            'EVE: "I reached the Deep. I became Hollow. Then I tried to stop the next Seeker — defeated them, saved them from becoming what I became. Saving them meant joining the mechanism. The Hollow doesn\'t just wait. It maintains. It keeps the promise alive."',
+            '',
+            '"You became part of the Loom."',
+            '',
+            'EVE, sad: "The only way to save someone is to let them choose. Even if they choose wrong. The Loom has been reading you since you entered — your techniques, your fears, what you want to become. And you want to understand. That\'s the most dangerous thing to want down here."',
+            '',
+            'She fades.',
+            '',
+            'EVE, fading: "The thing waiting at the end of the journey... is you."',
+          ].join('\n'),
+          choices: [
+            {
+              id: 'descend_final',
+              label: 'Descend. Finish it.',
+              onSuccess: () => 'The spire exhales. The last stretch of the descent begins.',
+            },
+          ],
+        },
+      },
+      {
+        id: 'ask_why_now',
+        label: '"Why tell me only now?"',
+        onSuccess: () => 'EVE: "Because you had stopped asking. And you were about to stop hearing me too."',
+        then: {
+          flavorText: [
+            'EVE: "I reached the Deep. I became Hollow. Then I tried to stop the next Seeker — defeated them, saved them from becoming what I became. Saving them meant joining the mechanism. The Hollow doesn\'t just wait. It maintains. It keeps the promise alive."',
+            '',
+            '"You became part of the Loom."',
+            '',
+            'EVE, sad: "The only way to save someone is to let them choose. Even if they choose wrong. The Loom has been reading you since you entered — your techniques, your fears, what you want to become. And you want to understand. That\'s the most dangerous thing to want down here."',
+            '',
+            'She fades.',
+            '',
+            'EVE, fading: "The thing waiting at the end of the journey... is you."',
+          ].join('\n'),
+          choices: [
+            {
+              id: 'descend_final',
+              label: 'Descend. Finish it.',
+              onSuccess: () => 'The spire exhales. The last stretch of the descent begins.',
+            },
+          ],
         },
       },
     ],

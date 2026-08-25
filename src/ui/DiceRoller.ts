@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { FONT_SERIF, PALETTE_HEX } from './uiTheme';
+import { reducedMotion } from '@systems/motion';
 
 export interface DiceRoller {
   container: Phaser.GameObjects.Container;
@@ -21,6 +22,10 @@ export function createDiceRoller(scene: Phaser.Scene, x: number, y: number): Dic
       activeTimer?.remove();
       let ticks = 0;
       const total = 10;
+      if (!reducedMotion()) {
+        // The die tumbles while it counts.
+        scene.tweens.add({ targets: container, angle: 360, duration: total * 45 + 120, ease: 'Cubic.easeOut' });
+      }
       const timer = scene.time.addEvent({
         delay: 45,
         repeat: total - 1,
@@ -29,7 +34,12 @@ export function createDiceRoller(scene: Phaser.Scene, x: number, y: number): Dic
           if (ticks >= total) {
             activeTimer = null;
             text.setText(String(finalValue));
-            scene.tweens.add({ targets: container, scale: 1.25, duration: 90, yoyo: true });
+            if (reducedMotion()) {
+              onDone();
+              return;
+            }
+            // Result slam: overshoot past 1.4× and settle with a dust ring.
+            scene.tweens.add({ targets: container, scale: { from: 1.4, to: 1 }, duration: 200, ease: 'Back.easeOut' });
             onDone();
           } else {
             text.setText(String(1 + Math.floor(Math.random() * 5)));

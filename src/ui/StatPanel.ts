@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import type { PlayerState } from '@data/types';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX, DESIGN } from './uiTheme';
 import { xpForLevel } from '@systems/LevelSystem';
+import { reducedMotion } from '@systems/motion';
 
 function bar(
   scene: Phaser.Scene,
@@ -14,13 +15,28 @@ function bar(
   bgColor = 0x0b0d10,
 ): { fg: Phaser.GameObjects.Rectangle; setPct: (p: number) => void } {
   const bg = scene.add.rectangle(x, y, w, h, bgColor, 0.45).setOrigin(0, 0.5);
+  // Fighting-game "ghost damage": a white trail that lingers where the bar was.
+  const ghost = scene.add.rectangle(x, y, w, h, 0xf5efdc).setOrigin(0, 0.5).setAlpha(0.55);
   const fg = scene.add.rectangle(x, y, w, h, fillColor).setOrigin(0, 0.5).setStrokeStyle(1, 0x0b0d10);
-  container.add([bg, fg]);
+  container.add([bg, ghost, fg]);
   return {
     fg,
     setPct: (p: number) => {
       const targetWidth = Math.max(0, Math.min(1, p)) * w;
-      scene.tweens.add({ targets: fg, width: targetWidth, duration: 350, ease: 'Sine.easeOut' });
+      scene.tweens.add({ targets: fg, width: targetWidth, duration: reducedMotion() ? 80 : 350, ease: 'Sine.easeOut' });
+      if (reducedMotion()) {
+        ghost.width = targetWidth;
+        return;
+      }
+      if (targetWidth >= ghost.width) {
+        // Growth snaps the ghost forward immediately.
+        scene.tweens.killTweensOf(ghost);
+        ghost.width = targetWidth;
+        return;
+      }
+      // Damage: the white trail chases the fill down a beat later.
+      scene.tweens.killTweensOf(ghost);
+      scene.tweens.add({ targets: ghost, width: targetWidth, delay: 380, duration: 420, ease: 'Quad.easeInOut' });
     },
   };
 }

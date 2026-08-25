@@ -75,7 +75,7 @@ From the implementation guide (Part VII) plus gaps opened by the narrative revam
 |-------|---------|-------|----------|
 | `sfx_loom_hum.(ogg/wav)` | Ambient drone for Final Chamber + endings | Low choral drone, layered whispers. (Currently: detuned sine pair in `EndingScene`) | P0 |
 | `sfx_wind_stone.(ogg/wav)` | Credits tail | Wind over stone under Eve's last line | P0 |
-| `vo_eve_lines_01–06.(ogg/wav)` | Eve V.O. beats (nodes 8/92/175/185, endings, credits) | Must stay ambiguous — memory or Loom? Text-only fallback already wired | P1 |
+| `vo_eve_lines_01–06.(ogg/wav)` | Eve voice beats (nodes 8/92/175/185, endings, credits) | Must stay ambiguous — memory or Loom? Text-only fallback already wired | P1 |
 | Music — descent ambience ×5 chapters, boss themes ×5, ending stingers ×3 | Full score | All audio is synth today; no music exists | P2 |
 | Replace all 22 synth cues with recorded SFX | Global feel pass | Cue map already wired through `PlaceholderAudio` API | P2 |
 

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { PlayerState } from '@data/types';
 import { FONT_MONO, FONT_SERIF, PALETTE_HEX } from './uiTheme';
+import { countTo, reducedMotion } from '@systems/motion';
 
 function bar(
   scene: Phaser.Scene,
@@ -71,6 +72,33 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
 
   container.add([hpLabel, hpText, mpLabel, mpText, resLabel, resText]);
 
+  let lastHP = -1;
+  let lastMP = -1;
+  let lastRes = -1;
+
+  /** Rolls a vital number to its new value and flashes the text green/red. */
+  function rollVital(
+    text: Phaser.GameObjects.Text,
+    last: number,
+    next: number,
+    suffix: string,
+  ): number {
+    if (last === -1 || last === next || reducedMotion()) {
+      text.setText(`${next}${suffix}`);
+      return next;
+    }
+    countTo(text, last, next, 320, suffix);
+    const good = next > last;
+    const flashColor = good ? '#7fbf6a' : '#e06c6c';
+    const baseColor = text.style.color ?? '#e8e2d0';
+    text.setColor(flashColor);
+    text.scene?.tweens.add({ targets: text, alpha: { from: 1, to: 1 }, duration: 10 });
+    text.scene?.time.delayedCall(650, () => {
+      if (text.active) text.setColor(baseColor === '0xe8e2d0' ? '#e8e2d0' : baseColor);
+    });
+    return next;
+  }
+
   return {
     container,
     update: (player: PlayerState) => {
@@ -79,11 +107,12 @@ export function createPlayerPanel(scene: Phaser.Scene, x: number, y: number, wid
       skillsText.setText(`Loadout ${player.equippedSkills.length}/6`);
       shardsText.setText(`Shards · Run: ${player.echoShards}`);
       hpBar.setPct(player.currentHP / Math.max(1, player.derived.maxHP));
-      hpText.setText(`${player.currentHP}/${player.derived.maxHP}`);
+      lastHP = rollVital(hpText, lastHP, player.currentHP, `/${player.derived.maxHP}`);
       mpBar.setPct(player.currentMP / Math.max(1, player.derived.maxMP));
-      mpText.setText(`${player.currentMP}/${player.derived.maxMP}`);
+      lastMP = rollVital(mpText, lastMP, player.currentMP, `/${player.derived.maxMP}`);
       resBar.setPct(Math.max(0, Math.min(1, player.resonance / 100)));
-      resText.setText(`${Math.round(player.resonance)}`);
+      lastRes = rollVital(resText, lastRes, Math.round(player.resonance), '');
+      void lastRes;
     },
     destroy: () => container.destroy(),
   };
