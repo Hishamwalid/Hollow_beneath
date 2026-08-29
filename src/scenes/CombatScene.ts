@@ -1579,7 +1579,7 @@ export class CombatScene extends Phaser.Scene {
         rightChips.forEach((ch) => ch.setAlpha(0.5));
       } else {
         bg.setInteractive({ useHandCursor: true });
-        bg.on('pointerover', () => this.applyInlineFocus(this.inlineRows.indexOf(entry)));
+        bg.on('pointerover', () => { this.applyInlineFocus(this.inlineRows.indexOf(entry)); entry.onHover?.(); });
         bg.on('pointerout', () => { this.applyInlineFocus(-1); this.tooltipPanel?.hide(); });
         bg.on('pointerdown', () => { audio.click(); const sel = entry.onSelect; this.closeInlineMenu(); sel(); });
       }
